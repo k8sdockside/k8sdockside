@@ -17,6 +17,8 @@ export function adoptPlugin(plugin: bindings.Plugin): Plugin {
         tagline: plugin.tagline ?? '',
         icon: plugin.icon || 'puzzle',
         author: plugin.author ?? '',
+        authorUrl: plugin.authorUrl ?? '',
+        official: plugin.official ?? false,
         docs: plugin.docs ?? '',
         links: adoptLinks(plugin.links),
         version: plugin.version ?? '',
@@ -99,6 +101,8 @@ export function adoptKnownPlugin(known: bindings.KnownOffer): KnownPlugin {
         repo: known.repo,
         detect: [...(known.detect ?? [])],
         links: adoptLinks(known.links),
+        author: known.author ?? '',
+        authorUrl: known.authorUrl ?? '',
         official: known.official ?? false,
         installed: known.installed,
     };

@@ -15,6 +15,8 @@
     import { pluginKindFor } from '../catalogue';
     import { classify } from '../errors';
     import { adoptPluginSummary } from '../plugins/adopt';
+    import { standingOf } from '../plugins/credit';
+    import PluginCredit from './PluginCredit.svelte';
     import type { CardResult, Plugin, PluginSummary } from '../plugins/types';
     import { workspace } from '../state/workspace.svelte';
     import { clusters } from '../state/health.svelte';
@@ -317,7 +319,10 @@
                 {/if}
             </span>
             {#if plugin.version}<span>· v{plugin.version.replace(/^v/, '')}</span>{/if}
-            {#if plugin.author}<span>· {plugin.author}</span>{/if}
+            {#if plugin.origin !== 'builtin'}
+                <span>·</span>
+                <PluginCredit author={plugin.author} authorUrl={plugin.authorUrl} standing={standingOf(plugin)} />
+            {/if}
             <!-- What the plugin is about: its links, and its docs where the
                  links do not already carry them. -->
             {#each plugin.links ?? [] as link (link.url)}

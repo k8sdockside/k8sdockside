@@ -83,7 +83,7 @@ func (w *Watcher) proxyFetch(kc Context, endpoint metrics.Endpoint) metrics.Fetc
 
 			raw, err := c.typed.CoreV1().
 				Services(endpoint.Namespace).
-				ProxyGet("http", endpoint.Service, endpoint.Port, path, params).
+				ProxyGet("http", endpoint.Service, endpoint.Port, endpoint.Path+path, params).
 				DoRaw(call)
 			if err != nil {
 				return proxyError(endpoint, err)

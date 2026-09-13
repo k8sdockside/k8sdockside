@@ -516,9 +516,14 @@ type Settings struct {
 	// HiddenPluginSuggestions are known plugins the user has told the sidebar
 	// to stop suggesting. One answer for every cluster: "not for me" is about
 	// the plugin, not about where it was offered.
-	HiddenPluginSuggestions []string                `json:"hiddenPluginSuggestions"`
-	Contexts                map[string]ContextPrefs `json:"contexts"`
-	TabOrder                []TabRef                `json:"tabOrder"`
+	HiddenPluginSuggestions []string `json:"hiddenPluginSuggestions"`
+	// PluginState is what plugins' own pages keep between sessions through
+	// the bridge's storage: plugin id -> context id -> key -> value. Per
+	// context, because a page always looks at one cluster, and what it
+	// remembers -- a folded section, a filter -- belongs to that cluster.
+	PluginState map[string]map[string]map[string]string `json:"pluginState"`
+	Contexts    map[string]ContextPrefs                 `json:"contexts"`
+	TabOrder    []TabRef                                `json:"tabOrder"`
 	// Dock is the bottom strip: its tabs in the order the user left them, and
 	// whether it is showing them. Kept apart from TabOrder rather than merged
 	// into it: the two strips are reordered independently and hold different
@@ -1059,6 +1064,55 @@ func (s *Store) HidePluginSuggestion(id string, hidden bool) (Settings, error) {
 	})
 }
 
+// Limits on what one plugin's pages may keep on one context: enough for
+// folded sections, filters and a few choices, not a database in the
+// settings file.
+const (
+	maxPluginStateKeys  = 64
+	maxPluginStateKey   = 128
+	maxPluginStateValue = 16 << 10
+)
+
+// SetPluginState keeps one value for a plugin's pages on one context, or
+// forgets it when value is empty.
+func (s *Store) SetPluginState(pluginID, contextID, key, value string) (Settings, error) {
+	switch {
+	case pluginID == "" || contextID == "":
+		return s.Get(), errors.New("plugin id and context id are required")
+	case key == "" || len(key) > maxPluginStateKey:
+		return s.Get(), fmt.Errorf("a stored key is 1 to %d characters", maxPluginStateKey)
+	case len(value) > maxPluginStateValue:
+		return s.Get(), fmt.Errorf("a stored value is at most %d KiB, and this one is %d bytes", maxPluginStateValue>>10, len(value))
+	}
+	if value != "" {
+		s.mu.Lock()
+		keys := s.data.PluginState[pluginID][contextID]
+		_, have := keys[key]
+		full := !have && len(keys) >= maxPluginStateKeys
+		s.mu.Unlock()
+		if full {
+			return s.Get(), fmt.Errorf("a plugin may keep at most %d values per cluster; remove one first", maxPluginStateKeys)
+		}
+	}
+	return s.update(func(d *Settings) {
+		if value == "" {
+			// Indexing nil maps reads as empty, and deleting from one is a no-op.
+			delete(d.PluginState[pluginID][contextID], key)
+			return
+		}
+		if d.PluginState == nil {
+			d.PluginState = map[string]map[string]map[string]string{}
+		}
+		if d.PluginState[pluginID] == nil {
+			d.PluginState[pluginID] = map[string]map[string]string{}
+		}
+		if d.PluginState[pluginID][contextID] == nil {
+			d.PluginState[pluginID][contextID] = map[string]string{}
+		}
+		d.PluginState[pluginID][contextID][key] = value
+	})
+}
+
 // SetLayout records the sidebar width and detail-panel dock and size.
 func (s *Store) SetLayout(l Layout) (Settings, error) {
 	return s.update(func(d *Settings) { d.Layout = l })
@@ -1262,6 +1316,21 @@ func normalise(s Settings) Settings {
 	}
 	if s.HiddenPluginSuggestions == nil {
 		s.HiddenPluginSuggestions = []string{}
+	}
+	if s.PluginState == nil {
+		s.PluginState = map[string]map[string]map[string]string{}
+	}
+	// A context or plugin with nothing left in it is dropped, so forgetting
+	// the last value leaves the file as if nothing had been kept.
+	for plugin, contexts := range s.PluginState {
+		for context, keys := range contexts {
+			if len(keys) == 0 {
+				delete(contexts, context)
+			}
+		}
+		if len(contexts) == 0 {
+			delete(s.PluginState, plugin)
+		}
 	}
 	if s.Contexts == nil {
 		s.Contexts = map[string]ContextPrefs{}
@@ -1679,6 +1748,18 @@ func clone(s Settings) Settings {
 	}
 	out.Preferences.Terminal.Shells = slices.Clone(s.Preferences.Terminal.Shells)
 	out.PortForwards = slices.Clone(s.PortForwards)
+	out.PluginState = make(map[string]map[string]map[string]string, len(s.PluginState))
+	for plugin, contexts := range s.PluginState {
+		copied := make(map[string]map[string]string, len(contexts))
+		for context, keys := range contexts {
+			values := make(map[string]string, len(keys))
+			for k, v := range keys {
+				values[k] = v
+			}
+			copied[context] = values
+		}
+		out.PluginState[plugin] = copied
+	}
 	out.Contexts = make(map[string]ContextPrefs, len(s.Contexts))
 	for k, v := range s.Contexts {
 		v.CollapsedGroups = slices.Clone(v.CollapsedGroups)

@@ -124,7 +124,7 @@
          * detail view, and null for a view that is a tab of its own.
          *
          * `plugin` is what the manifest says about the plugin itself:
-         * { id, name, version, docs, links: [{ label, url }] } -- for a page
+         * { id, name, version, docs, links: [{ label, url }], author, authorUrl } -- for a page
          * that is the plugin's own overview to link to what it is about. Open
          * a link with openUrl.
          */
@@ -282,6 +282,38 @@
         /** Opens an http(s) address in the user's browser. */
         openUrl: function (url) {
             return call('openUrl', { url: url });
+        },
+
+        /**
+         * What the page keeps between sessions, for this plugin on this
+         * cluster: a folded section, a filter, a choice. Values are anything
+         * JSON can hold -- at most 16 KiB each and 64 keys. The app keeps them
+         * in its own settings, not in the cluster: nobody else sees them.
+         */
+        storage: {
+            /** The value kept under `key`, or null. */
+            get: function (key) {
+                return call('storage.get', { key: key }).then(function (raw) {
+                    if (raw === null || raw === undefined) return null;
+                    try {
+                        return JSON.parse(raw);
+                    } catch (err) {
+                        return null;
+                    }
+                });
+            },
+            /** Keeps `value` under `key`; undefined forgets it. */
+            set: function (key, value) {
+                return call('storage.set', { key: key, value: value === undefined ? '' : JSON.stringify(value) });
+            },
+            /** Forgets what is kept under `key`. */
+            remove: function (key) {
+                return call('storage.set', { key: key, value: '' });
+            },
+            /** Every key kept, sorted. */
+            keys: function () {
+                return call('storage.keys');
+            },
         },
 
         /** Listens for pushes from the app. Events: 'theme'. Returns an unsubscribe function. */

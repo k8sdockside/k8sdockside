@@ -23,6 +23,7 @@
     import { isPluginOverview, PLUGIN_OVERVIEW, pluginKindFor } from '../catalogue';
     import { openExternal } from '../links';
     import { adoptPluginSummary } from '../plugins/adopt';
+    import { pluginState, setPluginState } from '../plugins/storage';
     import { detail, type DetailTarget } from '../state/detail.svelte';
     import { workspace } from '../state/workspace.svelte';
     import Icon from './Icon.svelte';
@@ -218,6 +219,8 @@
                         version: p.version ?? '',
                         docs: p.docs,
                         links: (p.links ?? []).map((l) => ({ label: l.label, url: l.url })),
+                        author: p.author,
+                        authorUrl: p.authorUrl ?? '',
                     },
                     theme: currentTheme(),
                 };
@@ -351,6 +354,17 @@
                 return null;
             case 'openUrl':
                 await openExternal(text(params.url));
+                return null;
+            // What the page keeps between sessions: this plugin's, on this
+            // tab's cluster, and nobody else's. The SDK encodes values as JSON.
+            case 'storage.get': {
+                const value = pluginState(p.id, contextId)[text(params.key)];
+                return value === undefined ? null : value;
+            }
+            case 'storage.keys':
+                return Object.keys(pluginState(p.id, contextId)).sort();
+            case 'storage.set':
+                await setPluginState(p.id, contextId, text(params.key), text(params.value));
                 return null;
             default:
                 throw new Error(`unknown request "${method}"`);

@@ -144,9 +144,7 @@
                 class="refresh"
                 onclick={() => attempt++}
                 disabled={loading}
-                title={source?.endpoint.namespace || source?.endpoint.url
-                    ? `Reading from ${source.endpoint.url || `${source.endpoint.namespace}/${source.endpoint.service}:${source.endpoint.port}`}`
-                    : 'Refresh'}
+                title={source?.describe ? `Reading from ${source.describe}` : 'Refresh'}
                 aria-label="Refresh the charts"
             >
                 <Icon name="refresh" size={12} />

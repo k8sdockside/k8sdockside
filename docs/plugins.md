@@ -11,6 +11,10 @@ Available**: cert-manager, MetalLB, KubeVirt and an image inventory. The
 sidebar suggests one for any cluster running what it is about. Anything else is
 a JSON file you drop in a folder, or a repository you give the address of.
 
+> **Writing one of your own?** Start with [Writing a plugin](writing-plugins.md),
+> a step-by-step guide from an empty folder to a published plugin. This page is
+> the reference it points into.
+
 Most of a plugin is data and nothing else: it names resource kinds the app
 already knows how to list and says how to arrange and summarise them. That part
 cannot ship code or CSS, which is what makes installing it about as risky as
@@ -70,12 +74,17 @@ own, each with a line on what it shows, links to what it is about, and an
 which of your clusters run the product, where the sidebar has read their
 definitions.
 
-| Plugin | Repository | Suggested for clusters serving |
-| --- | --- | --- |
-| cert-manager | [rogerwesterbo/k8sdockside-certmanager](https://github.com/rogerwesterbo/k8sdockside-certmanager) | `crd:certificates.cert-manager.io` |
-| MetalLB | [rogerwesterbo/k8sdockside-metallb](https://github.com/rogerwesterbo/k8sdockside-metallb) | `crd:ipaddresspools.metallb.io` |
-| KubeVirt | [rogerwesterbo/k8sdockside-kubevirt](https://github.com/rogerwesterbo/k8sdockside-kubevirt) | `crd:virtualmachines.kubevirt.io` |
-| Image inventory | [rogerwesterbo/k8sdockside-example-plugin-typescript](https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript) | — works on any cluster |
+| Plugin | By | Repository | Suggested for clusters serving |
+| --- | --- | --- | --- |
+| cert-manager | Roger Westerbo | [rogerwesterbo/k8sdockside-certmanager](https://github.com/rogerwesterbo/k8sdockside-certmanager) | `crd:certificates.cert-manager.io` |
+| MetalLB | Roger Westerbo | [rogerwesterbo/k8sdockside-metallb](https://github.com/rogerwesterbo/k8sdockside-metallb) | `crd:ipaddresspools.metallb.io` |
+| KubeVirt | Roger Westerbo | [rogerwesterbo/k8sdockside-kubevirt](https://github.com/rogerwesterbo/k8sdockside-kubevirt) | `crd:virtualmachines.kubevirt.io` |
+| Image inventory | Roger Westerbo | [rogerwesterbo/k8sdockside-example-plugin-typescript](https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript) | — works on any cluster |
+| Optimization advisor | Roger Westerbo | [rogerwesterbo/k8sdockside-optimization](https://github.com/rogerwesterbo/k8sdockside-optimization) | — works on any cluster |
+
+Every card credits its author, and says whether the plugin is **Official** —
+kept alongside the app by its author — or from the **Community**. Yours can be
+on this list: see [Get listed in the app](writing-plugins.md#get-listed-in-the-app).
 
 When a cluster serves one of those kinds and no plugin with that id is
 installed, the cluster's **Plugins** section in the sidebar shows a faint
@@ -145,7 +154,8 @@ working file you can edit a line at a time.
 | `version` | optional | The plugin's own version, `1.2.0` or `v1.2.0`. Shown on its card. |
 | `minAppVersion` | optional | The oldest release of K8s Dockside the plugin works with. See [Versions](#versions). |
 | `$schema` | optional | Where an editor finds [the schema](#checking-a-plugin). Ignored by the app. |
-| `author` | optional | Yours. |
+| `author` | optional | Who wrote it — you, or your company. Credited on the plugin's card in Settings, on its overview, and on a line the app draws under an overview page of its own. At most 80 characters. |
+| `authorUrl` | optional | Where to find the author — a profile, a company site. `http(s)` only; the author's name links to it. Needs `author`, and K8s Dockside 0.0.19 or newer. See [Credit](writing-plugins.md#credit). |
 | `requires` | optional | The kinds the overview checks this cluster for. |
 | `views` | required¹ | The rows under the plugin in the sidebar. |
 | `cards` | optional¹ | The live counts on the overview. |
@@ -322,6 +332,12 @@ for a port named `web`, `http-web`, `http` or `api`, or any port numbered 9090.
 The label is a much stronger signal than a name, which is why it is checked
 first: a cluster easily has several things called prometheus-something.
 
+A cluster with no Prometheus but a **VictoriaMetrics** is found too: a single
+server (`app.kubernetes.io/name` `vmsingle` or `victoria-metrics-single`) is
+queried as it is, and a cluster's `vmselect` under `/select/0/prometheus`, the
+path it serves the Prometheus API on. Both answer PromQL, so every chart works
+unchanged.
+
 When that finds the wrong thing or nothing, set the address on the context
 itself, in the sidebar's cluster settings panel:
 
@@ -426,7 +442,7 @@ The page includes the bridge, which the app serves, and uses it:
 
 | Call | |
 | --- | --- |
-| `ready()` | Resolves with what the view is looking at, once the app has answered. `plugin` in it is `{ id, name, version, docs, links }`, what the manifest says about the plugin itself — for a page to link to what it is about. |
+| `ready()` | Resolves with what the view is looking at, once the app has answered. `plugin` in it is `{ id, name, version, docs, links, author, authorUrl }`, what the manifest says about the plugin itself — for a page to link to what it is about. |
 | `list({ kind, namespace?, selector? })` | Objects of a kind, whole — `status` and all. |
 | `get({ kind, namespace, name })` | One object, read live. |
 | `watch(query, onItems, onError?)` | Polls `list` (`query.interval`, default 5 s). Returns a stop function. |
@@ -440,6 +456,7 @@ The page includes the bridge, which the app serves, and uses it:
 | `edit(ref)`, `logs(ref)` | The YAML editor or the log view, in the app. |
 | `openUrl(url)` | An `http(s)` address in the user's browser. |
 | `on('theme', fn)` | Called when the user changes theme. |
+| `storage.get(key)`, `storage.set(key, value)`, `storage.remove(key)`, `storage.keys()` | What the page keeps between sessions — a folded section, a filter — for this plugin on this tab's cluster. Values are anything JSON can hold, at most 16 KiB each and 64 keys per plugin and cluster. The app keeps them in its settings file, never in the cluster. K8s Dockside 0.0.19 and newer: check `k8sdockside.storage` exists, and keep state in the URL hash without it. |
 
 The SDK sets the app's colour tokens on the page's `:root` — `var(--bg)`,
 `var(--text)`, `var(--accent)`, `var(--ok)`, `var(--error)` and the rest — and
@@ -661,11 +678,15 @@ distributed as one file:
 ```json
 {
     "name": "Acme Pack",
-    "author": "acme",
+    "author": "Acme Inc",
+    "authorUrl": "https://acme.example",
     "version": "1.0.0",
     "plugins": [ { "id": "acme", "...": "..." }, { "id": "acme-edge", "...": "..." } ]
 }
 ```
+
+The pack's `author` and `authorUrl` are given to every plugin in it that names
+no author of its own.
 
 ## Replacing a built-in
 

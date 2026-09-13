@@ -154,6 +154,8 @@ func LoadAt(appVersion, dir string, extra []string, disabled []string) Catalogue
 	for i := range loaded {
 		loaded[i].Disabled = off[loaded[i].ID]
 		loaded[i].Repo, _ = RepoOf(loaded[i])
+		// Always decided here, whatever the manifest wrote.
+		loaded[i].Official = officialClone(loaded[i])
 	}
 
 	return Catalogue{
@@ -201,8 +203,11 @@ type packFile struct {
 	Schema  string           `json:"$schema,omitzero"`
 	Name    string           `json:"name,omitzero"`
 	Author  string           `json:"author,omitzero"`
-	Version string           `json:"version,omitzero"`
-	Plugins []jsontext.Value `json:"plugins"`
+	// AuthorURL is where to find the pack's author. With Author, it is given
+	// to every plugin in the pack that does not name an author of its own.
+	AuthorURL string           `json:"authorUrl,omitzero"`
+	Version   string           `json:"version,omitzero"`
+	Plugins   []jsontext.Value `json:"plugins"`
 }
 
 // parseFile reads one plugin file, which may hold a single plugin or a pack of
@@ -225,6 +230,9 @@ func parseFile(path string, raw []byte, appVersion string) (loaded []Plugin, ref
 	}
 	entries := []entry{{raw: raw}}
 	packName := ""
+	// The pack's author, checked as a plugin's would be, for the plugins in it
+	// that do not name one.
+	var packAuthor Plugin
 	if _, isPack := top["plugins"]; isPack {
 		var pack packFile
 		if err := decodeStrict(raw, &pack); err != nil {
@@ -232,6 +240,10 @@ func parseFile(path string, raw []byte, appVersion string) (loaded []Plugin, ref
 		}
 		if len(pack.Plugins) == 0 {
 			return nil, nil, errors.New("the file is a pack, but its plugins list is empty")
+		}
+		packAuthor = Plugin{ID: pack.Name, Author: pack.Author, AuthorURL: pack.AuthorURL}
+		if err := validateAuthor(&packAuthor); err != nil {
+			return nil, nil, err
 		}
 		packName = pack.Name
 		entries = entries[:0]
@@ -249,6 +261,9 @@ func parseFile(path string, raw []byte, appVersion string) (loaded []Plugin, ref
 		}
 		plugin.Origin = path
 		plugin.Pack = packName
+		if plugin.Author == "" && plugin.AuthorURL == "" {
+			plugin.Author, plugin.AuthorURL = packAuthor.Author, packAuthor.AuthorURL
+		}
 		// The pages are looked for even when the manifest has already failed,
 		// so the one list says everything that is wrong with the plugin.
 		err = errors.Join(err, checkPages(plugin))

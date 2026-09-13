@@ -203,12 +203,14 @@ See [docs/development.md](docs/development.md).
   each kept in its own repository, and suggested in the sidebar for a cluster
   running what it is about
 - A plugin is a JSON file naming kinds the app already knows how to show, so
-  supporting your own operator is a file, not a fork —
-  [docs/plugins.md](docs/plugins.md). One kept in its own folder or repository
-  can also bring views of its own: HTML drawn in a sandboxed frame, reading the
-  cluster through a narrow bridge. The
-  [TypeScript example](https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript)
-  is a starting point, and `plugincheck` runs the app's load checks on a folder
+  supporting your own operator is a file, not a fork. One kept in its own
+  folder or repository can also bring views of its own: HTML drawn in a
+  sandboxed frame, reading the cluster through a narrow bridge — in plain
+  JavaScript, TypeScript or any framework that builds to static files.
+  **[Writing a plugin](docs/writing-plugins.md)** takes you from an empty
+  folder to a published plugin, and to getting it listed in the app;
+  [docs/plugins.md](docs/plugins.md) is the reference. Plugins are credited to
+  their authors wherever the app shows them
 - Graphs where the cluster can answer for them: Prometheus is found
   automatically and reached *through the API server*, no port-forward and no
   second credential. The queries live in the plugin file.
@@ -252,7 +254,10 @@ for anyone new to it.
   code layout
 - [Development](docs/development.md) — building, testing, and cutting a release
 - [Themes](docs/themes.md) — the theme format
-- [Plugins](docs/plugins.md) — the plugin format
+- [Writing a plugin](docs/writing-plugins.md) — step by step: JSON only, pages
+  in plain JavaScript or TypeScript, publishing, credit, and getting listed
+- [Plugin reference](docs/plugins.md) — every manifest field and every call of
+  the bridge a plugin's pages talk to the app through
 
 ## Contributing
 

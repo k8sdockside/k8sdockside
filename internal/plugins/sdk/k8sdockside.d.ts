@@ -167,6 +167,15 @@ declare namespace K8sDockside {
         /** The manifest's `docs` link; `''` when it has none. */
         docs: string;
         links: PluginLink[];
+        /**
+         * Who wrote the plugin, and where to find them; `''` when the
+         * manifest does not say. The app already credits them under the
+         * plugin's own overview -- these are for a page that wants to say so
+         * itself. Optional: an app older than the one that added them leaves
+         * them out.
+         */
+        author?: string;
+        authorUrl?: string;
     }
 
     /** What `ready()` resolves with. */
@@ -325,6 +334,8 @@ declare namespace K8sDockside {
         namespace: string;
         service: string;
         port: string;
+        /** A prefix before the API's paths -- `/select/0/prometheus` for a VictoriaMetrics vmselect; `''` otherwise. */
+        path: string;
         /** Set instead of namespace/service/port when the user configured an address. */
         url: string;
         source: string;
@@ -392,6 +403,24 @@ declare namespace K8sDockside {
 
     /** Stops what returned it. */
     type Unsubscribe = () => void;
+
+    // ----- remembering ---------------------------------------------------------
+
+    /**
+     * What a page keeps between sessions, for its plugin on its tab's cluster.
+     * Values are anything JSON can hold, at most 16 KiB each and 64 keys per
+     * plugin and cluster. Kept by the app in its settings, never in the cluster.
+     */
+    interface PluginStorage {
+        /** The value kept under `key`, or null when there is none. */
+        get<T = unknown>(key: string): Promise<T | null>;
+        /** Keeps `value` under `key`. Rejects with the reason when a limit is hit. */
+        set(key: string, value: unknown): Promise<null>;
+        /** Forgets what is kept under `key`. */
+        remove(key: string): Promise<null>;
+        /** Every key kept, sorted. */
+        keys(): Promise<string[]>;
+    }
 
     // ----- the bridge -------------------------------------------------------------
 
@@ -514,6 +543,13 @@ declare namespace K8sDockside {
 
         /** Listens for pushes from the app. Returns a function that stops listening. */
         on<E extends keyof Events>(event: E, listener: (data: Events[E]) => void): Unsubscribe;
+
+        /**
+         * What the page keeps between sessions, for this plugin on this
+         * cluster. Absent on an app older than 0.0.19, which is why it is
+         * optional: check for it, and fall back to the URL hash without it.
+         */
+        storage?: PluginStorage;
     }
 }
 

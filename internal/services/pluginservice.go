@@ -350,6 +350,14 @@ func (s *PluginService) HideSuggestion(id string, hidden bool) (appconfig.Settin
 	return s.store.HidePluginSuggestion(id, hidden)
 }
 
+// SetState keeps one value for a plugin's own pages on one context -- what the
+// bridge's storage.set asks for -- or forgets it when value is empty, and
+// returns the settings as saved. The frame answers reads from the settings it
+// already holds, so there is no getter.
+func (s *PluginService) SetState(pluginID, contextID, key, value string) (appconfig.Settings, error) {
+	return s.store.SetPluginState(pluginID, contextID, key, value)
+}
+
 // Dir is the folder user plugins are read from by default.
 func (s *PluginService) Dir() string {
 	return s.store.PluginsDir()

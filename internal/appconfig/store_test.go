@@ -31,6 +31,86 @@ func openIn(t *testing.T) *Store {
 	return store
 }
 
+// What a plugin's pages keep is per plugin and per context, survives a
+// reopen, and leaves no trace once forgotten.
+func TestPluginStateIsKeptPerPluginAndContext(t *testing.T) {
+	path := tempSettings(t)
+	store, err := openAt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetPluginState("optimization", "cfg::prod", "overview", `{"collapsed":["waste"]}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetPluginState("optimization", "cfg::dev", "overview", `{"collapsed":[]}`); err != nil {
+		t.Fatal(err)
+	}
+
+	again, err := openAt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := again.Get().PluginState["optimization"]
+	if state["cfg::prod"]["overview"] != `{"collapsed":["waste"]}` || state["cfg::dev"]["overview"] != `{"collapsed":[]}` {
+		t.Errorf("after a reopen: %v", state)
+	}
+
+	got, err := again.SetPluginState("optimization", "cfg::dev", "overview", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, left := got.PluginState["optimization"]["cfg::dev"]; left {
+		t.Error("a context with nothing kept should be dropped")
+	}
+	got, _ = again.SetPluginState("optimization", "cfg::prod", "overview", "")
+	if len(got.PluginState) != 0 {
+		t.Errorf("forgetting the last value left %v", got.PluginState)
+	}
+}
+
+func TestPluginStateIsHeldToItsLimits(t *testing.T) {
+	store := openIn(t)
+	if _, err := store.SetPluginState("p", "ctx", "big", strings.Repeat("x", maxPluginStateValue+1)); err == nil {
+		t.Error("a value over the limit was kept")
+	}
+	if _, err := store.SetPluginState("p", "ctx", strings.Repeat("k", maxPluginStateKey+1), "v"); err == nil {
+		t.Error("a key over the limit was kept")
+	}
+	if _, err := store.SetPluginState("", "ctx", "k", "v"); err == nil {
+		t.Error("a value with no plugin was kept")
+	}
+	for i := range maxPluginStateKeys {
+		if _, err := store.SetPluginState("p", "ctx", "k"+strings.Repeat("x", i), "v"); err != nil {
+			t.Fatalf("key %d: %v", i, err)
+		}
+	}
+	if _, err := store.SetPluginState("p", "ctx", "one-too-many", "v"); err == nil {
+		t.Error("a key past the count limit was kept")
+	}
+	// Changing a key already there is not a new key, and another context has
+	// its own allowance.
+	if _, err := store.SetPluginState("p", "ctx", "k", "changed"); err != nil {
+		t.Errorf("changing a kept key: %v", err)
+	}
+	if _, err := store.SetPluginState("p", "other", "k", "v"); err != nil {
+		t.Errorf("another context: %v", err)
+	}
+}
+
+// The settings handed out are the caller's: changing them cannot reach back
+// into the store.
+func TestPluginStateIsClonedOut(t *testing.T) {
+	store := openIn(t)
+	got, err := store.SetPluginState("p", "ctx", "k", "v")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got.PluginState["p"]["ctx"]["k"] = "tampered"
+	if v := store.Get().PluginState["p"]["ctx"]["k"]; v != "v" {
+		t.Errorf("the store's value became %q", v)
+	}
+}
+
 func TestOpenWithNoFileYieldsDefaults(t *testing.T) {
 	store := openIn(t)
 

@@ -204,6 +204,11 @@ export interface Settings {
      * fixtures need not spell it out.
      */
     hiddenPluginSuggestions?: string[];
+    /**
+     * What plugins' own pages keep through the bridge's storage: plugin id ->
+     * context id -> key -> value. Optional so fixtures need not spell it out.
+     */
+    pluginState?: Record<string, Record<string, Record<string, string>>>;
     contexts: Record<string, ContextPrefs>;
     /**
      * Where every open view sits: which pane holds it, in what order, whether
@@ -295,6 +300,14 @@ export function adoptSettings(settings: appconfig.Settings): Settings {
         themeFolders: [...(settings.themeFolders ?? [])],
         pluginFolders: [...(settings.pluginFolders ?? [])],
         hiddenPluginSuggestions: [...(settings.hiddenPluginSuggestions ?? [])],
+        pluginState: Object.fromEntries(
+            Object.entries(settings.pluginState ?? {}).map(([plugin, contexts]) => [
+                plugin,
+                Object.fromEntries(
+                    Object.entries(contexts ?? {}).map(([context, keys]) => [context, { ...(keys ?? {}) } as Record<string, string>]),
+                ),
+            ]),
+        ),
         contexts: Object.fromEntries(
             Object.entries(settings.contexts ?? {}).map(([id, prefs]) => [
                 id,

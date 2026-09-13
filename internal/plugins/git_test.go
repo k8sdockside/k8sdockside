@@ -72,6 +72,35 @@ func upstreamWithClone(t *testing.T, address string) (upstream, plugins, clone s
 	return upstream, plugins, clone
 }
 
+// The Official badge belongs to the repository, not the name: cert-manager
+// cloned from the known list's address is official; a plugin calling itself
+// cert-manager from anywhere else -- or writing "official": true -- is not.
+func TestOfficialIsDecidedByTheRepositoryNotTheName(t *testing.T) {
+	known, ok := FindKnown("cert-manager")
+	if !ok || !known.Official {
+		t.Fatal("this test needs cert-manager to be an official known plugin")
+	}
+	const manifest = `{"id": "cert-manager", "official": true, "views": [{"id": "pods", "kind": "pods"}]}`
+
+	_, plugins, clone := upstreamWithClone(t, known.Repo)
+	write(t, clone, "plugin.json", manifest)
+	if p, ok := Load(plugins, nil, nil).Find("cert-manager"); !ok || !p.Official {
+		t.Errorf("a clone of %s: found %v, official %v; want it official", known.Repo, ok, p.Official)
+	}
+
+	_, elsewhere, fork := upstreamWithClone(t, "https://github.com/someone-else/k8sdockside-certmanager.git")
+	write(t, fork, "plugin.json", manifest)
+	if p, ok := Load(elsewhere, nil, nil).Find("cert-manager"); !ok || p.Official {
+		t.Errorf("a clone of someone else's repository: found %v, official %v; want it not official", ok, p.Official)
+	}
+
+	loose := t.TempDir()
+	write(t, loose, "cert-manager.json", manifest)
+	if p, ok := Load(loose, nil, nil).Find("cert-manager"); !ok || p.Official {
+		t.Errorf("a file in the plugins folder: found %v, official %v; want it not official", ok, p.Official)
+	}
+}
+
 // A repository cloned before its plugin was pushed has no plugin.json, so the
 // plugin is offered for installing again. Installing it has to update that
 // clone rather than refuse because the folder is taken.

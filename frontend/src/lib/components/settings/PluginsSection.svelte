@@ -10,9 +10,11 @@
 -->
 <script lang="ts">
     import { onExternalClick } from '../../links';
+    import { authorOf, knownStanding, standingOf } from '../../plugins/credit';
     import type { KnownPlugin, PluginLink } from '../../plugins/types';
     import { workspace } from '../../state/workspace.svelte';
     import Icon from '../Icon.svelte';
+    import PluginCredit from '../PluginCredit.svelte';
     import SettingsSection from './SettingsSection.svelte';
 
     let showFormat = $state(false);
@@ -285,6 +287,9 @@
                 <span class="sr-only">{plugin.disabled ? 'Off' : 'On'}</span>
             </label>
         </header>
+        <p class="credit-line">
+            <PluginCredit author={authorOf(plugin)} authorUrl={plugin.authorUrl} standing={standingOf(plugin)} />
+        </p>
         <p class="counts">
             {#if plugin.version}<span class="version">v{plugin.version.replace(/^v/, '')}</span> ·{/if}
             {plugin.views.length} view{plugin.views.length === 1 ? '' : 's'}
@@ -357,6 +362,9 @@
                 {installing === offer.id ? 'Installing…' : 'Install'}
             </button>
         </header>
+        <p class="credit-line">
+            <PluginCredit author={offer.author ?? ''} authorUrl={offer.authorUrl} standing={knownStanding(offer)} />
+        </p>
         <p class="description">{offer.description}</p>
         {#if running.length > 0}
             <p class="running" title="Seen in the definitions of {running.join(', ')}">
@@ -558,6 +566,12 @@
     .version {
         font-family: var(--mono);
         font-size: 10.5px;
+    }
+
+    .credit-line {
+        display: flex;
+        min-width: 0;
+        margin: 6px 0 0;
     }
 
     .suggest {

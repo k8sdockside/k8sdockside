@@ -120,6 +120,67 @@ func TestParseEndpointRefusesNonsense(t *testing.T) {
 	}
 }
 
+// A cluster with no Prometheus but a VictoriaMetrics single server: it answers
+// the Prometheus API at its root.
+func TestDiscoverFindsVictoriaMetricsSingle(t *testing.T) {
+	got := Discover([]ServiceCandidate{
+		svc("default", "web", nil, map[string]int32{"http": 80}),
+		svc("vm", "vmagent-k8s-stack", map[string]string{"app.kubernetes.io/name": "vmagent"}, map[string]int32{"http": 8429}),
+		svc("vm", "vmsingle-k8s-stack", map[string]string{"app.kubernetes.io/name": "vmsingle"}, map[string]int32{"http": 8429}),
+	})
+	if got.Service != "vmsingle-k8s-stack" || got.Port != "http" || got.Path != "" {
+		t.Fatalf("found %+v, want the vmsingle at its root", got)
+	}
+}
+
+// A VictoriaMetrics cluster's vmselect serves the Prometheus API under a prefix.
+func TestDiscoverFindsVMSelectUnderItsPrefix(t *testing.T) {
+	got := Discover([]ServiceCandidate{
+		svc("vm", "vminsert-main", map[string]string{"app.kubernetes.io/name": "vminsert"}, map[string]int32{"": 8480}),
+		svc("vm", "vmselect-main", map[string]string{"app.kubernetes.io/name": "vmselect"}, map[string]int32{"": 8481}),
+	})
+	if got.Service != "vmselect-main" || got.Port != "8481" || got.Path != "/select/0/prometheus" {
+		t.Fatalf("found %+v, want vmselect on 8481 under /select/0/prometheus", got)
+	}
+	if want := "vm/vmselect-main:8481/select/0/prometheus"; got.Describe() != want {
+		t.Errorf("Describe() = %q, want %q", got.Describe(), want)
+	}
+}
+
+// The Helm cluster chart labels every component the same; the vmselect one is
+// told apart by its own label or its name.
+func TestDiscoverFindsTheHelmClusterChartsVMSelect(t *testing.T) {
+	chart := map[string]string{"app.kubernetes.io/name": "victoria-metrics-cluster"}
+	got := Discover([]ServiceCandidate{
+		svc("vm", "vm-victoria-metrics-cluster-vmstorage", chart, map[string]int32{"http": 8482}),
+		svc("vm", "vm-victoria-metrics-cluster-vmselect", chart, map[string]int32{"http": 8481}),
+	})
+	if got.Service != "vm-victoria-metrics-cluster-vmselect" || got.Path != "/select/0/prometheus" {
+		t.Fatalf("found %+v, want the vmselect", got)
+	}
+}
+
+// Both installed: the Prometheus is what the charts were written against.
+func TestDiscoverPrefersPrometheusOverVictoriaMetrics(t *testing.T) {
+	got := Discover([]ServiceCandidate{
+		svc("vm", "vmsingle-main", map[string]string{"app.kubernetes.io/name": "vmsingle"}, map[string]int32{"http": 8429}),
+		svc("monitoring", "prometheus-operated", map[string]string{"app.kubernetes.io/name": "prometheus"}, map[string]int32{"web": 9090}),
+	})
+	if got.Service != "prometheus-operated" {
+		t.Fatalf("found %q, want the Prometheus", got.Service)
+	}
+}
+
+func TestParseEndpointTakesAPath(t *testing.T) {
+	got, err := ParseEndpoint("vm/vmselect-main:8481/select/0/prometheus/")
+	if err != nil {
+		t.Fatalf("ParseEndpoint: %v", err)
+	}
+	if got.Service != "vmselect-main" || got.Port != "8481" || got.Path != "/select/0/prometheus" {
+		t.Errorf("parsed as %+v, want the path without its trailing slash", got)
+	}
+}
+
 func TestDescribe(t *testing.T) {
 	if got := (Endpoint{Namespace: "m", Service: "p", Port: "web"}).Describe(); got != "m/p:web" {
 		t.Errorf("got %q", got)

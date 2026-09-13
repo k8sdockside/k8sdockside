@@ -20,7 +20,7 @@ export interface ChartData {
 }
 
 export interface MetricsSource {
-    endpoint: { namespace: string; service: string; port: string; url: string; source: string };
+    endpoint: { namespace: string; service: string; port: string; path: string; url: string; source: string };
     configured: string;
     available: boolean;
     error: string;
@@ -33,6 +33,8 @@ export function adoptSource(source: bindings.Source): MetricsSource {
         namespace: source.endpoint?.namespace ?? '',
         service: source.endpoint?.service ?? '',
         port: source.endpoint?.port ?? '',
+        // Set for a service serving the API below its root, as a VictoriaMetrics vmselect does.
+        path: source.endpoint?.path ?? '',
         url: source.endpoint?.url ?? '',
         source: source.endpoint?.source ?? '',
     };
@@ -41,7 +43,7 @@ export function adoptSource(source: bindings.Source): MetricsSource {
         configured: source.configured ?? '',
         available: source.available ?? false,
         error: source.error ?? '',
-        describe: endpoint.url || (endpoint.service ? `${endpoint.namespace}/${endpoint.service}:${endpoint.port}` : ''),
+        describe: endpoint.url || (endpoint.service ? `${endpoint.namespace}/${endpoint.service}:${endpoint.port}${endpoint.path}` : ''),
     };
 }
 

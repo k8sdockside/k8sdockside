@@ -2,6 +2,7 @@ package plugins
 
 import (
 	_ "embed"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -35,6 +36,10 @@ type Known struct {
 	Description string `json:"description,omitzero"`
 	// Repo is what installing it clones. https, so it needs no key.
 	Repo string `json:"repo"`
+	// Author is who wrote it, and AuthorURL where to find them. Required: the
+	// list credits everyone on it, the app's own author included.
+	Author    string `json:"author"`
+	AuthorURL string `json:"authorUrl,omitzero"`
 	// Detect are kinds whose presence in a cluster means the product the
 	// plugin is about is running there. Empty for one that works anywhere,
 	// which is then never suggested for a cluster in particular.
@@ -88,13 +93,16 @@ func validateKnown(k Known) (Known, error) {
 			return k, fmt.Errorf("%s: detects %q, which is not a kind this app can open", k.ID, kind)
 		}
 	}
-	// Links are held to the plugin rule, which needs a plugin to report
-	// against.
-	p := Plugin{ID: k.ID, Links: k.Links}
-	if err := validateLinks(&p); err != nil {
+	// Links and the author are held to the plugin rules, which need a plugin
+	// to report against.
+	p := Plugin{ID: k.ID, Links: k.Links, Author: k.Author, AuthorURL: k.AuthorURL}
+	if err := errors.Join(validateLinks(&p), validateAuthor(&p)); err != nil {
 		return k, err
 	}
-	k.Links = p.Links
+	if p.Author == "" {
+		return k, fmt.Errorf("%s: names no author; every plugin on the list is credited", k.ID)
+	}
+	k.Links, k.Author, k.AuthorURL = p.Links, p.Author, p.AuthorURL
 	return k, nil
 }
 
@@ -115,6 +123,22 @@ func (c Catalogue) Offer() []KnownOffer {
 		out = append(out, KnownOffer{Known: k, Installed: installed})
 	}
 	return out
+}
+
+// officialClone reports whether an installed plugin is an official one: it
+// has an official entry's id *and* sits in a clone of that entry's
+// repository. The repository is what counts -- anyone can write the id -- so
+// git is asked only for a plugin whose id is an official one's.
+func officialClone(p Plugin) bool {
+	if p.Repo == "" {
+		return false
+	}
+	k, ok := FindKnown(p.ID)
+	if !ok || !k.Official {
+		return false
+	}
+	origin, err := OriginOf(p.Repo)
+	return err == nil && SameRepository(origin, k.Repo)
 }
 
 // FindKnown returns the known plugin with the given id.

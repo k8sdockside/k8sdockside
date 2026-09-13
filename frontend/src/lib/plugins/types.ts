@@ -97,6 +97,13 @@ export interface Plugin {
     tagline: string;
     icon: string;
     author: string;
+    /** Where to find the author, http(s) only. Optional so fixtures need not spell it out. */
+    authorUrl?: string;
+    /**
+     * Installed from the repository of an official entry on the known list,
+     * as the loader checked it -- a manifest cannot say so about itself.
+     */
+    official?: boolean;
     docs: string;
     /** What the plugin is about, http(s) only. Optional so fixtures need not spell it out. */
     links?: PluginLink[];
@@ -148,6 +155,9 @@ export interface KnownPlugin {
     /** Kinds whose presence in a cluster gives the product away. Empty: never suggested. */
     detect: string[];
     links: PluginLink[];
+    /** Who wrote it, and where to find them. Optional so fixtures need not spell it out. */
+    author?: string;
+    authorUrl?: string;
     official: boolean;
     /** A plugin with this id is already in the catalogue. */
     installed: boolean;

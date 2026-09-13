@@ -268,6 +268,59 @@ func TestTheKnownPluginsAreSound(t *testing.T) {
 		if k.Tagline == "" || k.Description == "" {
 			t.Errorf("%s needs a tagline and a description to be offered", k.ID)
 		}
+		if k.Author == "" {
+			t.Errorf("%s names no author to credit", k.ID)
+		}
+	}
+}
+
+// The author is shown as written, beside the plugin's name, so it is held to
+// what fits there, and its address to the rule every link a plugin gives is.
+func TestAuthorIsCheckedAndCredited(t *testing.T) {
+	const views = `"views": [{ "id": "pods", "label": "Pods", "kind": "pods" }]`
+	for name, tc := range map[string]struct {
+		manifest string
+		refused  string
+	}{
+		"a name and an address": {`{ "id": "acme", "author": " Acme Inc ", "authorUrl": "https://acme.example", ` + views + ` }`, ""},
+		"a name alone":          {`{ "id": "acme", "author": "Acme Inc", ` + views + ` }`, ""},
+		"not a web address":     {`{ "id": "acme", "author": "Acme", "authorUrl": "javascript:alert(1)", ` + views + ` }`, "not an http(s) address"},
+		"an address alone":      {`{ "id": "acme", "authorUrl": "https://acme.example", ` + views + ` }`, "no author to link it from"},
+		"a name too long":       {`{ "id": "acme", "author": "` + strings.Repeat("a", 81) + `", ` + views + ` }`, "keep it to 80"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			loaded, _, err := parseFile("/plugins/acme.json", []byte(tc.manifest), "")
+			if tc.refused == "" {
+				if err != nil || len(loaded) != 1 {
+					t.Fatalf("refused: %v", err)
+				}
+				if loaded[0].Author != "Acme Inc" {
+					t.Errorf("author = %q, want it trimmed", loaded[0].Author)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.refused) {
+				t.Errorf("err = %v, want it to say %q", err, tc.refused)
+			}
+		})
+	}
+}
+
+// A pack credits its author on every plugin in it that does not name its own.
+func TestAPacksAuthorIsGivenToItsPlugins(t *testing.T) {
+	pack := `{ "name": "Acme Pack", "author": "Acme Inc", "authorUrl": "https://acme.example", "plugins": [
+		{ "id": "one", "views": [{ "id": "pods", "label": "Pods", "kind": "pods" }] },
+		{ "id": "two", "author": "Someone Else", "views": [{ "id": "pods", "label": "Pods", "kind": "pods" }] }
+	] }`
+	loaded, _, err := parseFile("/plugins/pack.json", []byte(pack), "")
+	if err != nil || len(loaded) != 2 {
+		t.Fatalf("loaded %d, err %v", len(loaded), err)
+	}
+	if loaded[0].Author != "Acme Inc" || loaded[0].AuthorURL != "https://acme.example" {
+		t.Errorf("one: %q %q, want the pack's author", loaded[0].Author, loaded[0].AuthorURL)
+	}
+	if loaded[1].Author != "Someone Else" || loaded[1].AuthorURL != "" {
+		t.Errorf("two: %q %q, want its own author and nothing of the pack's", loaded[1].Author, loaded[1].AuthorURL)
 	}
 }
 

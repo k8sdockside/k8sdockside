@@ -6,6 +6,8 @@
         "icon": "lock",
         "description": "When every certificate expires, which renewals are stuck and exactly where — the request, the ACME order or the challenge — and why, in plain words. Panels on certificates, issuers, Ingresses and Gateways.",
         "repo": "https://github.com/rogerwesterbo/k8sdockside-certmanager.git",
+        "author": "Roger Westerbo",
+        "authorUrl": "https://github.com/rogerwesterbo",
         "detect": ["crd:certificates.cert-manager.io"],
         "links": [
             { "label": "cert-manager.io", "url": "https://cert-manager.io" },
@@ -20,6 +22,8 @@
         "icon": "gateway",
         "description": "Every address pool as a map of its addresses, the route each address takes out of the cluster, and what is wrong with it. Services still waiting for an address come first, with the reason and a fix.",
         "repo": "https://github.com/rogerwesterbo/k8sdockside-metallb.git",
+        "author": "Roger Westerbo",
+        "authorUrl": "https://github.com/rogerwesterbo",
         "detect": ["crd:ipaddresspools.metallb.io"],
         "links": [
             { "label": "metallb.io", "url": "https://metallb.io" },
@@ -34,6 +38,8 @@
         "icon": "display",
         "description": "Your fleet of virtual machines at a glance, the nodes hosting them and the migrations in flight, with Start, Pause, Restart, Migrate and Stop on every machine and guest charts from Prometheus.",
         "repo": "https://github.com/rogerwesterbo/k8sdockside-kubevirt.git",
+        "author": "Roger Westerbo",
+        "authorUrl": "https://github.com/rogerwesterbo",
         "detect": ["crd:virtualmachines.kubevirt.io"],
         "links": [
             { "label": "kubevirt.io", "url": "https://kubevirt.io" },
@@ -48,9 +54,26 @@
         "icon": "layers",
         "description": "Every image in the cluster by registry, the workloads using it, and the risky ones — unpinned tags and images that will not pull. Works on any cluster. Also the starting point for writing a plugin of your own in TypeScript.",
         "repo": "https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript.git",
+        "author": "Roger Westerbo",
+        "authorUrl": "https://github.com/rogerwesterbo",
         "links": [
             { "label": "Container images", "url": "https://kubernetes.io/docs/concepts/containers/images/" },
             { "label": "Source", "url": "https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript" }
+        ],
+        "official": true
+    },
+    {
+        "id": "optimization",
+        "name": "Optimization advisor",
+        "tagline": "a score for this cluster, and what to change to raise it",
+        "icon": "sliders",
+        "description": "Checks requests and limits, replicas and disruption budgets, probes, autoscalers, idle volumes and node headroom against plain rules, scores the cluster, and says what to change. Switch rules off, accept findings, and rightsize from Prometheus, VictoriaMetrics or metrics-server. Works on any cluster.",
+        "repo": "https://github.com/rogerwesterbo/k8sdockside-optimization.git",
+        "author": "Roger Westerbo",
+        "authorUrl": "https://github.com/rogerwesterbo",
+        "links": [
+            { "label": "Resource management", "url": "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/" },
+            { "label": "Source", "url": "https://github.com/rogerwesterbo/k8sdockside-optimization" }
         ],
         "official": true
     }

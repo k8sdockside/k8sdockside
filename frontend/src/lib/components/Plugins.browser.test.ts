@@ -369,6 +369,8 @@ test('settings offers the known plugins and explains the ones that would not loa
             repo: 'https://github.com/rogerwesterbo/k8sdockside-certmanager.git',
             detect: ['crd:certificates.cert-manager.io'],
             links: [{ label: 'cert-manager.io', url: 'https://cert-manager.io' }],
+            author: 'Roger Westerbo',
+            authorUrl: 'https://github.com/rogerwesterbo',
             official: true,
             installed: false,
         },
@@ -403,6 +405,12 @@ test('settings offers the known plugins and explains the ones that would not loa
     await expect.element(page.getByTitle('git clone https://github.com/rogerwesterbo/k8sdockside-certmanager.git')).toBeVisible();
     expect(page.getByTitle(/^git clone/).elements()).toHaveLength(1);
     await expect.element(page.getByRole('link', { name: 'cert-manager.io' })).toBeVisible();
+    // Each offer credits its author, linked, and says whose it is.
+    await expect.element(page.getByRole('link', { name: 'Roger Westerbo' })).toHaveAttribute('href', 'https://github.com/rogerwesterbo');
+    await expect.element(page.getByText('Official', { exact: true })).toBeVisible();
+    // The built-in Argo CD card credits the project.
+    await expect.element(page.getByText('Built in', { exact: true }).first()).toBeVisible();
+    await expect.element(page.getByText('K8s Dockside', { exact: true })).toBeVisible();
     await expect.element(page.getByText('acme/plugin.json', { exact: true })).toBeVisible();
     await expect.element(page.getByText('did you mean "label"?', { exact: false })).toBeVisible();
     await expect.element(page.getByText('requires "widgets"', { exact: false })).toBeVisible();

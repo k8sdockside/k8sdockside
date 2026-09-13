@@ -43,6 +43,8 @@
     import DetailPanel from './DetailPanel.svelte';
     import Icon from './Icon.svelte';
     import LogView from './LogView.svelte';
+    import { authorOf, standingOf } from '../plugins/credit';
+    import PluginCredit from './PluginCredit.svelte';
     import PluginFrame from './PluginFrame.svelte';
     import PluginOverview from './PluginOverview.svelte';
     import PortForwards from './PortForwards.svelte';
@@ -376,8 +378,18 @@
                         {:else if active.kind === ACCESS_OVERVIEW}
                             <AccessOverview contextId={active.contextId} />
                         {:else if isPluginOverview(active.kind) && workspace.pluginFor(active.kind)?.overview}
-                            <!-- A plugin that draws its own landing page. -->
-                            <PluginFrame contextId={active.contextId} kind={active.kind} />
+                            {@const owner = workspace.pluginFor(active.kind)!}
+                            <!-- A plugin that draws its own landing page, with the
+                                 app's own line under it saying who it is from --
+                                 outside the frame, so the page cannot draw over it. -->
+                            <div class="own-overview">
+                                <PluginFrame contextId={active.contextId} kind={active.kind} />
+                                <footer class="plugin-credit">
+                                    <span class="plugin-name">{owner.name}</span>
+                                    {#if owner.version}<span class="plugin-version">v{owner.version.replace(/^v/, '')}</span>{/if}
+                                    <PluginCredit author={authorOf(owner)} authorUrl={owner.authorUrl} standing={standingOf(owner)} />
+                                </footer>
+                            </div>
                         {:else if isPluginOverview(active.kind)}
                             <PluginOverview contextId={active.contextId} kind={active.kind} />
                         {:else if workspace.pluginViewFor(active.kind)?.type === 'custom'}
@@ -576,6 +588,37 @@
         min-height: 0;
         min-width: 0;
         overflow: hidden;
+    }
+
+    /* A plugin's own overview, and the app's line under it. */
+    .own-overview {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
+    .plugin-credit {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        padding: 3px 12px;
+        font-size: 11px;
+        color: var(--text-faint);
+        background: var(--bg-panel);
+        border-top: 1px solid var(--border-soft);
+    }
+
+    .plugin-name {
+        color: var(--text-dim);
+        white-space: nowrap;
+    }
+
+    .plugin-version {
+        font-family: var(--mono);
+        font-size: 10.5px;
     }
 
     /* A folded bottom pane is its strip and nothing else... */

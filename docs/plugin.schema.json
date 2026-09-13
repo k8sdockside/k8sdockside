@@ -31,7 +31,14 @@
                     "type": "string"
                 },
                 "author": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 80,
+                    "description": "Who wrote the pack. Given to every plugin in it that names no author of its own."
+                },
+                "authorUrl": {
+                    "type": "string",
+                    "pattern": "^https?://[^\\s]+$",
+                    "description": "Where to find the pack's author."
                 },
                 "version": {
                     "type": "string"
@@ -153,7 +160,14 @@
                     "description": "One of the app's icons."
                 },
                 "author": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 80,
+                    "description": "Who wrote the plugin, a person or a company. Credited wherever the app shows the plugin."
+                },
+                "authorUrl": {
+                    "type": "string",
+                    "pattern": "^https?://[^\\s]+$",
+                    "description": "Where to find the author: a profile, a company site. The author's name links to it. Needs author."
                 },
                 "version": {
                     "type": "string",

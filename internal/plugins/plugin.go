@@ -259,7 +259,12 @@ type Plugin struct {
 	Name    string `json:"name"`
 	Tagline string `json:"tagline,omitzero"`
 	Icon    string `json:"icon,omitzero"`
-	Author  string `json:"author,omitzero"`
+	// Author is who wrote the plugin -- a person or a company -- and AuthorURL
+	// where to find them. The app credits them wherever it shows the plugin:
+	// its card in settings, its overview, and a strip under an overview page of
+	// its own, which the plugin's own code cannot draw over.
+	Author    string `json:"author,omitzero"`
+	AuthorURL string `json:"authorUrl,omitzero"`
 	// Docs is a link shown on the overview. Only http(s) is accepted; a plugin
 	// file is not allowed to hand the app an arbitrary URL scheme to open.
 	Docs string `json:"docs,omitzero"`
@@ -302,6 +307,11 @@ type Plugin struct {
 	// Repo is the git checkout the file is in, filled in by the loader, so
 	// the settings view can offer to update it. Empty for everything else.
 	Repo string `json:"repo"`
+	// Official is set by the loader, and ignored on the way in, for a plugin
+	// cloned from the repository of an official entry on the known list. The
+	// check is the repository, not the id: a plugin cannot call itself
+	// official by taking an official one's name.
+	Official bool `json:"official,omitzero"`
 	// Disabled is set by the loader for a plugin the user has switched off in
 	// settings. A disabled plugin stays in the catalogue rather than being
 	// dropped from it, because the settings view has to list it to offer
@@ -517,6 +527,7 @@ func validate(p Plugin) (Plugin, error) {
 		fail(fmt.Errorf("plugin %q has a docs link that is not http(s): %q", p.ID, p.Docs))
 	}
 	fail(validateLinks(&p))
+	fail(validateAuthor(&p))
 	fail(validateVersions(&p))
 	fail(checkIcon(p.ID, "itself", p.Icon))
 	if p.Icon == "" {
@@ -617,6 +628,33 @@ func validateLinks(p *Plugin) error {
 			link.Label = parsed.Host
 		}
 		p.Links[i] = link
+	}
+	return errors.Join(errs...)
+}
+
+// maxAuthor is how long an author's name may be: it is written on one line
+// beside the plugin's name.
+const maxAuthor = 80
+
+// validateAuthor checks who the plugin credits. The name is shown as it is
+// written, so it is kept to a line; the address, like every other link a
+// plugin gives, is http(s) only, and needs a name to hang on.
+func validateAuthor(p *Plugin) error {
+	p.Author = strings.TrimSpace(p.Author)
+	p.AuthorURL = strings.TrimSpace(p.AuthorURL)
+
+	var errs []error
+	if n := len([]rune(p.Author)); n > maxAuthor {
+		errs = append(errs, fmt.Errorf("plugin %q names an author %d characters long; keep it to %d", p.ID, n, maxAuthor))
+	}
+	if p.AuthorURL != "" {
+		parsed, err := url.Parse(p.AuthorURL)
+		switch {
+		case err != nil || !webLink(p.AuthorURL) || parsed.Host == "":
+			errs = append(errs, fmt.Errorf("plugin %q has an authorUrl %q that is not an http(s) address", p.ID, p.AuthorURL))
+		case p.Author == "":
+			errs = append(errs, fmt.Errorf("plugin %q has an authorUrl but no author to link it from", p.ID))
+		}
 	}
 	return errors.Join(errs...)
 }

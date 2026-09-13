@@ -41,7 +41,7 @@ func TestTheSchemaDescribesEveryManifestField(t *testing.T) {
 	// Filled in by the loader and never written by hand, so the schema leaves
 	// them out even though the loader tolerates them.
 	loaderOnly := map[string][]string{
-		"plugin": {"origin", "pack", "repo", "disabled"},
+		"plugin": {"origin", "pack", "repo", "official", "disabled"},
 		"ui":     {"readable"},
 	}
 	types := map[string]reflect.Type{
