@@ -200,9 +200,9 @@ func emptyClones(dir string) []Problem {
 // packFile is a pack as it is first read: its plugins kept as they are
 // written, so each is read -- and refused -- on its own.
 type packFile struct {
-	Schema  string           `json:"$schema,omitzero"`
-	Name    string           `json:"name,omitzero"`
-	Author  string           `json:"author,omitzero"`
+	Schema string `json:"$schema,omitzero"`
+	Name   string `json:"name,omitzero"`
+	Author string `json:"author,omitzero"`
 	// AuthorURL is where to find the pack's author. With Author, it is given
 	// to every plugin in the pack that does not name an author of its own.
 	AuthorURL string           `json:"authorUrl,omitzero"`
