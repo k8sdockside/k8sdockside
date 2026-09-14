@@ -59,8 +59,8 @@ var quietKinds = map[string]bool{KindEvents: true}
 // the metrics API serves a PodMetrics for every pod, by the pod's own name, and
 // events.k8s.io serves the same Events the core group does.
 var skippedGroups = map[string]bool{
-	"metrics.k8s.io":  true,
-	"events.k8s.io":   true,
+	"metrics.k8s.io":        true,
+	"events.k8s.io":         true,
 	"authorization.k8s.io":  true,
 	"authentication.k8s.io": true,
 }

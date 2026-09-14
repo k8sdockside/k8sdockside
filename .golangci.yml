@@ -7,3 +7,13 @@ linters:
       # (e.g. modifyOptionsForIOS, only referenced behind //go:build ios) and
       # Wails' own dependency installer scripts. Not our code, not our lint.
       - build/
+
+# Formatting is checked by `make lint` too, not only by CI's separate
+# "Check formatting" step, so an unformatted file fails locally before it is
+# pushed. Same exclusion as the linters, for the same reason.
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    paths:
+      - build/
