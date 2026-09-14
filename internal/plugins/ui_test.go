@@ -103,6 +103,55 @@ func TestValidateRefusesBadCustomViews(t *testing.T) {
 	}
 }
 
+func TestAFocusedViewGetsItsDefaultsAndMayReadItsKind(t *testing.T) {
+	p, err := validate(Plugin{
+		ID:    "x",
+		Views: []View{{ID: "board", Type: ViewCustom, Focus: &Focus{Kind: " crd:meshes.acme.io "}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, _ := p.View("board")
+	if v.Focus == nil || v.Focus.Kind != "crd:meshes.acme.io" || v.Focus.Hash != DefaultFocusHash {
+		t.Errorf("focus = %+v, want the kind trimmed and the default hash", v.Focus)
+	}
+	if !p.CanRead("crd:meshes.acme.io") {
+		t.Error("a view that can be opened on a kind should be able to read it")
+	}
+}
+
+func TestAFocusHashLosesItsHashMark(t *testing.T) {
+	p, err := validate(Plugin{
+		ID:    "x",
+		Views: []View{{ID: "board", Type: ViewCustom, Focus: &Focus{Kind: "pods", Hash: "#selected={namespace}/{name}"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := p.View("board"); v.Focus.Hash != "selected={namespace}/{name}" {
+		t.Errorf("hash = %q", v.Focus.Hash)
+	}
+}
+
+func TestValidateRefusesBadFocuses(t *testing.T) {
+	cases := map[string]View{
+		"on a table view":    {ID: "v", Kind: "pods", Focus: &Focus{Kind: "pods"}},
+		"with no kind":       {ID: "v", Type: ViewCustom, Focus: &Focus{Hash: "name={name}"}},
+		"on nonsense":        {ID: "v", Type: ViewCustom, Focus: &Focus{Kind: "widgets"}},
+		"on a plugin view":   {ID: "v", Type: ViewCustom, Focus: &Focus{Kind: "plugin:x/y"}},
+		"on secrets":         {ID: "v", Type: ViewCustom, Focus: &Focus{Kind: "secrets"}},
+		"naming the unknown": {ID: "v", Type: ViewCustom, Focus: &Focus{Kind: "pods", Hash: "uid={uid}"}},
+		"a second hash mark": {ID: "v", Type: ViewCustom, Focus: &Focus{Kind: "pods", Hash: "a={name}#b"}},
+	}
+	for name, v := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := validate(Plugin{ID: "x", Views: []View{v}}); err == nil {
+				t.Error("accepted")
+			}
+		})
+	}
+}
+
 // A secret named anywhere else in the plugin still does not become readable.
 func TestSecretsAreNeverReadableByAView(t *testing.T) {
 	p, err := validate(Plugin{

@@ -10,7 +10,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-// New wires the twelve services the frontend calls and returns them ready to
+// New wires the thirteen services the frontend calls and returns them ready to
 // register with the application, along with the asset middleware that serves
 // plugins' own views -- which needs the plugin catalogue, and so comes from
 // here rather than from main.go.
@@ -41,6 +41,11 @@ func New(settings *appconfig.Store) ([]application.Service, application.Middlewa
 	charts := NewHelmService(configs, resources.watcher, settings)
 	shells := NewTerminalService(configs, resources.watcher, settings)
 	tunnels := NewPortForwardService(configs, resources.watcher, settings)
+	// Search borrows the same watcher again: a search of a context already
+	// open in a tab goes through that tab's connection, and one of a context
+	// that was not leaves a warm client behind for the tab the reader is about
+	// to open on what they found.
+	finder := NewSearchService(configs, resources.watcher)
 	// The one service that reaches beyond this machine and its clusters: it
 	// asks GitHub whether a newer release exists. It reads the settings for
 	// whether it may, and writes them for what the user has already seen.
@@ -58,6 +63,7 @@ func New(settings *appconfig.Store) ([]application.Service, application.Middlewa
 		application.NewService(charts),
 		application.NewService(shells),
 		application.NewService(tunnels),
+		application.NewService(finder),
 		application.NewService(news),
 	}, solutions.assetMiddleware()
 }

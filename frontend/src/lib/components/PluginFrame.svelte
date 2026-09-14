@@ -13,7 +13,7 @@
   /plugin-ui/_sdk/k8sdockside.js; see internal/plugins/sdk.
 -->
 <script lang="ts">
-    import { onDestroy } from 'svelte';
+    import { onDestroy, untrack } from 'svelte';
     import {
         MetricsService,
         PluginService,
@@ -25,7 +25,8 @@
     import { adoptPluginSummary } from '../plugins/adopt';
     import { pluginState, setPluginState } from '../plugins/storage';
     import { detail, type DetailTarget } from '../state/detail.svelte';
-    import { workspace } from '../state/workspace.svelte';
+    import { resourceTabId, workspace } from '../state/workspace.svelte';
+    import { pluginFocus } from '../plugins/focus.svelte';
     import Icon from './Icon.svelte';
 
     interface Props {
@@ -57,6 +58,29 @@
     let frame = $state<HTMLIFrameElement | null>(null);
 
     /**
+     * The object a tab's page was asked to open on -- from a search hit, for a
+     * view that declares a focus. See plugins/focus.svelte.ts.
+     *
+     * It rides in the address after the #, and each request reloads the frame:
+     * a page reads its address as it loads, and a fragment changed under a page
+     * already loaded would not load anything. The request is taken as it is
+     * used, so bringing the tab forward again later opens the page as the
+     * reader left it rather than back on the object searched for.
+     */
+    const tabId = untrack(() => (section ? '' : resourceTabId(contextId, kind)));
+    let focusHash = $state('');
+    let focusNonce = $state(0);
+    $effect(() => {
+        if (!tabId || !pluginFocus.peek(tabId)) return;
+        untrack(() => {
+            const asked = pluginFocus.take(tabId);
+            if (!asked) return;
+            focusHash = asked.hash;
+            focusNonce = asked.nonce;
+        });
+    });
+
+    /**
      * What the page is: a tab's view, the plugin's own overview, or a section.
      * Null when none of them is installed any more.
      */
@@ -83,7 +107,8 @@
     let src = $derived.by(() => {
         if (!plugin || !page) return '';
         const entry = page.entry.split('/').map(encodeURIComponent).join('/');
-        return `/plugin-ui/${encodeURIComponent(plugin.id)}/${entry}?scheme=${scheme}`;
+        const address = `/plugin-ui/${encodeURIComponent(plugin.id)}/${entry}?scheme=${scheme}`;
+        return focusHash ? `${address}#${focusHash}` : address;
     });
 
     /**
@@ -111,6 +136,8 @@
 
     /** Reloads a section's page when the panel moves to another object. */
     let objectKey = $derived(object ? `${object.contextId}/${object.kind}/${object.namespace}/${object.name}` : '');
+    /** What the frame is rebuilt on: another object for a section, another focus for a tab. */
+    let frameKey = $derived(`${objectKey}|${focusNonce}`);
 
     // ----- the confirmation a write waits on -------------------------------
 
@@ -441,7 +468,7 @@
              popups, no top-level navigation. The Go side repeats the sandbox in
              the page's own Content-Security-Policy. -->
         <div class="viewport" style:zoom={zoom === 1 ? null : 1 / zoom}>
-            {#key objectKey}
+            {#key frameKey}
                 <iframe
                     bind:this={frame}
                     {src}

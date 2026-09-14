@@ -29,6 +29,12 @@ export interface PluginViewSpec {
      * sets it.
      */
     entry?: string;
+    /**
+     * Custom views only: the kind the page can be opened on, and what goes
+     * after the # in its address to say which object -- `{namespace}` and
+     * `{name}` filled in. Null (or absent) for a view that cannot be.
+     */
+    focus?: { kind: string; hash: string } | null;
 }
 
 /**

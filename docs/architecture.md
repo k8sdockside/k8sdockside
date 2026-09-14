@@ -73,6 +73,7 @@ internal/services/           the services the frontend calls, wired together in 
   terminalservice.go         shells: the sessions open, and the external terminals
   portforwardservice.go      the tunnels open, and the ones remembered from last time
   updateservice.go           whether a newer release exists, and whether the user has heard
+  searchservice.go           finding objects by name across clusters, reported as they are found
 internal/kube/               kubeconfig parsing, and the stubbed cluster data
 internal/appconfig/          the settings file
 internal/addons/             finding and merging add-on files, shared by the two below
@@ -99,6 +100,8 @@ frontend/src/
   lib/state/updates.svelte.ts     the newest release known, and whether it is still unread
   lib/state/tabdrag.svelte.ts     the tab in the air, while one is being dragged between panes
   lib/state/views.ts              how each open list is sorted and filtered, for as long as its tab is
+  lib/state/search.svelte.ts      the search in the title bar: the query, its options, and what has turned up
+  lib/search/                     ordering search hits, and the plugin views each one can be opened in
   lib/theme/apply.ts         writing a theme's colours onto the document
   lib/plugins/               the plugin catalogue as the sidebar and overview see it
   lib/components/PluginFrame.svelte   a plugin's own view or detail panel, sandboxed, and the bridge it talks through

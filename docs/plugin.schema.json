@@ -407,6 +407,25 @@
                 "selector": {
                     "type": "string",
                     "description": "A label selector in the usual a=b,c in (d,e) syntax."
+                },
+                "focus": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                        "kind"
+                    ],
+                    "description": "Custom views only: lets the app open this view on one object of a kind -- from a search hit, for instance -- by putting the object in the page's address after the #.",
+                    "properties": {
+                        "kind": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "The kind the view can be opened on: a built-in name, or \"crd:<plural>.<group>\"."
+                        },
+                        "hash": {
+                            "type": "string",
+                            "description": "What follows the # in the page's address. {namespace} and {name} are replaced by the object's, URL-encoded. Defaults to namespace={namespace}&name={name}."
+                        }
+                    }
                 }
             }
         },

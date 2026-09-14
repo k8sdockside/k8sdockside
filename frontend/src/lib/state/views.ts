@@ -34,6 +34,11 @@ export interface TabView {
 
 const remembered = new Map<string, TabView>();
 
+/** How a tab that has never been on screen starts. */
+function blank(): TabView {
+    return { sortColumn: null, sortDescending: false, namespaces: [], query: '', node: '' };
+}
+
 /**
  * Bumped whenever something outside a table changes what that table should be
  * showing -- today, focusNode.
@@ -68,14 +73,24 @@ export const views = {
      * that *is* already mounted watches this through views.revision.
      */
     focusNode(tabId: string, node: string): void {
-        const view = remembered.get(tabId) ?? {
-            sortColumn: null,
-            sortDescending: false,
-            namespaces: [],
-            query: '',
-            node: '',
-        };
+        const view = remembered.get(tabId) ?? blank();
         remembered.set(tabId, { ...view, node });
+        bump();
+    },
+
+    /**
+     * Narrows a list to one object's name, whether or not its tab is on
+     * screen, so that opening a search hit lands on its row.
+     *
+     * Whatever else would hide the row goes with it: a node filter, and a
+     * namespace filter that leaves out the object's namespace. A namespace
+     * filter that already includes it is kept -- it is what the reader chose,
+     * and it is not in the way.
+     */
+    focusName(tabId: string, name: string, namespace: string): void {
+        const view = remembered.get(tabId) ?? blank();
+        const hidden = namespace !== '' && view.namespaces.length > 0 && !view.namespaces.includes(namespace);
+        remembered.set(tabId, { ...view, query: name, node: '', namespaces: hidden ? [] : view.namespaces });
         bump();
     },
 

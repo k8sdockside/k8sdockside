@@ -51,6 +51,8 @@ vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/service
         Uninstall: vi.fn().mockResolvedValue(''),
         ChartVersions: vi.fn().mockResolvedValue([]),
     },
+    // The title bar carries the search box, whose store is loaded with it.
+    SearchService: { Start: vi.fn().mockResolvedValue(undefined), Cancel: vi.fn().mockResolvedValue(undefined) },
     KubeconfigService: { Sync: vi.fn().mockResolvedValue([]), Files: vi.fn().mockResolvedValue([]) },
     ResourceService: {
         Describe: vi.fn().mockResolvedValue(''),

@@ -63,7 +63,11 @@
             "label": "Application board",
             "icon": "dashboard",
             "type": "custom",
-            "entry": "apps.html"
+            "entry": "apps.html",
+            "focus": {
+                "kind": "crd:applications.argoproj.io",
+                "hash": "selected={namespace}/{name}"
+            }
         },
         {
             "id": "applications",

@@ -417,6 +417,7 @@ my-plugin/
 | --- | --- | --- |
 | view `type` | | `custom` for a page of the plugin's own; `table`, the default, for a listing. |
 | view `entry` | optional | The file it opens, relative to the ui folder. Defaults to `index.html`. One page can serve several views and tell them apart by `viewId`. A custom view takes no `kind`, `namespace` or `selector`. |
+| view `focus` | optional | Lets the app open the view on one object: `{ "kind": "crd:applications.argoproj.io", "hash": "selected={namespace}/{name}" }`. Wherever the app has an object of that kind in hand — a search hit, today — it offers the view, and opens the page with `hash` after the `#` in its address, `{namespace}` and `{name}` filled in and URL-encoded. `hash` defaults to `namespace={namespace}&name={name}`. The page reads `location.hash` as it loads; a new focus reloads it. The kind becomes readable by the plugin's views. |
 | `ui.dir` | optional | The folder, relative to the plugin's file. Defaults to `ui`. It may not leave the file's folder. |
 | `ui.kinds` | optional | Kinds the views may read, beyond those the plugin already names in `requires`, `views` and `cards`. |
 | `ui.write` | optional | Lets the views *ask* to merge-patch and create objects of those kinds. |

@@ -124,6 +124,32 @@ type View struct {
 	// built-in kind -- the Deployments that are Argo CD's -- rather than only
 	// of custom resources nothing else owns.
 	Selector string `json:"selector,omitzero"`
+	// Focus says a custom view can be opened on one object of a kind, and
+	// how to tell the page which. Meaningless on a table view, which is
+	// opened on an object by filtering it.
+	Focus *Focus `json:"focus,omitzero"`
+}
+
+// DefaultFocusHash is the address fragment a focused view is opened with when
+// its focus does not say otherwise.
+const DefaultFocusHash = "namespace={namespace}&name={name}"
+
+// Focus lets a custom view be opened on one object -- an Application shown
+// selected on a board of them -- rather than on the page as a whole. The app
+// offers it wherever it has an object of the kind in hand and somewhere to
+// send the reader: a search hit, today.
+//
+// The object reaches the page in its own address, after the #, which is the
+// one thing a page already reads before the bridge is up and which it can
+// keep for itself as the reader moves about.
+type Focus struct {
+	// Kind is what the view can be focused on: a built-in name or a
+	// "crd:<plural>.<group>" custom resource.
+	Kind string `json:"kind"`
+	// Hash is the part of the address after the #, with {namespace} and
+	// {name} standing for the object's. Both are URL-encoded as they are put
+	// in. Defaults to DefaultFocusHash.
+	Hash string `json:"hash,omitzero"`
 }
 
 // Requirement is a kind the plugin needs the cluster to serve. It is what the
@@ -848,6 +874,9 @@ func validateView(pluginID string, v View) (View, error) {
 	if v.Entry != "" {
 		return v, fmt.Errorf("plugin %q has a table view %q with an entry file; only a %q view opens one", pluginID, v.ID, ViewCustom)
 	}
+	if v.Focus != nil {
+		return v, fmt.Errorf("plugin %q has a table view %q with a focus; a table is opened on an object by filtering it, and only a %q view needs telling which", pluginID, v.ID, ViewCustom)
+	}
 	if v.Kind == "" {
 		return v, fmt.Errorf("plugin %q has a view %q with no kind to list", pluginID, v.ID)
 	}
@@ -877,7 +906,47 @@ func validateCustomView(pluginID string, v View) (View, error) {
 	if !fs.ValidPath(v.Entry) || v.Entry == "." {
 		return v, fmt.Errorf("plugin %q has a custom view %q opening %q, which is not a file inside its UI folder", pluginID, v.ID, v.Entry)
 	}
+	if v.Focus != nil {
+		focus, err := validateFocus(pluginID, v.ID, *v.Focus)
+		if err != nil {
+			return v, err
+		}
+		v.Focus = &focus
+	}
 	return v, nil
+}
+
+// focusPlaceholders are what a focus's hash may say about the object.
+var focusPlaceholders = []string{"{namespace}", "{name}"}
+
+// validateFocus checks what a custom view says it can be opened on.
+//
+// The hash is checked for what it may name rather than for what it looks like:
+// a placeholder the app does not fill would reach the page as literal braces,
+// and the page would go looking for an object called "{uid}".
+func validateFocus(pluginID, viewID string, f Focus) (Focus, error) {
+	f.Kind = strings.TrimSpace(f.Kind)
+	f.Hash = strings.TrimPrefix(strings.TrimSpace(f.Hash), "#")
+	if f.Hash == "" {
+		f.Hash = DefaultFocusHash
+	}
+	if f.Kind == "" {
+		return f, fmt.Errorf("plugin %q has a custom view %q with a focus but no kind to focus on", pluginID, viewID)
+	}
+	if strings.HasPrefix(f.Kind, Prefix) || !kube.IsKnownKind(f.Kind) {
+		return f, fmt.Errorf("plugin %q has a custom view %q focusing on %q, which is not a kind this app can open", pluginID, viewID, f.Kind)
+	}
+	if f.Kind == unreadableKind {
+		return f, fmt.Errorf("plugin %q has a custom view %q focusing on %s, which no plugin view may read", pluginID, viewID, unreadableKind)
+	}
+	rest := f.Hash
+	for _, p := range focusPlaceholders {
+		rest = strings.ReplaceAll(rest, p, "")
+	}
+	if strings.ContainsAny(rest, "{}#") {
+		return f, fmt.Errorf("plugin %q has a custom view %q whose focus hash %q names something other than %s", pluginID, viewID, f.Hash, strings.Join(focusPlaceholders, " and "))
+	}
+	return f, nil
 }
 
 // validateOverview checks a plugin's own landing page.
@@ -960,6 +1029,10 @@ func readableKinds(p Plugin, extra []string) []string {
 	}
 	for _, view := range p.Views {
 		add(view.Kind)
+		// A view that can be opened on an object has to be able to read it.
+		if view.Focus != nil {
+			add(view.Focus.Kind)
+		}
 	}
 	for _, card := range p.Cards {
 		add(card.Kind)

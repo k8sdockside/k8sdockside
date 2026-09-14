@@ -38,6 +38,7 @@ export function adoptPlugin(plugin: bindings.Plugin): Plugin {
             namespace: view.namespace ?? '',
             selector: view.selector ?? '',
             entry: view.entry ?? '',
+            focus: view.focus ? { kind: view.focus.kind, hash: view.focus.hash ?? '' } : null,
         })),
         ui: plugin.ui
             ? { readable: [...(plugin.ui.readable ?? [])], write: plugin.ui.write ?? false }

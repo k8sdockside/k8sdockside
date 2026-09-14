@@ -41,6 +41,27 @@ export const HELP: Page = {
             ],
         },
         {
+            id: 'search',
+            label: 'Search',
+            icon: 'search',
+            lede: 'Find an object by name in every cluster at once, whatever its kind.',
+            blocks: [
+                {
+                    type: 'list',
+                    items: [
+                        '**The box in the title bar** searches as you type. **Cmd/Ctrl+K** puts you in it from anywhere; the arrow keys move through the results, **Enter** opens one and **Esc** closes the panel.',
+                        '**Every kind the cluster serves** is searched — built-in and custom resources alike — except Events, which are named after the objects they are about and would bury them. Ask for them with `kind:events`.',
+                        '**Words** must all appear in the name. `*` is a wildcard that pins the ends (`api-*-worker`), and a slash matches the namespace too (`kube-system/core`).',
+                        '**Filters** narrow it: `kind:po,svc` by name, plural or short name; `ns:default` to one namespace, `ns:a,b` to several; `label:app=web` by label selector, which the cluster answers.',
+                        '**Where it looks.** By default, the contexts already open: selected, showing a tab, or answering in the sidebar. **All contexts** reaches the rest as well, connecting to each one — which runs its credential plugin, if it has one.',
+                        '**As it goes.** Results arrive cluster by cluster, and the panel shows which clusters are still being searched and how far each has got. **Stop** calls the search off and keeps what it found.',
+                        '**Opening a hit** opens its kind’s list narrowed to its name, with its report in the details panel. Where an enabled plugin shows the kind, the hit also offers that view — the Argo CD application board opens with the Application selected.',
+                        '**Only names, namespaces and labels are read.** A search never fetches what a Secret or a ConfigMap holds.',
+                    ],
+                },
+            ],
+        },
+        {
             id: 'sidebar',
             label: 'The sidebar',
             icon: 'layers',

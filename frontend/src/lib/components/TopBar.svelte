@@ -8,32 +8,46 @@
   from under them.
 
   The title is centred on the window rather than in the space left over, so it
-  does not drift as the panels are resized. The bell and the View menu sit in
-  the space that leaves on the right, which is the one part of the window that
-  is there whatever else has been hidden -- see NotificationMenu.svelte and
-  ViewMenu.svelte.
+  does not drift as the panels are resized: the bar is three columns, and the
+  two either side of the title are the same width whatever they hold. The left
+  one belongs to the traffic lights. The right one holds the search box, just
+  after the title, and the bell and the View menu at the far end, which is the
+  one part of the window that is there whatever else has been hidden -- see
+  SearchBar.svelte, NotificationMenu.svelte and ViewMenu.svelte.
 -->
 <script lang="ts">
     import NotificationMenu from './NotificationMenu.svelte';
+    import SearchBar from './SearchBar.svelte';
     import ViewMenu from './ViewMenu.svelte';
 </script>
 
 <header class="topbar">
+    <div class="lead"></div>
+
     <div class="title">
         <img src="/icon-ship.svg" alt="" width="18" height="18" />
         <span>K8S Dockside</span>
     </div>
 
-    <div class="menus">
-        <NotificationMenu />
-        <ViewMenu />
+    <div class="trail">
+        <SearchBar />
+        <div class="menus">
+            <NotificationMenu />
+            <ViewMenu />
+        </div>
     </div>
 </header>
 
 <style>
     .topbar {
+        /* The search panel is placed against this, so it hangs from the middle
+           of the window rather than from the box. */
         position: relative;
-        display: flex;
+        display: grid;
+        /* minmax(0, …) rather than 1fr, whose minimum is its content: a wide
+           search box would otherwise widen its column, and the title would
+           drift off the centre line to make room. */
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
         align-items: center;
         flex: 0 0 auto;
         /* Set from the zoom level: the webview scales CSS pixels but the
@@ -48,9 +62,6 @@
     }
 
     .title {
-        position: absolute;
-        left: 50%;
-        transform: translateX(-50%);
         display: flex;
         align-items: center;
         gap: 8px;
@@ -59,6 +70,7 @@
         letter-spacing: 0.02em;
         color: var(--text);
         pointer-events: none;
+        white-space: nowrap;
     }
 
     .title img {
@@ -66,12 +78,20 @@
         opacity: 0.95;
     }
 
-    /* On the right, where nothing else is: the left of the bar belongs to the
-       macOS traffic lights, and the middle to the title. */
+    .trail {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        padding-left: 14px;
+    }
+
+    /* At the far right, where nothing else is. */
     .menus {
         display: flex;
         align-items: center;
         gap: 2px;
+        flex: 0 0 auto;
         margin-left: auto;
         padding-right: 8px;
     }

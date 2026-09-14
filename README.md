@@ -168,6 +168,12 @@ See [docs/development.md](docs/development.md).
 - Nodes carry the `kubectl get nodes -o wide` columns — internal and external
   IP, OS image, kernel and container runtime — beside capacity and allocatable
 - A dashboard of cluster capacity, requests and workload health
+- Search in the title bar (`⌘K`): find an object by name in every kind every
+  open cluster serves — or every context in your kubeconfigs — with results
+  arriving cluster by cluster as they are found. Filters for kind, namespace
+  and label; only metadata is read, never a Secret's values. A hit opens in its
+  list and details panel, or in the plugin view that shows it — an Argo CD
+  Application opens selected on the application board
 
 **Working with objects**
 - A describe panel you can dock right, bottom or left, and resize
