@@ -76,5 +76,21 @@
             { "label": "Source", "url": "https://github.com/rogerwesterbo/k8sdockside-optimization" }
         ],
         "official": true
+    },
+    {
+        "id": "vitistack",
+        "name": "Vitistack",
+        "tagline": "a supervisor cluster -- networks, clusters, machines and their VMs -- as one picture",
+        "icon": "layers",
+        "description": "Every network namespace, Kubernetes cluster, machine provider, machine and VM as one node graph that lights up the chains through whatever you select, with what is failing and why. Cluster and machine pages in full, and every cluster against the Kubernetes release calendar and the Talos support matrix, with buttons that start talos-operator's upgrades.",
+        "repo": "https://github.com/rogerwesterbo/k8sdockside-vitistack.git",
+        "author": "Roger Westerbo",
+        "authorUrl": "https://github.com/rogerwesterbo",
+        "detect": ["crd:kubernetesclusters.vitistack.io"],
+        "links": [
+            { "label": "Vitistack", "url": "https://github.com/vitistack" },
+            { "label": "Source", "url": "https://github.com/rogerwesterbo/k8sdockside-vitistack" }
+        ],
+        "official": true
     }
 ]

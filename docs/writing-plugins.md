@@ -340,6 +340,7 @@ from repository**, with no change needed here unless its address moves.
 | --- | --- |
 | [k8sdockside-example-plugin-typescript](https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript) | TypeScript with esbuild, tests and CI: an overview, a view and a panel over core kinds, a patch. The one to copy. |
 | [k8sdockside-optimization](https://github.com/rogerwesterbo/k8sdockside-optimization) | TypeScript: rules with tests, a score, Prometheus data through `charts()`, `create` and `patch`. |
+| [k8sdockside-vitistack](https://github.com/rogerwesterbo/k8sdockside-vitistack) | TypeScript: an SVG node graph with a layout of its own, several views that hand each other an object through `storage`, panels on its own kinds and on another plugin's, actions, and `patch` behind buttons. |
 | [k8sdockside-metallb](https://github.com/rogerwesterbo/k8sdockside-metallb) | Plain JavaScript: an overview of its own, views and panels. |
 | [k8sdockside-certmanager](https://github.com/rogerwesterbo/k8sdockside-certmanager) | Plain JavaScript: panels on built-in kinds (Ingresses, Gateways), charts on objects. |
 | [`internal/plugins/builtin/`](../internal/plugins/builtin/) | The built-ins, in the same format: `flux.json` is JSON only; `argocd.json` has actions, a board and a panel; `prometheus.json` has every kind of chart. |

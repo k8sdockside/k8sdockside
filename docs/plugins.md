@@ -7,7 +7,7 @@ names like `kustomize.toolkit.fluxcd.io`.
 
 Three ship with the app: Argo CD, Flux and Prometheus. Others live in
 repositories of their own and are a button away in **Settings → Plugins →
-Available**: cert-manager, MetalLB, KubeVirt and an image inventory. The
+Available**: cert-manager, MetalLB, KubeVirt, Vitistack and an image inventory. The
 sidebar suggests one for any cluster running what it is about. Anything else is
 a JSON file you drop in a folder, or a repository you give the address of.
 
@@ -79,6 +79,7 @@ definitions.
 | cert-manager | Roger Westerbo | [rogerwesterbo/k8sdockside-certmanager](https://github.com/rogerwesterbo/k8sdockside-certmanager) | `crd:certificates.cert-manager.io` |
 | MetalLB | Roger Westerbo | [rogerwesterbo/k8sdockside-metallb](https://github.com/rogerwesterbo/k8sdockside-metallb) | `crd:ipaddresspools.metallb.io` |
 | KubeVirt | Roger Westerbo | [rogerwesterbo/k8sdockside-kubevirt](https://github.com/rogerwesterbo/k8sdockside-kubevirt) | `crd:virtualmachines.kubevirt.io` |
+| Vitistack | Roger Westerbo | [rogerwesterbo/k8sdockside-vitistack](https://github.com/rogerwesterbo/k8sdockside-vitistack) | `crd:kubernetesclusters.vitistack.io` |
 | Image inventory | Roger Westerbo | [rogerwesterbo/k8sdockside-example-plugin-typescript](https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript) | — works on any cluster |
 | Optimization advisor | Roger Westerbo | [rogerwesterbo/k8sdockside-optimization](https://github.com/rogerwesterbo/k8sdockside-optimization) | — works on any cluster |
 

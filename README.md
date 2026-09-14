@@ -204,7 +204,8 @@ See [docs/development.md](docs/development.md).
 - More a button away in *Settings → Plugins*:
   [cert-manager](https://github.com/rogerwesterbo/k8sdockside-certmanager),
   [MetalLB](https://github.com/rogerwesterbo/k8sdockside-metallb),
-  [KubeVirt](https://github.com/rogerwesterbo/k8sdockside-kubevirt) and an
+  [KubeVirt](https://github.com/rogerwesterbo/k8sdockside-kubevirt),
+  [Vitistack](https://github.com/rogerwesterbo/k8sdockside-vitistack) and an
   [image inventory](https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript),
   each kept in its own repository, and suggested in the sidebar for a cluster
   running what it is about
