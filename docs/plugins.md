@@ -672,6 +672,24 @@ nowhere to look. The folder is kept, so a plugin waiting on a newer app loads
 once the app is updated, and one with a mistake in it can be fixed and updated
 in place.
 
+**Uninstall** on an installed plugin's card deletes what it came in: the folder
+it was cloned or copied into, or the file, for one dropped straight into the
+plugins folder. The app says exactly what that is — and which other plugins go
+with it, the rest of a pack or of a folder holding several — and asks first. A
+built-in cannot be uninstalled, only switched off, and a plugin read from a
+folder you added with **Watch another folder** is never deleted: stop watching
+the folder instead. A plugin both installed and in a watched folder — the one
+you are writing, say — loads from the plugins folder, and the other copy is
+listed under **would not load**; uninstalling the installed copy lets the other
+one load.
+
+A plugin read from a watched folder is listed apart, under **From folders you
+watch**, with the folder it is in. It gets no **Update** and no **Uninstall** —
+the folder is your checkout, to pull and to delete yourself — only a button to
+stop watching the folder. A known plugin it shares an id with is still offered
+under **Available**: installing it puts a copy in the plugins folder, which
+then takes the id, and the watched copy is listed under **would not load**.
+
 ## Shipping several at once
 
 A file with a `plugins` array is a pack, which is how a collection is

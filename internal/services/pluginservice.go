@@ -412,7 +412,9 @@ func (s *PluginService) InstallKnown(id string) (plugins.Catalogue, error) {
 	if !ok {
 		return s.catalogue(), fmt.Errorf("%q is not a plugin this app knows of", id)
 	}
-	if _, ok := s.catalogue().Find(id); ok {
+	// A copy read from a folder the user watches does not count: installing
+	// puts one in the plugins folder, which takes the id from it.
+	if _, ok := s.catalogue().InstalledHere(id); ok {
 		return s.catalogue(), fmt.Errorf("%s is already installed", known.Name)
 	}
 	return s.InstallFromGit(known.Repo)
@@ -455,12 +457,47 @@ func (s *PluginService) UpdateFromGit(id string) (plugins.Catalogue, error) {
 	if !ok {
 		return s.catalogue(), fmt.Errorf("no plugin called %q is installed", id)
 	}
+	// Only a clone the app made: a watched folder is the user's own checkout,
+	// and pulling into it is theirs to do.
+	if !plugin.Builtin() && !plugins.InPluginsDir(s.store.PluginsDir(), plugin) {
+		return s.catalogue(), fmt.Errorf("%s is read from a folder you watch -- it is your own checkout, so pull it yourself", plugin.Name)
+	}
 	repo, ok := plugins.RepoOf(plugin)
 	if !ok {
 		return s.catalogue(), fmt.Errorf("%s was not installed from a repository, so there is nothing to pull", plugin.Name)
 	}
 	if err := plugins.Pull(repo); err != nil {
 		return s.catalogue(), err
+	}
+	s.forget()
+	return s.catalogue(), nil
+}
+
+// UninstallPreview says what uninstalling a plugin would delete -- its clone,
+// its folder or its file in the plugins folder -- and which other plugins go
+// with it, without deleting anything. The settings view asks the user about
+// exactly that before calling Uninstall.
+func (s *PluginService) UninstallPreview(id string) (plugins.Removal, error) {
+	cat := s.catalogue()
+	plugin, ok := cat.Find(id)
+	if !ok {
+		return plugins.Removal{Plugins: []string{}}, fmt.Errorf("no plugin called %q is installed", id)
+	}
+	return plugins.Removable(cat, s.store.PluginsDir(), plugin)
+}
+
+// Uninstall deletes an installed plugin from the plugins folder and reads the
+// folders again -- see plugins.Uninstall. A built-in, or a plugin read from a
+// folder the user added, is refused: the first is only switched off, and the
+// second is theirs.
+func (s *PluginService) Uninstall(id string) (plugins.Catalogue, error) {
+	cat := s.catalogue()
+	plugin, ok := cat.Find(id)
+	if !ok {
+		return cat, fmt.Errorf("no plugin called %q is installed", id)
+	}
+	if _, err := plugins.Uninstall(cat, s.store.PluginsDir(), plugin); err != nil {
+		return cat, err
 	}
 	s.forget()
 	return s.catalogue(), nil

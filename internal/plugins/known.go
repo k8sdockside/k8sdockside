@@ -110,8 +110,10 @@ func validateKnown(k Known) (Known, error) {
 // already installed here, and from where.
 type KnownOffer struct {
 	Known
-	// Installed is true when a plugin with this id is in the catalogue,
-	// whoever installed it and however.
+	// Installed is true when a plugin with this id is built in or in the
+	// plugins folder, whoever put it there and however. A copy read only from
+	// a watched folder does not count: installing is how to get the published
+	// copy back.
 	Installed bool `json:"installed"`
 }
 
@@ -119,7 +121,7 @@ type KnownOffer struct {
 func (c Catalogue) Offer() []KnownOffer {
 	out := make([]KnownOffer, 0, len(KnownPlugins()))
 	for _, k := range KnownPlugins() {
-		_, installed := c.Find(k.ID)
+		_, installed := c.InstalledHere(k.ID)
 		out = append(out, KnownOffer{Known: k, Installed: installed})
 	}
 	return out

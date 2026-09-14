@@ -67,6 +67,50 @@
         }
     }
 
+    /** The plugin being uninstalled, if one is. */
+    let uninstalling = $state<string | null>(null);
+
+    /**
+     * The uninstall waiting on an answer: which plugin, and what the app says
+     * it deletes. Asked in the card rather than with window.confirm, which the
+     * macOS webview answers with a silent "no" and shows nothing.
+     */
+    let asking = $state<{ id: string; path: string; plugins: string[] } | null>(null);
+    /** The question's safe answer, focused so a stray Enter cannot delete. */
+    let cancelEl = $state<HTMLButtonElement | null>(null);
+
+    $effect(() => {
+        if (asking) cancelEl?.focus();
+    });
+
+    async function askUninstall(id: string): Promise<void> {
+        if (uninstalling) return;
+        const removal = await workspace.pluginRemoval(id);
+        if (removal) asking = { id, ...removal };
+    }
+
+    async function uninstall(id: string): Promise<void> {
+        if (uninstalling) return;
+        uninstalling = id;
+        try {
+            await workspace.uninstallPlugin(id);
+        } finally {
+            uninstalling = null;
+            asking = null;
+        }
+    }
+
+    /**
+     * Whether a plugin was read from the plugins folder, which is what can be
+     * uninstalled. A built-in is switched off instead, and a plugin in a folder
+     * the user added is theirs -- the app only stops reading that folder. The
+     * Go side refuses both whatever this says; this only decides the button.
+     */
+    function inPluginsDir(plugin: { origin: string }): boolean {
+        const dir = workspace.pluginDir.replace(/[\\/]+$/, '');
+        return !!dir && (plugin.origin.startsWith(dir + '/') || plugin.origin.startsWith(dir + '\\'));
+    }
+
     /** "3 actions on VirtualMachines · 1 panel" -- what a plugin adds to objects. */
     function objectExtras(plugin: import('../../plugins/types').Plugin): string {
         const parts: string[] = [];
@@ -78,13 +122,34 @@
     }
 
     let builtin = $derived(workspace.plugins.filter((p) => p.origin === 'builtin'));
-    let installed = $derived(workspace.plugins.filter((p) => p.origin !== 'builtin'));
+    /** Installed into the plugins folder: the app's to update and uninstall. */
+    let installed = $derived(workspace.plugins.filter((p) => p.origin !== 'builtin' && inPluginsDir(p)));
+    /**
+     * Read from a folder the user added -- their own checkout, typically the
+     * plugin they are writing. Listed apart, because the app neither updates
+     * nor deletes anything in it.
+     */
+    let watched = $derived(workspace.plugins.filter((p) => p.origin !== 'builtin' && !inPluginsDir(p)));
     /**
      * The known plugins not installed here. One that is installed is already
      * under Installed, with its links and its update button; listing it here
-     * as well would only say the same thing twice.
+     * as well would only say the same thing twice. One read only from a
+     * watched folder is still offered: installing it is how to get the
+     * published copy back.
      */
-    let known = $derived(workspace.knownPlugins.filter((k) => !workspace.hasPlugin(k.id)));
+    let known = $derived(
+        workspace.knownPlugins.filter((k) => !installed.some((p) => p.id === k.id) && !builtin.some((p) => p.id === k.id)),
+    );
+
+    /** The watched folder a plugin was read from; '' when it was not. */
+    function watchedFolder(plugin: { origin: string }): string {
+        return (
+            workspace.pluginFolders.find((folder) => {
+                const f = folder.replace(/[\\/]+$/, '');
+                return plugin.origin.startsWith(f + '/') || plugin.origin.startsWith(f + '\\');
+            }) ?? ''
+        );
+    }
 
     function fileOf(origin: string): string {
         const at = Math.max(origin.lastIndexOf('/'), origin.lastIndexOf('\\'));
@@ -124,6 +189,20 @@
         <h3>Installed</h3>
         <div class="gallery">
             {#each installed as plugin (plugin.id)}
+                {@render card(plugin)}
+            {/each}
+        </div>
+    {/if}
+
+    {#if watched.length > 0}
+        <h3>From folders you watch</h3>
+        <p class="note">
+            Read from the folders under <strong>Extra folders</strong> — your own checkouts, typically a plugin you
+            are writing. The app neither updates nor deletes anything in them: pull and edit them yourself, and press
+            <strong>Reload</strong> to see the change.
+        </p>
+        <div class="gallery">
+            {#each watched as plugin (plugin.id)}
                 {@render card(plugin)}
             {/each}
         </div>
@@ -311,19 +390,70 @@
         {@render links(plugin.links ?? [], plugin.docs)}
         {#if plugin.origin !== 'builtin'}
             <p class="from" title={plugin.origin}>
-                {#if plugin.pack}{plugin.pack} · {/if}{fileOf(plugin.origin)}
+                {#if plugin.pack}{plugin.pack} · {/if}{watchedFolder(plugin) || fileOf(plugin.origin)}
             </p>
         {/if}
-        {#if plugin.repo}
-            <button
-                class="update"
-                disabled={updating === plugin.id}
-                title="git pull in {plugin.repo}"
-                onclick={() => void update(plugin.id)}
-            >
-                <Icon name="refresh" size={11} />
-                {updating === plugin.id ? 'Updating…' : 'Update from repository'}
-            </button>
+        {#if watchedFolder(plugin)}
+            <!-- The user's own checkout: the app neither pulls into it nor
+                 deletes it. It can only stop reading it. -->
+            <div class="card-actions">
+                <button
+                    class="suggest unwatch"
+                    title="Stop reading plugins from {watchedFolder(plugin)} -- nothing on disk is touched"
+                    onclick={() => void workspace.removePluginFolder(watchedFolder(plugin))}
+                >
+                    Stop watching this folder
+                </button>
+            </div>
+        {:else if plugin.repo || inPluginsDir(plugin)}
+            <div class="card-actions">
+                {#if plugin.repo && inPluginsDir(plugin)}
+                    <button
+                        class="update"
+                        disabled={updating === plugin.id}
+                        title="git pull in {plugin.repo}"
+                        onclick={() => void update(plugin.id)}
+                    >
+                        <Icon name="refresh" size={11} />
+                        {updating === plugin.id ? 'Updating…' : 'Update from repository'}
+                    </button>
+                {/if}
+                <!-- Only what was installed into the plugins folder: the app
+                     asks what that deletes, and says it, before deleting. -->
+                {#if inPluginsDir(plugin)}
+                    <button
+                        class="uninstall"
+                        disabled={uninstalling !== null || asking?.id === plugin.id}
+                        title="Delete {plugin.name} from the plugins folder"
+                        onclick={() => void askUninstall(plugin.id)}
+                    >
+                        <Icon name="trash" size={11} />
+                        {uninstalling === plugin.id ? 'Uninstalling…' : 'Uninstall'}
+                    </button>
+                {/if}
+            </div>
+        {/if}
+        {#if asking?.id === plugin.id}
+            {@const others = asking.plugins.filter((other) => other !== plugin.id)}
+            <!-- Asked here, in the page: the macOS webview answers
+                 window.confirm with a silent "no" and shows nothing. -->
+            <div class="uninstall-ask" role="alertdialog" aria-label="Uninstall {plugin.name}?">
+                <p class="question">
+                    Delete <span class="path selectable">{asking.path}</span>{#if others.length > 0}, and with it
+                        {others.join(', ')}{/if}? Tabs open on its views will say it is gone.
+                </p>
+                <div class="answers">
+                    <button bind:this={cancelEl} class="uninstall-cancel" onclick={() => (asking = null)}>Cancel</button>
+                    <button
+                        class="uninstall-confirm"
+                        disabled={uninstalling !== null}
+                        onclick={() => void uninstall(plugin.id)}
+                    >
+                        <Icon name="trash" size={11} />
+                        {uninstalling === plugin.id ? 'Uninstalling…' : 'Uninstall'}
+                    </button>
+                </div>
+            </div>
         {/if}
     </article>
 {/snippet}
@@ -345,6 +475,7 @@
 
 {#snippet knownCard(offer: KnownPlugin)}
     {@const running = workspace.clustersRunning(offer)}
+    {@const watchedCopy = watched.find((p) => p.id === offer.id)}
     <article class="plugin known">
         <header>
             <Icon name={offer.icon} size={18} />
@@ -366,6 +497,14 @@
             <PluginCredit author={offer.author ?? ''} authorUrl={offer.authorUrl} standing={knownStanding(offer)} />
         </p>
         <p class="description">{offer.description}</p>
+        {#if watchedCopy}
+            <!-- Installing is still offered: it is how to get the published
+                 copy back. Said here, because it changes which copy loads. -->
+            <p class="counts" title={watchedCopy.origin}>
+                A copy is read from {watchedFolder(watchedCopy)} now. Installing puts one in the plugins folder, which
+                then takes its place.
+            </p>
+        {/if}
         {#if running.length > 0}
             <p class="running" title="Seen in the definitions of {running.join(', ')}">
                 <span class="dot"></span>
@@ -761,6 +900,102 @@
         margin-top: 8px;
         padding: 3px 8px;
         font-size: 11px;
+    }
+
+    .card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+    }
+
+    .card-actions .update {
+        margin-top: 0;
+    }
+
+    /* Plain until it is pointed at: it deletes, but it also asks first. */
+    .uninstall {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+        padding: 3px 8px;
+        border-radius: var(--radius-sm);
+        font-size: 11px;
+        color: var(--text-dim);
+        box-shadow: inset 0 0 0 1px var(--border);
+    }
+
+    .uninstall:hover:not(:disabled) {
+        color: var(--error);
+        background: color-mix(in srgb, var(--error) 12%, transparent);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--error) 50%, transparent);
+    }
+
+    .uninstall:disabled {
+        opacity: 0.5;
+    }
+
+    /* The question an uninstall waits on, in the card it is about: what goes,
+       then the safe answer first and the one that deletes coloured apart. */
+    .uninstall-ask {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 8px;
+        padding: 8px 10px;
+        border-radius: var(--radius-sm);
+        background: color-mix(in srgb, var(--error) 8%, var(--bg-panel));
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--error) 40%, transparent);
+    }
+
+    .uninstall-ask .question {
+        margin: 0;
+        font-size: 12px;
+        color: var(--text);
+        overflow-wrap: anywhere;
+    }
+
+    .uninstall-ask .path {
+        font-family: var(--mono);
+        font-size: 11px;
+    }
+
+    .uninstall-ask .answers {
+        display: flex;
+        justify-content: flex-end;
+        gap: 6px;
+    }
+
+    .uninstall-cancel {
+        padding: 3px 10px;
+        border-radius: var(--radius-sm);
+        font-size: 11.5px;
+        color: var(--text-dim);
+    }
+
+    .uninstall-cancel:hover {
+        background: var(--bg-hover);
+        color: var(--text);
+    }
+
+    .uninstall-confirm {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: var(--radius-sm);
+        font-size: 11.5px;
+        color: var(--error);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--error) 55%, transparent);
+    }
+
+    .uninstall-confirm:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--error) 16%, transparent);
+    }
+
+    .uninstall-confirm:disabled {
+        opacity: 0.5;
     }
 
     .paths,

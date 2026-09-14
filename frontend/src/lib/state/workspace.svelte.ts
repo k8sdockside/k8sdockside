@@ -2592,6 +2592,44 @@ class Workspace {
         }
     }
 
+    /**
+     * What uninstalling a plugin would delete -- its clone, folder or file, and
+     * every plugin read from there -- for its card to ask about before
+     * anything is deleted. `null` when the app refuses, with the reason shown.
+     */
+    async pluginRemoval(id: string): Promise<{ path: string; plugins: string[] } | null> {
+        try {
+            const removal = await PluginService.UninstallPreview(id);
+            return { path: removal.path, plugins: removal.plugins ?? [] };
+        } catch (err) {
+            const name = this.plugins.find((p) => p.id === id)?.name || id;
+            notices.fail(`Could not uninstall ${name}: ${message(err)}`);
+            return null;
+        }
+    }
+
+    /**
+     * Deletes an installed plugin from the plugins folder and reads the
+     * folders again. Returns whether it worked.
+     *
+     * The card asks first, in the page, with what pluginRemoval says goes: the
+     * macOS webview answers window.confirm with a silent "no" and shows
+     * nothing, so a native question would never be seen.
+     */
+    async uninstallPlugin(id: string): Promise<boolean> {
+        const name = this.plugins.find((p) => p.id === id)?.name || id;
+        try {
+            this.pluginCatalogue = adoptPluginCatalogue(await PluginService.Uninstall(id));
+            this.metricsAttachments = (await MetricsService.Attachments()) ?? [];
+            this.registerViews();
+            notices.inform(`Uninstalled ${name}`);
+            return true;
+        } catch (err) {
+            notices.fail(`Could not uninstall ${name}: ${message(err)}`);
+            return false;
+        }
+    }
+
     /** Stops reading plugins from a folder. Nothing on disk is touched. */
     async removePluginFolder(path: string): Promise<void> {
         try {

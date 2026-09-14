@@ -290,6 +290,10 @@
         {:else}
             <Icon name="search" size={13} />
         {/if}
+        <!-- Opened by a click, by typing or by the shortcut -- never by focus
+             alone: Wails makes the webview first responder when the window is
+             shown, WebKit gives that focus to this box as the first text field,
+             and a panel opening on focus opened at every launch. -->
         <input
             bind:this={input}
             bind:value={search.query}
@@ -301,7 +305,8 @@
             aria-label="Search every cluster"
             aria-expanded={search.open}
             aria-controls="search-panel"
-            onfocus={() => (search.open = true)}
+            onpointerdown={() => (search.open = true)}
+            oninput={() => (search.open = true)}
             onkeydown={onInputKey}
         />
         {#if search.query}
