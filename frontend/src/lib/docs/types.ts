@@ -35,7 +35,14 @@ export interface Term {
     href?: string;
 }
 
-export type Block =
+/**
+ * The version of the app something is written for: the desktop app, reading
+ * the kubeconfigs on the user's own machine, or the web version, run on a
+ * server behind a sign-in. Content marked with neither is true of both.
+ */
+export type Mode = 'desktop' | 'web';
+
+export type Block = (
     | { type: 'p'; text: string }
     | { type: 'h3'; text: string }
     | { type: 'list'; items: string[] }
@@ -46,13 +53,19 @@ export type Block =
     | { type: 'links'; links: Link[] }
     | { type: 'actions'; actions: Action[] }
     /** A quiet aside: a caveat, or where to look next. */
-    | { type: 'note'; text: string };
+    | { type: 'note'; text: string }
+) & {
+    /** Shown in one version of the app only, and left out of the other. See ./mode.ts. */
+    only?: Mode;
+};
 
 export interface Section {
     /** Lowercase, dashes; the rail's anchor. */
     id: string;
     label: string;
     icon: string;
+    /** Shown in one version of the app only, and left out of the other. See ./mode.ts. */
+    only?: Mode;
     /** One line under the heading, saying what the section covers. */
     lede?: string;
     blocks: Block[];

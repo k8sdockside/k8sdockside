@@ -16,8 +16,10 @@
 
 <script lang="ts">
     import { inline } from '../docs/inline';
+    import { forMode } from '../docs/mode';
     import { onExternalClick } from '../links';
     import type { Action, Page } from '../docs/types';
+    import { session } from '../state/session.svelte';
     import { workspace } from '../state/workspace.svelte';
     import Icon from './Icon.svelte';
     import { rememberSection } from './settings/section.svelte';
@@ -28,14 +30,23 @@
 
     let { page }: Props = $props();
 
+    // The page as this version of the app tells it: the web version leaves out
+    // what only the desktop app can do, and the other way round. It changes
+    // once, when the window learns which version it is.
+    let shown = $derived(forMode(page, session.server));
+
     // The initial value only, on purpose: the page a tab draws never changes.
     // svelte-ignore state_referenced_locally
-    let active = $state(remembered.get(page.title) ?? page.sections[0]?.id ?? '');
-    let section = $derived(page.sections.find((s) => s.id === active) ?? page.sections[0]);
+    let chosen = $state(remembered.get(page.title) ?? '');
+    // The section on show: the one chosen, while this version of the page has
+    // it, and otherwise the first -- so a section only one version has is never
+    // left highlighted in the other.
+    let active = $derived(shown.sections.some((s) => s.id === chosen) ? chosen : (shown.sections[0]?.id ?? ''));
+    let section = $derived(shown.sections.find((s) => s.id === active));
     let panel = $state<HTMLElement | null>(null);
 
     function show(id: string): void {
-        active = id;
+        chosen = id;
         remembered.set(page.title, id);
         panel?.scrollTo({ top: 0 });
     }
@@ -46,8 +57,9 @@
         const step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
         if (step === 0) return;
         event.preventDefault();
-        const at = page.sections.findIndex((s) => s.id === active);
-        const next = page.sections[(at + step + page.sections.length) % page.sections.length];
+        const sections = shown.sections;
+        const at = sections.findIndex((s) => s.id === active);
+        const next = sections[(at + step + sections.length) % sections.length];
         show(next.id);
         document.getElementById(`doc-nav-${next.id}`)?.focus();
     }
@@ -88,7 +100,7 @@
     <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
     <nav class="rail" role="tablist" aria-orientation="vertical" aria-label="{page.title} sections" onkeydown={onRailKey}>
         <p class="rail-heading">{page.title}</p>
-        {#each page.sections as s (s.id)}
+        {#each shown.sections as s (s.id)}
             <button
                 id="doc-nav-{s.id}"
                 role="tab"

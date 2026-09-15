@@ -3,6 +3,7 @@ import { DASHBOARD, HELM_RELEASES, NAV_GROUPS, DASHBOARD_ITEM } from '../catalog
 import { PATHS } from '../components/Icon.svelte';
 import { HELP } from './help';
 import { KUBERNETES_PRIMER } from './kubernetes';
+import { forMode } from './mode';
 import type { Page } from './types';
 
 // The pages are data, so the mistakes they can carry are data mistakes: a
@@ -47,6 +48,49 @@ test.each(PAGES.map((p) => [p.title, p] as const))('%s names only icons that exi
 test.each(PAGES.map((p) => [p.title, p] as const))('%s has unique section ids', (_title, page) => {
     const ids = page.sections.map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);
+});
+
+// Help is one page for both versions of the app, with what only one of them
+// can do marked for it. Each version must see its own and not the other's,
+// and no section may be left with nothing in it -- a dead entry in the rail.
+test.each([
+    ['desktop', false],
+    ['web', true],
+] as const)('Help as the %s version tells it', (mode, server) => {
+    const page = forMode(HELP, server);
+
+    const foreign = page.sections.flatMap((s) => [s.only, ...s.blocks.map((b) => b.only)]).filter((only) => only && only !== mode);
+    expect(foreign).toEqual([]);
+    expect(page.sections.filter((s) => s.blocks.length === 0).map((s) => s.id)).toEqual([]);
+
+    const ids = page.sections.map((s) => s.id);
+    if (server) expect(ids[0]).toBe('web');
+    else expect(ids).not.toContain('web');
+});
+
+// What the web version must never ask of anyone: a path on their own disk, a
+// folder on their own machine, a terminal emulator of their own.
+test('the web version of Help sends nobody to their own machine', () => {
+    const text = JSON.stringify(forMode(HELP, true));
+    for (const desktopOnly of ['~/.kube', '%AppData%', '$XDG_CONFIG_HOME', 'terminal emulator']) {
+        expect(text, desktopOnly).not.toContain(desktopOnly);
+    }
+});
+
+test('forMode keeps what is unmarked and drops what is marked for the other version', () => {
+    const page: Page = {
+        title: 'T',
+        lede: '',
+        sections: [
+            { id: 'both', label: 'Both', icon: 'info', blocks: [{ type: 'p', text: 'a' }, { type: 'p', text: 'd', only: 'desktop' }, { type: 'p', text: 'w', only: 'web' }] },
+            { id: 'web-only', label: 'Web', icon: 'info', only: 'web', blocks: [{ type: 'p', text: 'x' }] },
+        ],
+    };
+    const text = (p: Page) => p.sections.map((s) => `${s.id}:${s.blocks.map((b) => (b.type === 'p' ? b.text : '')).join('')}`);
+    expect(text(forMode(page, false))).toEqual(['both:ad']);
+    expect(text(forMode(page, true))).toEqual(['both:aw', 'web-only:x']);
+    // The page handed in is not changed.
+    expect(page.sections[0].blocks).toHaveLength(3);
 });
 
 test.each(PAGES.map((p) => [p.title, p] as const))('%s links only to https pages', (_title, page) => {

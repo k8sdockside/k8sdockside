@@ -1,6 +1,11 @@
 // The Help page: what K8s Dockside does and how to use it, plus how to write
 // and install a theme or a plugin. Kept in step with README.md and the two
 // guides under docs/; where a section here stops short, it links to the guide.
+//
+// One page serves both versions of the app. A section or a block marked
+// `only: 'desktop'` or `only: 'web'` is left out of the other -- see mode.ts --
+// so the web version never tells anyone to pick a file from a disk its browser
+// cannot see, and the desktop app does not explain a sign-in it does not have.
 
 import { DASHBOARD } from '../catalogue';
 import type { Page } from './types';
@@ -12,6 +17,53 @@ export const HELP: Page = {
     lede: 'A desktop workspace for the Kubernetes clusters in your kubeconfig files.',
     sections: [
         {
+            id: 'web',
+            label: 'The web version',
+            icon: 'server',
+            only: 'web',
+            lede: 'The same app, run on a server and opened in a browser, behind a sign-in of its own.',
+            blocks: [
+                {
+                    type: 'list',
+                    items: [
+                        '**Signing in.** With a username and password, or with an account you already have — GitHub, Google, Facebook, GitLab, Microsoft, or your organisation’s own — whichever the administrator has set up. Your name at the right of the title bar opens **Account**, **Administration** for administrators, and **Sign out**.',
+                        '**Whose credentials.** The clusters are the server’s. Everyone who signs in reaches them through the credentials this server was given, not their own, so what you can do in a cluster is what those credentials allow.',
+                        '**What is yours.** Your terminals, log streams, open tables and searches belong to you: nobody else signed in sees them or can type into them. They close shortly after you close the browser tab — a node shell’s pod with them.',
+                        '**What is shared.** The clusters, their names and colours, the plugins and themes, and the settings — the saved tabs and layout included — are the same for everyone on this server. Only an administrator can add or remove clusters and plugins.',
+                    ],
+                },
+                { type: 'h3', text: 'Administration' },
+                {
+                    type: 'p',
+                    text: 'Administrators have three pages, under **Administration** in the account menu:',
+                },
+                {
+                    type: 'list',
+                    items: [
+                        '**Users** — add people, set a password, make someone an administrator, or switch an account off. The first account ever created is the administrator.',
+                        '**Sign-in providers** — let people sign in with GitHub, Google, Facebook, GitLab, Microsoft or any OpenID Connect provider. Each shows the callback address to register with the provider, and either admits anyone it signs in or only people already added.',
+                        '**Clusters** — add a cluster by uploading or pasting a kubeconfig. The cluster the server runs in, and any kubeconfigs its deployment mounts, are listed there as well. **Manage clusters** in the sidebar goes straight to it.',
+                    ],
+                },
+                { type: 'h3', text: 'What the web version leaves out' },
+                {
+                    type: 'list',
+                    items: [
+                        '**Port forwards.** A forward would open a port on the server, not on your machine.',
+                        '**Shells in another app.** Shells open in the dock, in the browser: there is nothing on the server to hand them to.',
+                        '**Files from a disk.** The browser cannot hand the server a path on your machine; an administrator uploads a kubeconfig under Administration → Clusters instead.',
+                        '**Update notices.** Whoever runs the server decides when it is updated.',
+                    ],
+                },
+                {
+                    type: 'links',
+                    links: [
+                        { label: 'Running the web version', href: `${GUIDES}/server-mode.md`, note: 'the Helm chart, sign-in providers, clusters and the security model' },
+                    ],
+                },
+            ],
+        },
+        {
             id: 'start',
             label: 'Getting started',
             icon: 'rocket',
@@ -19,6 +71,7 @@ export const HELP: Page = {
             blocks: [
                 {
                     type: 'steps',
+                    only: 'desktop',
                     items: [
                         '**Launch it.** The app reads `~/.kube/config`, everything in `$KUBECONFIG`, and anything else under `~/.kube` that parses as a kubeconfig. Nothing connects to a cluster yet.',
                         '**Add anything it missed.** The `+` button in the sidebar adds a file; the folder button watches a whole folder, which is scanned by content rather than by file name and rescanned on **Sync**.',
@@ -28,8 +81,25 @@ export const HELP: Page = {
                     ],
                 },
                 {
+                    type: 'steps',
+                    only: 'web',
+                    items: [
+                        '**Sign in.** With a username and password, or through a provider the administrator has set up. The clusters are already in the sidebar: this server’s administrator provides them.',
+                        '**No clusters yet?** An administrator adds them under Administration → Clusters, by uploading or pasting a kubeconfig; **Manage clusters** in the sidebar goes straight there.',
+                        '**Name and colour your contexts.** Select one, then use the panel at the foot of the sidebar. The colour follows the context onto every tab, panel and dock entry — and everyone on this server sees the same names and colours.',
+                        '**Open a view.** Unfold a context and pick a kind. It opens as a tab in that context’s colour, and the live watch starts there.',
+                        '**Click a row.** The details panel opens with the object’s report. From there: **Edit** for the live YAML, **Logs**, **Shell**, and the actions the kind allows.',
+                    ],
+                },
+                {
                     type: 'note',
+                    only: 'desktop',
                     text: 'The app only reads your kubeconfig files. Aliases, colours, hidden files and removed contexts are kept in its own settings file, and a kubeconfig is never written.',
+                },
+                {
+                    type: 'note',
+                    only: 'web',
+                    text: 'The server only reads its kubeconfigs, and never writes one. Everyone who signs in reaches the clusters through the same credentials — see **The web version**.',
                 },
                 {
                     type: 'actions',
@@ -65,7 +135,7 @@ export const HELP: Page = {
             id: 'sidebar',
             label: 'The sidebar',
             icon: 'layers',
-            lede: 'Every context on this machine, and under each one everything the cluster can show.',
+            lede: 'Every context the app knows of, and under each one everything the cluster can show.',
             blocks: [
                 {
                     type: 'list',
@@ -84,6 +154,11 @@ export const HELP: Page = {
                 {
                     type: 'p',
                     text: 'The panel at the foot of the sidebar edits the selected context: its display name, its colour, and where its metrics come from. Reset puts the kubeconfig name and the default colour back.',
+                },
+                {
+                    type: 'note',
+                    only: 'web',
+                    text: 'In the web version the sidebar is everyone’s: a name or colour set here is set for all, and only an administrator can remove or hide a context or a file.',
                 },
             ],
         },
@@ -136,10 +211,27 @@ export const HELP: Page = {
                         '**Edit** opens the object’s YAML in the dock with syntax checking. Save with `⌘S`. A save against an object somebody else changed in the meantime is refused, with the API server’s own reason, rather than forced.',
                         '**Actions** depend on the kind: scale and restart for workloads; cordon, uncordon and drain for nodes; delete for anything. Each asks first.',
                         '**Logs** stream per container, with the container picker above the output.',
+                    ],
+                },
+                {
+                    type: 'list',
+                    only: 'desktop',
+                    items: [
                         '**Shell** opens a terminal in a container, in the dock or in your own terminal emulator. On a node it does what `kubectl debug node` does: a privileged pod, removed when the terminal closes.',
                         '**Forward** opens a port forward to a pod or a service, resolving the service port to the pod port for you. Forwards are listed under Network → Port Forwards, where they can be stopped, and are remembered between sessions as requests.',
-                        '**Secrets** are redacted before they enter the cache; tables show key counts only.',
                     ],
+                },
+                {
+                    type: 'list',
+                    only: 'web',
+                    items: [
+                        '**Shell** opens a terminal in a container, in the dock. On a node it does what `kubectl debug node` does: a privileged pod, removed when the terminal closes — or shortly after you close the browser tab it was in.',
+                        '**Port forwards** are not offered: a forward would open a port on the server, not on your machine.',
+                    ],
+                },
+                {
+                    type: 'list',
+                    items: ['**Secrets** are redacted before they enter the cache; tables show key counts only.'],
                 },
                 {
                     type: 'actions',
@@ -201,15 +293,28 @@ export const HELP: Page = {
                 },
                 {
                     type: 'note',
+                    only: 'desktop',
                     text: 'A plugin is installed on **this machine**. What it describes is installed in **a cluster**. The sidebar lists every plugin for every cluster and marks the ones a cluster does not have as *not installed*, rather than hiding them.',
+                },
+                {
+                    type: 'note',
+                    only: 'web',
+                    text: 'A plugin is installed on **this server**, for everyone on it. What it describes is installed in **a cluster**. The sidebar lists every plugin for every cluster and marks the ones a cluster does not have as *not installed*, rather than hiding them.',
                 },
                 { type: 'h3', text: 'Installing one' },
                 {
                     type: 'p',
+                    only: 'web',
+                    text: 'An administrator installs them from Settings → Plugins: one the app knows of with a button, any other from its git repository. Switching one on or off, updating it and removing it are the administrator’s too; everyone else sees the same list and uses what is switched on.',
+                },
+                {
+                    type: 'p',
+                    only: 'desktop',
                     text: 'Put the `.json` file in the plugins folder. Settings → Plugins shows the exact path for your machine and has a button to open it. Files are read from that folder and one level into any subfolder, so an unzipped pack works as it is. You can also watch folders elsewhere. Plugins are read at launch and whenever you press **Reload**.',
                 },
                 {
                     type: 'table',
+                    only: 'desktop',
                     head: ['Platform', 'Folder'],
                     rows: [
                         ['Linux, macOS', '`$XDG_CONFIG_HOME/k8sdockside/plugins/`, falling back to `~/.config/k8sdockside/plugins/`'],
@@ -309,10 +414,17 @@ export const HELP: Page = {
                 { type: 'h3', text: 'Installing one' },
                 {
                     type: 'p',
+                    only: 'desktop',
                     text: 'Put the `.json` file in the themes folder. Settings → Themes shows the exact path and opens it. Like plugins, themes are read from the folder and one level into subfolders, from any extra folder you watch, at launch and on **Reload**.',
                 },
                 {
+                    type: 'p',
+                    only: 'web',
+                    text: 'The themes are the server’s: the built-in ones, and any the deployment has put in the server’s themes folder. A theme chosen under Settings → Themes is chosen for everyone on the server, since the settings are shared.',
+                },
+                {
                     type: 'table',
+                    only: 'desktop',
                     head: ['Platform', 'Folder'],
                     rows: [
                         ['Linux, macOS', '`$XDG_CONFIG_HOME/k8sdockside/themes/`, falling back to `~/.config/k8sdockside/themes/`'],
@@ -380,6 +492,7 @@ export const HELP: Page = {
             blocks: [
                 {
                     type: 'list',
+                    only: 'desktop',
                     items: [
                         '**Settings** live in one JSON file: `$XDG_CONFIG_HOME/k8sdockside/settings.json` on Linux and macOS, `%AppData%\\k8sdockside\\settings.json` on Windows. The path is shown in the status bar and under Settings → About, with a button to open it. Deleting it is how you start over. Your themes and plugins sit in folders beside it.',
                         '**Updates.** The bell in the title bar says when a newer release is out, and offers the release page and the download for the way this build was installed. It is one request to GitHub shortly after launch and every six hours, carrying nothing but the app’s name and version. Switch it off under Settings → Behaviour; the check-now button under About works either way.',
@@ -388,17 +501,46 @@ export const HELP: Page = {
                     ],
                 },
                 {
+                    type: 'list',
+                    only: 'web',
+                    items: [
+                        '**Settings** are kept on the server and shared by everyone who signs in: a theme, a layout or a context’s colour changed by one person is changed for all. Settings → About says which version the server runs.',
+                        '**Updates** are up to whoever runs the server. The web version asks GitHub nothing, and has no update notice.',
+                        '**Nothing leaves the server** that nobody asked for. Clusters are dialled only when someone opens something on them, and Prometheus is reached through the API server.',
+                        '**Credentials** are the server’s — the kubeconfigs and service account it was given — and every signed-in user works through them.',
+                    ],
+                },
+                {
                     type: 'actions',
+                    only: 'desktop',
                     actions: [
                         { kind: 'settings', section: 'about', label: 'About and updates' },
                         { kind: 'settings', section: 'behaviour', label: 'Behaviour' },
                     ],
                 },
                 {
+                    type: 'actions',
+                    only: 'web',
+                    actions: [
+                        { kind: 'settings', section: 'about', label: 'About' },
+                        { kind: 'settings', section: 'behaviour', label: 'Behaviour' },
+                    ],
+                },
+                {
                     type: 'links',
+                    only: 'desktop',
                     links: [
                         { label: 'K8s Dockside on GitHub', href: 'https://github.com/rogerwesterbo/k8sdockside', note: 'source, releases, and where to report a problem' },
                         { label: 'Verifying a download', href: 'https://github.com/rogerwesterbo/k8sdockside/blob/main/SECURITY.md#verifying-a-download' },
+                        { label: 'Running it on a server', href: `${GUIDES}/server-mode.md`, note: 'the same app as a web app inside a cluster, for a team, behind a sign-in of its own' },
+                    ],
+                },
+                {
+                    type: 'links',
+                    only: 'web',
+                    links: [
+                        { label: 'K8s Dockside on GitHub', href: 'https://github.com/rogerwesterbo/k8sdockside', note: 'source, releases, and where to report a problem' },
+                        { label: 'Running the web version', href: `${GUIDES}/server-mode.md`, note: 'the Helm chart, sign-in providers, clusters and the security model' },
                     ],
                 },
             ],

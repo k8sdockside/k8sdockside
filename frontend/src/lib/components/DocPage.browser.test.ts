@@ -82,6 +82,7 @@ vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/service
 const { workspace } = await import('../state/workspace.svelte');
 const { SETTINGS } = await import('../catalogue');
 const DocPage = (await import('./DocPage.svelte')).default;
+const { session } = await import('../state/session.svelte');
 type Page = import('../docs/types').Page;
 
 // One component draws both documentation pages from data. What is tested is
@@ -143,6 +144,46 @@ beforeEach(() => {
         { id: PROD, name: 'admin@prod', cluster: 'prod', user: 'admin', namespace: '', server: '', file: '/home/u/.kube/config', current: false },
     ] }];
     workspace.selectContext(PROD);
+});
+
+// One page serves the desktop app and the web version, with what only one of
+// them can do marked for it. The page follows the session: it is the desktop
+// app's until the window learns otherwise.
+test('the page tells each version of the app only what is true of it', async () => {
+    const MODES: Page = {
+        title: 'Both versions',
+        lede: '',
+        sections: [
+            {
+                id: 'everywhere',
+                label: 'Everywhere',
+                icon: 'info',
+                blocks: [
+                    { type: 'p', text: 'Said in both.' },
+                    { type: 'p', text: 'Pick a file from your disk.', only: 'desktop' },
+                    { type: 'p', text: 'Ask an administrator.', only: 'web' },
+                ],
+            },
+            { id: 'signing-in', label: 'Signing in', icon: 'server', only: 'web', blocks: [{ type: 'p', text: 'Sign in first.' }] },
+        ],
+    };
+    const desktop = session.info;
+    try {
+        render(DocPage, { page: MODES });
+
+        await expect.element(page.getByText('Pick a file from your disk.')).toBeVisible();
+        expect(document.body.textContent).not.toContain('Ask an administrator.');
+        expect(document.body.textContent).not.toContain('Signing in');
+
+        session.info = { ...desktop, server: true, admin: false, username: 'ada' };
+
+        await expect.element(page.getByText('Ask an administrator.')).toBeVisible();
+        await expect.element(page.getByRole('tab', { name: 'Signing in' })).toBeVisible();
+        expect(document.body.textContent).not.toContain('Pick a file from your disk.');
+        await expect.element(page.getByText('Said in both.')).toBeVisible();
+    } finally {
+        session.info = desktop;
+    }
 });
 
 test('the rail lists the sections and shows the first, with its marks drawn', async () => {

@@ -27,7 +27,9 @@ whether you are about to delete a pod in staging or in production. Nothing is
 polled: tables are backed by live watches, so a rollout repaints as it happens.
 
 It is a single native binary — no cluster-side agent, no browser tab, no
-credentials leaving your machine. Free and open source under Apache 2.0.
+credentials leaving your machine. The same app also runs as a
+[web app inside a cluster](#server-mode-kubernetes), for a team, behind a
+sign-in of its own. Free and open source under Apache 2.0.
 
 ## Why you might want it
 
@@ -291,7 +293,8 @@ for anyone new to it.
 ## Contributing
 
 Issues and pull requests are welcome. CI runs build, test, lint and security
-scans on every push; `make audit` runs the same security checks locally.
+scans on every push. `make precheck` runs every one of those checks locally —
+worth doing before you push — and `make audit` just the security scans.
 
 Security issues: please see [SECURITY.md](SECURITY.md) rather than opening a
 public issue.
