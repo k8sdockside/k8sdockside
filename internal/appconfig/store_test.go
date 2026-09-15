@@ -945,6 +945,41 @@ func TestSetPanesKeepsTheCallersSliceOutOfTheStore(t *testing.T) {
 	}
 }
 
+// The left pane holds the cluster tree, and the width it was dragged to is the
+// one it has to come back at after quitting and reopening the app.
+func TestTheLeftPanesWidthSurvivesAReopen(t *testing.T) {
+	path := tempSettings(t)
+
+	store, err := openAt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tabs := []PaneTabRef{{Type: ViewClusters, Kind: KindClusters}}
+	if _, err := store.SetPanes(Panes{
+		Left: PaneState{Open: true, Size: 412, Tabs: tabs},
+		Main: PaneState{Open: true},
+	}); err != nil {
+		t.Fatalf("SetPanes: %v", err)
+	}
+
+	tabs[0].Kind = "elsewhere"
+	if got := store.Get().Panes.Left.Tabs[0].Kind; got != KindClusters {
+		t.Errorf("tab kind = %q, want the store to hold its own copy", got)
+	}
+
+	reopened, err := openAt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	left := reopened.Get().Panes.Left
+	if left.Size != 412 {
+		t.Errorf("left pane size = %d, want 412", left.Size)
+	}
+	if len(left.Tabs) != 1 || left.Tabs[0].Type != ViewClusters {
+		t.Errorf("left pane tabs = %+v, want just the cluster tree", left.Tabs)
+	}
+}
+
 func TestSetPluginEnabledRecordsOnlyTheDisabledOnes(t *testing.T) {
 	store := openIn(t)
 

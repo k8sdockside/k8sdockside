@@ -1867,6 +1867,7 @@ class Workspace {
     private persistPanes(): void {
         this.savePanes(
             $state.snapshot({
+                left: this.paneRef('left'),
                 main: this.paneRef('main'),
                 right: this.paneRef('right'),
                 bottom: this.paneRef('bottom'),

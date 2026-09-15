@@ -445,6 +445,78 @@ test('scaling sends the number that was typed', async () => {
     );
 });
 
+/** Opens the scale form on a deployment running three. */
+async function openScale(): Promise<HTMLInputElement> {
+    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: true, replicas: 3, cordoned: false, containers: [] });
+    render(ObjectActions, { object: DEPLOYMENT });
+    await page.getByRole('button', { name: 'Scale' }).click();
+    await expect.element(page.getByRole('slider', { name: 'Replica count' })).toBeVisible();
+    return page.getByRole('slider', { name: 'Replica count' }).element() as HTMLInputElement;
+}
+
+test('the slider and the − and + buttons move the same count', async () => {
+    const slider = await openScale();
+
+    // Dragging is the browser's business; what the form owns is what the
+    // slider's input event does with the value it lands on.
+    slider.value = '7';
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    await expect.element(page.getByRole('spinbutton', { name: /Replicas/ })).toHaveValue(7);
+
+    await page.getByRole('button', { name: 'One fewer replica' }).click();
+    await page.getByRole('button', { name: 'One fewer replica' }).click();
+    await page.getByRole('button', { name: 'One more replica' }).click();
+    await expect.element(page.getByRole('spinbutton', { name: /Replicas/ })).toHaveValue(6);
+    expect(slider.value).toBe('6');
+    await expect.element(page.getByText(/3 → 6 \(\+3\)/)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Apply' }).click();
+    await vi.waitFor(() =>
+        expect(ActionService.Scale).toHaveBeenCalledWith(PROD, 'deployments', 'default', 'web', 6),
+    );
+});
+
+test('Apply waits for a count different from the one running', async () => {
+    await openScale();
+
+    await expect.element(page.getByRole('button', { name: 'Apply' })).toBeDisabled();
+    await page.getByRole('spinbutton', { name: /Replicas/ }).fill('4');
+    await expect.element(page.getByRole('button', { name: 'Apply' })).toBeEnabled();
+});
+
+test('typing past the end of the slider moves the end out', async () => {
+    const slider = await openScale();
+    // Three running puts the end at ten.
+    expect(slider.max).toBe('10');
+
+    await page.getByRole('spinbutton', { name: /Replicas/ }).fill('40');
+
+    await vi.waitFor(() => {
+        expect(slider.max).toBe('40');
+        expect(slider.value).toBe('40');
+    });
+});
+
+test('scaling to zero says it stops every pod', async () => {
+    await openScale();
+
+    await page.getByRole('spinbutton', { name: /Replicas/ }).fill('0');
+
+    await expect.element(page.getByText(/stops every pod/)).toBeVisible();
+    await expect.element(page.getByRole('button', { name: 'One fewer replica' })).toBeDisabled();
+});
+
+test('Enter in the count applies it', async () => {
+    await openScale();
+    const box = page.getByRole('spinbutton', { name: /Replicas/ });
+
+    await box.fill('8');
+    box.element().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    await vi.waitFor(() =>
+        expect(ActionService.Scale).toHaveBeenCalledWith(PROD, 'deployments', 'default', 'web', 8),
+    );
+});
 test('draining asks first, then reports as it goes', async () => {
     render(ObjectActions, { object: NODE });
     await page.getByRole('button', { name: 'Drain' }).click();

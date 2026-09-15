@@ -1167,15 +1167,16 @@ func (s *Store) MarkUpdateRead(version string) (Settings, error) {
 // SetPanes records where every open view sits: which pane holds it, in what
 // order, and how much room each pane takes.
 //
-// All three panes are written together rather than one at a time, for the
-// reason the dock it replaces was written whole. One gesture moves a tab out of
-// a pane and into another, filling and opening the second; two writers over
-// that would each answer with the whole settings, and the slower would carry
-// the other's half of the move back.
+// Every pane is written together rather than one at a time, for the reason the
+// dock it replaces was written whole. One gesture moves a tab out of a pane and
+// into another, filling and opening the second; two writers over that would
+// each answer with the whole settings, and the slower would carry the other's
+// half of the move back.
 func (s *Store) SetPanes(panes Panes) (Settings, error) {
 	return s.update(func(d *Settings) {
 		// Cloned on the way in for the same reason clone copies it on the way
 		// out: the caller's slices must not become the store's.
+		panes.Left.Tabs = slices.Clone(panes.Left.Tabs)
 		panes.Main.Tabs = slices.Clone(panes.Main.Tabs)
 		panes.Right.Tabs = slices.Clone(panes.Right.Tabs)
 		panes.Bottom.Tabs = slices.Clone(panes.Bottom.Tabs)

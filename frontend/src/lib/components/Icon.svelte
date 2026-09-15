@@ -115,6 +115,7 @@
         'sort-desc': ['M4 6h4', 'M4 12h7', 'M4 18h11', 'M18 19V5', 'M15 8l3-3 3 3'],
         'sort-off': ['M4 6h8', 'M4 12h14', 'M4 18h6'],
         plus: ['M12 5v14', 'M5 12h14'],
+        minus: ['M5 12h14'],
         // A folder with a plus: add every kubeconfig in a directory.
         'folder-plus': [
             'M3 7a1 1 0 0 1 1-1h5l2 2.5h8a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7z',

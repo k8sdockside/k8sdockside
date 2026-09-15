@@ -1601,6 +1601,19 @@ describe('saving settings', () => {
             vi.mocked(SettingsService.SetPanes).mockReset().mockResolvedValue({} as never);
         }
     });
+
+    // The cluster tree's pane was left out of the write, so its width -- and
+    // anything moved into it -- was back at the default after every restart.
+    test('writes the left pane with the others, so its width survives a restart', async () => {
+        vi.mocked(SettingsService.SetPanes).mockClear();
+
+        workspace.setSidebarWidth(300);
+        await vi.waitFor(() => expect(SettingsService.SetPanes).toHaveBeenCalled());
+
+        const written = vi.mocked(SettingsService.SetPanes).mock.calls.at(-1)![0];
+        expect(written.left?.size).toBe(300);
+        expect(written.left?.tabs?.map((t) => t?.type)).toContain('clusters');
+    });
 });
 
 describe('the detail panel', () => {
@@ -2583,7 +2596,7 @@ describe('the describe tab', () => {
         const calls = vi.mocked(SettingsService.SetPanes).mock.calls;
         expect(calls.length).toBeGreaterThan(0);
         const written = calls.at(-1)?.[0];
-        const tabs = [written?.main, written?.right, written?.bottom].flatMap(
+        const tabs = [written?.left, written?.main, written?.right, written?.bottom].flatMap(
             (pane) => pane?.tabs ?? [],
         );
         // The list it was read from is there; the report itself is not.

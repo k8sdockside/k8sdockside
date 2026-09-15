@@ -4,7 +4,7 @@
   Which buttons appear is the catalogue's answer (../actions.ts) and what they
   do is the store's (../state/actions.svelte.ts). What is here is the middle:
   asking before the two that cannot be undone, holding the replica count while
-  it is typed, and showing a drain as it works.
+  it is dragged, stepped or typed, and showing a drain as it works.
 
   A question replaces the bar rather than opening a dialog over it, so that
   "Delete web?" is read in the same place the button was pressed and cannot be
@@ -170,8 +170,53 @@
 
     /** The action waiting on an answer -- a confirmation, a number, a port -- if any. */
     let asking = $state<ActionId | null>(null);
-    let replicas = $state(0);
     let busy = $state(false);
+
+    /**
+     * The replica count being chosen. Nullable because that is what a number
+     * field bound to an empty box holds.
+     */
+    let replicas = $state<number | null>(0);
+    /**
+     * Where the scale slider ends. Fixed when the form opens -- double what is
+     * running, rounded up to five and never under ten -- so the track does not
+     * rescale under the pointer mid-drag. Typing past it moves the end out to
+     * the typed number rather than refusing it.
+     */
+    let scaleCeiling = $state(10);
+    let sliderMax = $derived(Math.max(scaleCeiling, replicas ?? 0));
+    let sliderEl = $state<HTMLInputElement | null>(null);
+    /** The chosen count as the cluster would take it, or null for anything it would not. */
+    let wanted = $derived(replicas !== null && Number.isInteger(replicas) && replicas >= 0 ? replicas : null);
+    /** Where the slider sits: the chosen count, or what is running while the box holds nonsense. */
+    let shownReplicas = $derived(wanted ?? facts.replicas);
+    let scaleChange = $derived(wanted === null ? 0 : wanted - facts.replicas);
+    /** Scaling to what is already running is a write that changes nothing. */
+    let canScale = $derived(!busy && wanted !== null && wanted !== facts.replicas);
+
+    // A range input clamps a value set before its max has caught up, which is
+    // what typing past the end does: the number and the end move together.
+    $effect(() => {
+        if (!sliderEl) return;
+        sliderEl.max = String(sliderMax);
+        sliderEl.value = String(shownReplicas);
+    });
+
+    function openScale(): void {
+        replicas = facts.replicas;
+        scaleCeiling = Math.max(10, Math.ceil((facts.replicas * 2) / 5) * 5);
+    }
+
+    function stepReplicas(by: number): void {
+        replicas = Math.max(0, shownReplicas + by);
+    }
+
+    /** Enter in the scale form applies it, as it would in any one-field form. */
+    function applyOnEnter(event: KeyboardEvent): void {
+        if (event.key !== 'Enter' || !canScale || wanted === null) return;
+        event.preventDefault();
+        void perform('scale', wanted);
+    }
 
     /**
      * What a forward could be opened on, read from the object when the form is
@@ -236,9 +281,12 @@
         }
     });
 
-    // Focus the safe answer as soon as a question appears.
+    // Focus the safe answer as soon as a question appears. The replica count
+    // is not a question, and its slider takes the focus instead, so the arrow
+    // keys move it straight away.
     $effect(() => {
-        if (asking || askingPlugin) cancelEl?.focus();
+        if (asking === 'scale') sliderEl?.focus();
+        else if (asking || askingPlugin) cancelEl?.focus();
     });
 
     /**
@@ -291,7 +339,7 @@
             void perform(action.id);
             return;
         }
-        if (action.form === 'number') replicas = facts.replicas;
+        if (action.form === 'number') openScale();
         if (action.id === 'drain') resetDrain();
         asking = action.id;
     }
@@ -521,7 +569,7 @@
 />
 
 {#if available.length > 0 || offered.length > 0}
-    <div class="bar" class:stacked={asked?.id === 'drain'}>
+    <div class="bar" class:stacked={asked?.id === 'drain' || asked?.form === 'number'}>
         {#if askingPlugin}
             {@const a = askingPlugin}
             <p class="question">{a.confirm}</p>
@@ -670,13 +718,74 @@
                 </button>
             </div>
         {:else if asked && asked.form === 'number'}
-            <label class="scale">
-                Replicas
-                <input type="number" min="0" bind:value={replicas} />
-            </label>
+            <!-- Drag, step or type: all three move the one count. The tick
+                 under the track marks what is running now, so how far the
+                 count has been moved from it can be seen as well as read. -->
+            <div class="scale-head">
+                <span class="scale-title">Scale {subject}</span>
+                <span
+                    class="scale-change"
+                    class:up={scaleChange > 0}
+                    class:down={scaleChange < 0}
+                    class:stops={wanted === 0 && facts.replicas > 0}
+                    aria-live="polite"
+                >
+                    {#if wanted === null}
+                        Not a replica count
+                    {:else if scaleChange === 0}
+                        {facts.replicas} running
+                    {:else}
+                        {facts.replicas} → {wanted} ({scaleChange > 0 ? '+' : '−'}{Math.abs(scaleChange)}){wanted === 0
+                            ? ' — stops every pod'
+                            : ''}
+                    {/if}
+                </span>
+            </div>
+            <div class="scale-row">
+                <button
+                    class="step"
+                    aria-label="One fewer replica"
+                    title="One fewer"
+                    disabled={busy || shownReplicas <= 0}
+                    onclick={() => stepReplicas(-1)}
+                >
+                    <Icon name="minus" size={12} />
+                </button>
+                <div class="scalebar" style:--now={facts.replicas / sliderMax} style:--at={shownReplicas / sliderMax}>
+                    <input
+                        bind:this={sliderEl}
+                        class="slider"
+                        type="range"
+                        min="0"
+                        max={sliderMax}
+                        step="1"
+                        value={shownReplicas}
+                        aria-label="Replica count"
+                        aria-valuetext="{shownReplicas} replicas"
+                        disabled={busy}
+                        oninput={(e) => (replicas = e.currentTarget.valueAsNumber)}
+                        onkeydown={applyOnEnter}
+                    />
+                    <span class="now" title="{facts.replicas} running now" aria-hidden="true"></span>
+                    <span class="ends" aria-hidden="true"><span>0</span><span>{sliderMax}</span></span>
+                </div>
+                <button
+                    class="step"
+                    aria-label="One more replica"
+                    title="One more"
+                    disabled={busy}
+                    onclick={() => stepReplicas(1)}
+                >
+                    <Icon name="plus" size={12} />
+                </button>
+                <label class="count">
+                    Replicas
+                    <input type="number" min="0" step="1" disabled={busy} bind:value={replicas} onkeydown={applyOnEnter} />
+                </label>
+            </div>
             <div class="answers">
                 <button bind:this={cancelEl} class="plain" onclick={() => (asking = null)}>Cancel</button>
-                <button class="go" disabled={busy} onclick={() => perform('scale', replicas)}>Apply</button>
+                <button class="go" disabled={!canScale} onclick={() => perform('scale', wanted ?? 0)}>Apply</button>
             </div>
         {:else}
             {#each available.filter((a) => a.tone !== 'danger') as action (action.id)}
@@ -837,14 +946,6 @@
         flex: 0 0 auto;
     }
 
-    .scale {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 12px;
-        color: var(--text-dim);
-    }
-
     .field {
         display: flex;
         align-items: center;
@@ -907,8 +1008,183 @@
         margin-top: 8px;
     }
 
-    .scale input {
-        width: 72px;
+    /* ----- the scale form: a heading, the slider row, the answers ----- */
+
+    .scale-head {
+        flex: 1 1 100%;
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        font-size: 12px;
+    }
+
+    .scale-title {
+        min-width: 0;
+        color: var(--text);
+        overflow-wrap: anywhere;
+    }
+
+    .scale-change {
+        margin-left: auto;
+        color: var(--text-dim);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .scale-change.up {
+        color: var(--ok);
+    }
+
+    .scale-change.down {
+        color: var(--warn);
+    }
+
+    .scale-change.stops {
+        color: var(--error);
+    }
+
+    /* Room underneath for the 0 and max labels, which hang below the track
+       so the track itself lines up with the buttons either side of it. */
+    .scale-row {
+        flex: 1 1 100%;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding-bottom: 10px;
+    }
+
+    .step {
+        flex: 0 0 auto;
+        width: 24px;
+        padding: 0;
+        justify-content: center;
+    }
+
+    .scalebar {
+        --thumb: 14px;
+        position: relative;
+        flex: 1 1 auto;
+        min-width: 96px;
+    }
+
+    /* Where along the track a count sits: the thumb's centre, which travels
+       half a thumb in from either end rather than the whole width. */
+    .slider,
+    .now {
+        --along: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--at));
+    }
+
+    .slider {
+        display: block;
+        width: 100%;
+        height: 18px;
+        margin: 0;
+        background: transparent;
+        appearance: none;
+        -webkit-appearance: none;
+        cursor: pointer;
+    }
+
+    .slider:disabled {
+        cursor: default;
+        opacity: 0.5;
+    }
+
+    .slider:focus-visible {
+        outline: none;
+    }
+
+    .slider::-webkit-slider-runnable-track {
+        height: 4px;
+        border-radius: 2px;
+        background: linear-gradient(to right, var(--accent) var(--along), var(--bg-active) 0);
+    }
+
+    .slider::-webkit-slider-thumb {
+        appearance: none;
+        -webkit-appearance: none;
+        width: var(--thumb);
+        height: var(--thumb);
+        margin-top: calc((4px - var(--thumb)) / 2);
+        border-radius: 50%;
+        background: var(--bg-raised);
+        box-shadow:
+            0 0 0 1.5px var(--accent),
+            0 1px 2px rgb(0 0 0 / 0.25);
+        cursor: grab;
+    }
+
+    .slider:active::-webkit-slider-thumb {
+        cursor: grabbing;
+    }
+
+    .slider:focus-visible::-webkit-slider-thumb {
+        box-shadow:
+            0 0 0 1.5px var(--accent),
+            0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent);
+    }
+
+    .slider::-moz-range-track {
+        height: 4px;
+        border-radius: 2px;
+        background: var(--bg-active);
+    }
+
+    .slider::-moz-range-progress {
+        height: 4px;
+        border-radius: 2px;
+        background: var(--accent);
+    }
+
+    .slider::-moz-range-thumb {
+        width: var(--thumb);
+        height: var(--thumb);
+        border: none;
+        border-radius: 50%;
+        background: var(--bg-raised);
+        box-shadow: 0 0 0 1.5px var(--accent);
+    }
+
+    /* What is running now: a tick under the track, hidden by the thumb until
+       the count is moved away from it. */
+    .now {
+        --at: var(--now);
+        position: absolute;
+        top: 12px;
+        left: var(--along);
+        width: 2px;
+        height: 5px;
+        margin-left: -1px;
+        border-radius: 1px;
+        background: var(--text-dim);
+        pointer-events: none;
+    }
+
+    .ends {
+        position: absolute;
+        top: 19px;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: space-between;
+        font-size: 10px;
+        line-height: 1;
+        color: var(--text-faint);
+        font-variant-numeric: tabular-nums;
+        pointer-events: none;
+    }
+
+    .count {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+        font-size: 12px;
+        color: var(--text-dim);
+    }
+
+    .count input {
+        width: 64px;
         height: 24px;
         padding: 0 8px;
         border-radius: var(--radius-sm);
@@ -917,6 +1193,7 @@
         color: var(--text);
         font: inherit;
         font-size: 12px;
+        font-variant-numeric: tabular-nums;
     }
 
     .drain {
