@@ -1,0 +1,42 @@
+# The other half of the kitchen sink: the alternatives full-values.yaml cannot
+# turn on at the same time as their counterparts -- an existing PVC, a Gateway
+# API route instead of an Ingress, a providers file from an existing Secret,
+# an inline bootstrap admin and setup token, and cluster-admin RBAC. Every
+# credential below is a placeholder.
+
+persistence:
+  enabled: true
+  existingClaim: dockside-data
+
+clusters:
+  inCluster:
+    enabled: true
+
+rbac:
+  mode: admin
+  extraClusterRoles:
+    - system:aggregate-to-view
+
+httpRoute:
+  enabled: true
+  annotations:
+    example.com/route: public
+  parentRefs:
+    - name: public
+      namespace: gateway-system
+      sectionName: https
+  hostnames:
+    - dockside.example.com
+  timeouts:
+    request: "0s"
+
+auth:
+  publicURL: https://dockside.example.com
+  trustForwardedHeaders: true
+  setupToken: placeholder-setup-token
+  bootstrapAdmin:
+    username: admin
+    password: placeholder-not-a-password
+  existingProvidersSecret:
+    name: dockside-providers
+    key: providers.json

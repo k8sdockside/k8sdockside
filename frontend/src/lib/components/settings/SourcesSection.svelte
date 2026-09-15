@@ -7,9 +7,16 @@
   frequent thing and should stay one click away in the sidebar, while a full
   path only fits here. Both render from workspace.settings, so there is one
   piece of state under the two views and they cannot disagree.
+
+  In the web version the sources are the server's, and they are shared by
+  everyone signed in to it. A cluster is added there by uploading a kubeconfig
+  on the administration page, not by picking a file off a disk the browser
+  cannot see -- so the two pickers become a link to that page, offered to
+  administrators, and everything that changes the lists is theirs alone.
 -->
 <script lang="ts">
     import { splitContextId } from '../../state/adopt';
+    import { session } from '../../state/session.svelte';
     import { workspace } from '../../state/workspace.svelte';
     import Icon from '../Icon.svelte';
     import SettingsSection from './SettingsSection.svelte';
@@ -27,15 +34,25 @@
 
 <SettingsSection
     title="Kubeconfig sources"
-    lede="k8sdockside reads ~/.kube/config, every path in $KUBECONFIG, anything else in ~/.kube that parses as a kubeconfig, and whatever you add here. Your kubeconfig files are never modified."
+    lede={session.server
+        ? 'The clusters on this server, shared by everyone who signs in to it. An administrator adds them under Administration → Clusters.'
+        : 'k8sdockside reads ~/.kube/config, every path in $KUBECONFIG, anything else in ~/.kube that parses as a kubeconfig, and whatever you add here. Your kubeconfig files are never modified.'}
 >
     <div class="actions">
-        <button class="primary" onclick={() => workspace.addFile()}>
-            <Icon name="plus" size={14} /> Add kubeconfigs
-        </button>
-        <button onclick={() => workspace.addFolder()}>
-            <Icon name="folder-plus" size={14} /> Watch a folder
-        </button>
+        {#if session.server}
+            {#if session.admin && session.clustersUrl}
+                <a class="primary" href={session.clustersUrl}>
+                    <Icon name="server" size={14} /> Manage clusters
+                </a>
+            {/if}
+        {:else}
+            <button class="primary" onclick={() => workspace.addFile()}>
+                <Icon name="plus" size={14} /> Add kubeconfigs
+            </button>
+            <button onclick={() => workspace.addFolder()}>
+                <Icon name="folder-plus" size={14} /> Watch a folder
+            </button>
+        {/if}
         <button onclick={() => workspace.sync()} disabled={workspace.syncing}>
             <Icon name="refresh" size={14} />
             {workspace.syncing ? 'Syncing…' : 'Sync now'}
@@ -50,14 +67,16 @@
                     <Icon name="file" size={13} />
                     <span class="path selectable">{file.path}</span>
                     <span class="count">{contextCount(file.contexts.length)}</span>
-                    <button
-                        class="drop"
-                        onclick={() => workspace.removeFile(file.path)}
-                        title="Stop tracking {file.path}"
-                        aria-label="Stop tracking {file.path}"
-                    >
-                        <Icon name="close" size={12} />
-                    </button>
+                    {#if session.admin}
+                        <button
+                            class="drop"
+                            onclick={() => workspace.removeFile(file.path)}
+                            title="Stop tracking {file.path}"
+                            aria-label="Stop tracking {file.path}"
+                        >
+                            <Icon name="close" size={12} />
+                        </button>
+                    {/if}
                 </li>
             {/each}
         </ul>
@@ -74,14 +93,16 @@
                 <li>
                     <Icon name="folder" size={13} />
                     <span class="path selectable">{folder}</span>
-                    <button
-                        class="drop"
-                        onclick={() => workspace.removeFolder(folder)}
-                        title="Stop watching {folder}"
-                        aria-label="Stop watching {folder}"
-                    >
-                        <Icon name="close" size={12} />
-                    </button>
+                    {#if session.admin}
+                        <button
+                            class="drop"
+                            onclick={() => workspace.removeFolder(folder)}
+                            title="Stop watching {folder}"
+                            aria-label="Stop watching {folder}"
+                        >
+                            <Icon name="close" size={12} />
+                        </button>
+                    {/if}
                 </li>
             {/each}
         </ul>
@@ -95,14 +116,16 @@
                     <Icon name="file" size={13} />
                     <span class="path selectable">{file.path}</span>
                     <span class="count">{contextCount(file.contexts.length)}</span>
-                    <button
-                        class="drop"
-                        onclick={() => workspace.removeFile(file.path)}
-                        title="Hide {file.path}"
-                        aria-label="Hide {file.path}"
-                    >
-                        <Icon name="close" size={12} />
-                    </button>
+                    {#if session.admin}
+                        <button
+                            class="drop"
+                            onclick={() => workspace.removeFile(file.path)}
+                            title="Hide {file.path}"
+                            aria-label="Hide {file.path}"
+                        >
+                            <Icon name="close" size={12} />
+                        </button>
+                    {/if}
                 </li>
             {/each}
         </ul>
@@ -119,14 +142,16 @@
                 <li>
                     <Icon name="file" size={13} />
                     <span class="path selectable dim">{path}</span>
-                    <button
-                        class="drop restore"
-                        onclick={() => workspace.restoreFile(path)}
-                        title="Show {path} again"
-                        aria-label="Show {path} again"
-                    >
-                        <Icon name="undo" size={12} />
-                    </button>
+                    {#if session.admin}
+                        <button
+                            class="drop restore"
+                            onclick={() => workspace.restoreFile(path)}
+                            title="Show {path} again"
+                            aria-label="Show {path} again"
+                        >
+                            <Icon name="undo" size={12} />
+                        </button>
+                    {/if}
                 </li>
             {/each}
             <!-- A removed context belongs under the same heading: it is the
@@ -138,14 +163,16 @@
                     <Icon name="server" size={13} />
                     <span class="path selectable dim">{context.name}</span>
                     <span class="reason">in {context.file}</span>
-                    <button
-                        class="drop restore"
-                        onclick={() => workspace.restoreContext(id)}
-                        title="Show {context.name} again"
-                        aria-label="Show context {context.name} again"
-                    >
-                        <Icon name="undo" size={12} />
-                    </button>
+                    {#if session.admin}
+                        <button
+                            class="drop restore"
+                            onclick={() => workspace.restoreContext(id)}
+                            title="Show {context.name} again"
+                            aria-label="Show context {context.name} again"
+                        >
+                            <Icon name="undo" size={12} />
+                        </button>
+                    {/if}
                 </li>
             {/each}
         </ul>
@@ -159,14 +186,16 @@
                     <Icon name="alert" size={13} />
                     <span class="path selectable">{file.path}</span>
                     <span class="reason">{file.error}</span>
-                    <button
-                        class="drop"
-                        onclick={() => workspace.removeFile(file.path)}
-                        title="Hide {file.path}"
-                        aria-label="Hide {file.path}"
-                    >
-                        <Icon name="close" size={12} />
-                    </button>
+                    {#if session.admin}
+                        <button
+                            class="drop"
+                            onclick={() => workspace.removeFile(file.path)}
+                            title="Hide {file.path}"
+                            aria-label="Hide {file.path}"
+                        >
+                            <Icon name="close" size={12} />
+                        </button>
+                    {/if}
                 </li>
             {/each}
         </ul>
@@ -174,8 +203,12 @@
 
     {#if workspace.loaded && workspace.files.length === 0 && workspace.excluded.length === 0 && workspace.removedContexts.length === 0}
         <p class="empty">
-            No kubeconfig found. Add files above, or point k8sdockside at a folder and it will take every one in
-            there — whatever they are named.
+            {#if session.server}
+                No clusters yet. An administrator adds them under Administration → Clusters.
+            {:else}
+                No kubeconfig found. Add files above, or point k8sdockside at a folder and it will take every one in
+                there — whatever they are named.
+            {/if}
         </p>
     {/if}
 </SettingsSection>
@@ -188,7 +221,8 @@
         margin: 14px 0 4px;
     }
 
-    .actions button {
+    .actions button,
+    .actions a {
         display: flex;
         align-items: center;
         gap: 6px;
@@ -198,6 +232,7 @@
         box-shadow: inset 0 0 0 1px var(--border);
         font-size: 12px;
         color: var(--text);
+        text-decoration: none;
     }
 
     .actions button:hover:not(:disabled) {

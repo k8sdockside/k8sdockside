@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rogerwesterbo/k8sdockside/internal/kube"
+	"github.com/rogerwesterbo/k8sdockside/internal/session"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -99,6 +100,9 @@ type SearchService struct {
 	watcher *kube.Watcher
 	// emit sends one update to the frontend. A field so a test can listen.
 	emit func(SearchUpdate)
+	// owners files each search under whoever started it, in the web version.
+	// The ID is the caller's choice, so it is the one claim that can collide.
+	owners *session.Owners
 
 	mu      sync.Mutex
 	running map[string]context.CancelFunc
@@ -136,7 +140,7 @@ func (s *SearchService) ServiceShutdown() error {
 //
 // It refuses, before asking any cluster, a query that asks for nothing or
 // carries a selector the API server would refuse.
-func (s *SearchService) Start(req SearchRequest) error {
+func (s *SearchService) Start(caller context.Context, req SearchRequest) error {
 	if req.ID == "" {
 		return errors.New("a search needs an id")
 	}
@@ -161,7 +165,8 @@ func (s *SearchService) Start(req SearchRequest) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	s.mu.Lock()
-	if _, taken := s.running[req.ID]; taken {
+	_, taken := s.running[req.ID]
+	if taken || s.owners.Claim(caller, req.ID, cancel) != nil {
 		s.mu.Unlock()
 		cancel()
 		return fmt.Errorf("a search called %q is already running", req.ID)
@@ -175,7 +180,10 @@ func (s *SearchService) Start(req SearchRequest) error {
 
 // Cancel calls a search off. What it has already found stays found; the
 // clusters still going stop, and report themselves done.
-func (s *SearchService) Cancel(searchID string) {
+func (s *SearchService) Cancel(caller context.Context, searchID string) {
+	if !s.owners.Allowed(caller, searchID) {
+		return
+	}
 	s.mu.Lock()
 	cancel, ok := s.running[searchID]
 	s.mu.Unlock()
@@ -267,6 +275,7 @@ func (s *SearchService) forget(id string) {
 		cancel()
 		delete(s.running, id)
 	}
+	s.owners.Release(id)
 }
 
 // hitBudget is how many more hits a search may report, shared by every

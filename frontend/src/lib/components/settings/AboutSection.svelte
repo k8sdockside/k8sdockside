@@ -7,10 +7,15 @@
 
   The update check is here as well as on the bell, because this is where
   somebody who has switched the automatic check off comes to ask by hand.
+
+  The web version shows neither. Its settings file is on the server, where
+  nobody in a browser can open it, and it is upgraded by whoever runs it rather
+  than from here -- so what is left is what this build is.
 -->
 <script lang="ts">
     import { SettingsService } from '../../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
     import type { About } from '../../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services/models.js';
+    import { session } from '../../state/session.svelte';
     import { updates } from '../../state/updates.svelte';
     import { workspace } from '../../state/workspace.svelte';
     import Icon from '../Icon.svelte';
@@ -94,13 +99,19 @@
         <img src="/icon-ship.svg" alt="" width="40" height="40" />
         <div>
             <h3>K8s Dockside</h3>
-            <p>A desktop workspace for the Kubernetes clusters in your local kubeconfig files.</p>
+            {#if session.server}
+                <p>A workspace for the Kubernetes clusters your administrator has added, in the browser.</p>
+            {:else}
+                <p>A desktop workspace for the Kubernetes clusters in your local kubeconfig files.</p>
+            {/if}
         </div>
     </div>
 
     <dl class="facts">
         <div><dt>Version</dt><dd class="selectable">{about?.version ?? '…'}</dd></div>
-        <div><dt>Latest release</dt><dd class="selectable">{updates.latest?.version ?? '—'}</dd></div>
+        {#if !session.server}
+            <div><dt>Latest release</dt><dd class="selectable">{updates.latest?.version ?? '—'}</dd></div>
+        {/if}
         <div><dt>Wails</dt><dd class="selectable">{about?.wails || '—'}</dd></div>
         <div><dt>Go</dt><dd class="selectable">{about?.go ?? '…'}</dd></div>
         <div><dt>Platform</dt><dd class="selectable">{about?.platform ?? '…'}</dd></div>
@@ -113,6 +124,7 @@
         </div>
     </dl>
 
+    {#if !session.server}
     <h3 class="heading">Updates</h3>
     <p class="note" class:news={updates.available}>{standing}</p>
     {#if updates.status.error}
@@ -152,6 +164,7 @@
             <Icon name="folder" size={13} /> Show in file manager
         </button>
     </div>
+    {/if}
 </SettingsSection>
 
 <style>

@@ -9,11 +9,17 @@
 // listens to what it says: a forward's state changes when a listener comes up,
 // when a pod behind it goes away, and when a connection drops hours later, and
 // none of those are things this side could work out for itself.
+//
+// There are none in the web version. A forward is a port on localhost, and
+// there localhost is the server: a tunnel opened there would be reachable by
+// everything on that machine and by nobody in the browser. The backend refuses
+// them, and this list stays empty rather than asking.
 
 import { Events } from '@wailsio/runtime';
 import { PortForwardService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
 import type * as kube from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/kube/models.js';
 import type * as main from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services/models.js';
+import { session } from './session.svelte';
 
 /** One forward, live or waiting to be reconnected. */
 export type Forward = main.Forward;
@@ -58,6 +64,11 @@ class Forwards {
 
     /** Reads the list, including the forwards remembered from last session. */
     async load(): Promise<void> {
+        await session.load();
+        if (session.server) {
+            this.loaded = true;
+            return;
+        }
         try {
             this.list = (await PortForwardService.List()) ?? [];
         } finally {

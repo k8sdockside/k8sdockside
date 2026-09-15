@@ -1,11 +1,13 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 
 	"github.com/rogerwesterbo/k8sdockside/internal/appconfig"
+	"github.com/rogerwesterbo/k8sdockside/internal/session"
 	"github.com/rogerwesterbo/k8sdockside/internal/themes"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -21,9 +23,12 @@ import (
 //
 // Like SettingsService, every mutator answers with the whole catalogue, so the
 // frontend replaces its state with what actually happened rather than assuming
-// its optimistic update stuck.
+// its optimistic update stuck. In the web version the theme folders are
+// everyone's, so only an administrator may change them.
 type ThemeService struct {
 	store *appconfig.Store
+	// server is set in the web version, which has no file manager to open.
+	server bool
 }
 
 // NewThemeService wires the service to the settings store, which is where the
@@ -64,6 +69,9 @@ func (s *ThemeService) Dir() string {
 // The path comes from the store rather than the frontend, so that nothing the
 // webview says can decide what gets opened.
 func (s *ThemeService) RevealDir() error {
+	if s.server {
+		return errDesktopOnly
+	}
 	dir := s.store.ThemesDir()
 	if err := themes.EnsureDir(dir); err != nil {
 		return err
@@ -77,13 +85,19 @@ func (s *ThemeService) RevealDir() error {
 // It exists because the alternative first step -- read the token documentation,
 // open an editor, get the JSON right -- is a much worse place to start than a
 // file that already loads and can be edited a colour at a time.
-func (s *ThemeService) CreateExample() (string, error) {
+func (s *ThemeService) CreateExample(ctx context.Context) (string, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return "", err
+	}
 	return themes.WriteExample(s.store.ThemesDir())
 }
 
 // AddFolder starts reading themes from another directory, for themes kept
 // somewhere the user already syncs -- a dotfiles repo, a shared drive.
-func (s *ThemeService) AddFolder(path string) (themes.Catalogue, error) {
+func (s *ThemeService) AddFolder(ctx context.Context, path string) (themes.Catalogue, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.List(), err
+	}
 	path = filepath.Clean(path)
 	info, err := os.Stat(path)
 	if err != nil {
@@ -101,7 +115,10 @@ func (s *ThemeService) AddFolder(path string) (themes.Catalogue, error) {
 // RemoveFolder stops reading themes from a directory. Nothing is deleted: the
 // themes in it simply stop being offered, and a theme from it that was in use
 // falls back to the default until the folder is added again.
-func (s *ThemeService) RemoveFolder(path string) (themes.Catalogue, error) {
+func (s *ThemeService) RemoveFolder(ctx context.Context, path string) (themes.Catalogue, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.List(), err
+	}
 	if _, err := s.store.RemoveThemeFolder(path); err != nil {
 		return s.List(), err
 	}
@@ -110,7 +127,10 @@ func (s *ThemeService) RemoveFolder(path string) (themes.Catalogue, error) {
 
 // BrowseForFolder opens the native picker in directory mode and adds the folder
 // the user chose. Cancelling leaves everything as it was and is not an error.
-func (s *ThemeService) BrowseForFolder() (themes.Catalogue, error) {
+func (s *ThemeService) BrowseForFolder(ctx context.Context) (themes.Catalogue, error) {
+	if s.server {
+		return s.List(), errDesktopOnly
+	}
 	dialog := application.Get().Dialog.OpenFile().
 		SetTitle("Add a folder of themes").
 		CanChooseFiles(false).
@@ -128,5 +148,5 @@ func (s *ThemeService) BrowseForFolder() (themes.Catalogue, error) {
 	if path == "" {
 		return s.List(), nil // cancelled
 	}
-	return s.AddFolder(path)
+	return s.AddFolder(ctx, path)
 }

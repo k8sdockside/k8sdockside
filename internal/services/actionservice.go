@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/rogerwesterbo/k8sdockside/internal/kube"
+	"github.com/rogerwesterbo/k8sdockside/internal/session"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -38,6 +39,9 @@ type ActionService struct {
 	mu     sync.Mutex
 	drains map[string]context.CancelFunc
 	nextID atomic.Uint64
+	// owners files each drain under whoever started it, in the web version,
+	// so its progress goes to the panel that asked.
+	owners *session.Owners
 }
 
 // NewActionService wires the service to the kubeconfig cache it resolves
@@ -166,7 +170,7 @@ func (s *ActionService) Cordon(contextID, name string, on bool) error {
 // waits on disruption budgets, which is the point of using the eviction API --
 // so it reports through events rather than making the window wait. Options
 // that cannot work are refused here, before the node is touched.
-func (s *ActionService) Drain(contextID, node string, opts kube.DrainOptions) (string, error) {
+func (s *ActionService) Drain(caller context.Context, contextID, node string, opts kube.DrainOptions) (string, error) {
 	if err := opts.Validate(); err != nil {
 		return "", err
 	}
@@ -181,6 +185,9 @@ func (s *ActionService) Drain(contextID, node string, opts kube.DrainOptions) (s
 	s.mu.Lock()
 	s.drains[id] = cancel
 	s.mu.Unlock()
+	// Claimed before the drain starts reporting. A fresh ID cannot be anyone
+	// else's.
+	_ = s.owners.Claim(caller, id, cancel)
 
 	go func() {
 		defer s.finished(id)
@@ -194,7 +201,10 @@ func (s *ActionService) Drain(contextID, node string, opts kube.DrainOptions) (s
 
 // CancelDrain calls off a drain in flight. The node stays cordoned: it is half
 // emptied, and quietly letting work back onto it is not what stopping meant.
-func (s *ActionService) CancelDrain(drainID string) {
+func (s *ActionService) CancelDrain(caller context.Context, drainID string) {
+	if !s.owners.Allowed(caller, drainID) {
+		return
+	}
 	s.mu.Lock()
 	cancel, found := s.drains[drainID]
 	s.mu.Unlock()
@@ -211,6 +221,7 @@ func (s *ActionService) finished(id string) {
 		cancel()
 		delete(s.drains, id)
 	}
+	s.owners.Release(id)
 }
 
 // push forwards one drain report to the frontend. Called from the drain's own

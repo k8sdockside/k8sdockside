@@ -1,0 +1,87 @@
+{{- $fullname := include "k8sdockside.fullname" . -}}
+{{- $publicURL := include "k8sdockside.publicURL" . -}}
+{{- $adminMode := include "k8sdockside.bootstrapAdminMode" . -}}
+{{- $ns := .Release.Namespace -}}
+K8s Dockside (server mode) {{ .Chart.AppVersion }} is installed as "{{ $fullname }}" in namespace "{{ $ns }}".
+
+REACHING IT
+{{- if $publicURL }}
+
+  {{ $publicURL }}
+{{- end }}
+{{- if .Values.httpRoute.enabled }}
+
+  HTTPRoute {{ $fullname }} serves: {{ .Values.httpRoute.hostnames | join ", " | default "every hostname of its parent Gateway" }}
+{{- end }}
+{{- if not (or .Values.ingress.enabled .Values.httpRoute.enabled) }}
+
+  No Ingress or HTTPRoute is enabled. Port-forward to the Service:
+
+    kubectl --namespace {{ $ns }} port-forward svc/{{ $fullname }} 8080:{{ .Values.service.port }}
+
+  and open http://127.0.0.1:8080
+{{- end }}
+
+SIGNING IN
+{{- if eq $adminMode "inline" }}
+
+  The admin account "{{ .Values.auth.bootstrapAdmin.username }}" is created at startup, as long as no users exist yet.
+{{- else if eq $adminMode "existing" }}
+
+  The admin account from Secret "{{ .Values.auth.bootstrapAdmin.existingSecret.name }}" is created at startup, as long as no users exist yet.
+{{- else if .Values.auth.existingSetupTokenSecret.name }}
+
+  The first visitor creates the admin account, and has to present the setup token:
+
+    kubectl --namespace {{ $ns }} get secret {{ .Values.auth.existingSetupTokenSecret.name }} -o jsonpath='{.data.{{ .Values.auth.existingSetupTokenSecret.key | default "setup-token" | replace "." "\\." }}}' | base64 -d
+{{- else if .Values.auth.setupToken }}
+
+  The first visitor creates the admin account, and has to present the setup token:
+
+    kubectl --namespace {{ $ns }} get secret {{ include "k8sdockside.authSecretName" . }} -o jsonpath='{.data.setup-token}' | base64 -d
+{{- else }}
+
+  WARNING: whoever opens the page first creates the admin account. Open it
+  yourself before anyone else can reach it, or set auth.setupToken or
+  auth.bootstrapAdmin.
+{{- end }}
+
+  Admins manage users, sign-in providers, clusters and plugins at {{ $publicURL | default "" }}/-/admin
+
+OAUTH
+  Register this redirect (callback) URL with each provider, <id> being the provider's id:
+
+    {{ $publicURL | default "<publicURL>" }}/-/oauth/<id>/callback
+{{- range .Values.auth.providers }}
+    {{ .id }}: {{ $publicURL | default "<publicURL>" }}/-/oauth/{{ .id }}/callback
+{{- end }}
+{{- if not $publicURL }}
+
+  auth.publicURL is not set, so callback URLs are built from whatever address
+  each request arrives on. Set it to the address users type into their browser.
+{{- end }}
+
+CLUSTER ACCESS
+{{- if .Values.clusters.inCluster.enabled }}
+
+  This cluster is offered as context "{{ .Values.clusters.inCluster.name | default "in-cluster" }}", through ServiceAccount "{{ include "k8sdockside.serviceAccountName" . }}"
+  {{- if .Values.rbac.create }} with rbac.mode={{ .Values.rbac.mode | default "readonly" }}
+  {{- if .Values.rbac.extraClusterRoles }} plus ClusterRoles {{ join ", " .Values.rbac.extraClusterRoles }}{{ end }}.
+  {{- else }}. rbac.create=false: bind its permissions yourself.
+  {{- end }}
+{{- end }}
+{{- if include "k8sdockside.hasKubeconfigs" . }}
+
+  Kubeconfigs from Secrets are mounted at /etc/k8sdockside/kubeconfigs.
+{{- end }}
+
+  WARNING: every signed-in user acts with the pod's cluster credentials -- its
+  ServiceAccount and every mounted or uploaded kubeconfig -- not their own.
+  Anyone who can sign in can do whatever those allow.
+{{- if not .Values.persistence.enabled }}
+
+STORAGE
+  persistence.enabled=false: users, sessions, providers added in the admin UI,
+  uploaded kubeconfigs and installed plugins are lost whenever the pod restarts
+  or moves. Set persistence.enabled=true to keep them.
+{{- end }}

@@ -14,8 +14,14 @@
   after the title, and the bell and the View menu at the far end, which is the
   one part of the window that is there whatever else has been hidden -- see
   SearchBar.svelte, NotificationMenu.svelte and ViewMenu.svelte.
+
+  The web version adds who is signed in at the very end, where every site keeps
+  it -- see AccountMenu.svelte. The desktop app has nobody to sign in, so its
+  bar is exactly as it was.
 -->
 <script lang="ts">
+    import { session } from '../state/session.svelte';
+    import AccountMenu from './AccountMenu.svelte';
     import NotificationMenu from './NotificationMenu.svelte';
     import SearchBar from './SearchBar.svelte';
     import ViewMenu from './ViewMenu.svelte';
@@ -34,6 +40,9 @@
         <div class="menus">
             <NotificationMenu />
             <ViewMenu />
+            {#if session.server}
+                <AccountMenu />
+            {/if}
         </div>
     </div>
 </header>

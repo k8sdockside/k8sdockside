@@ -278,6 +278,12 @@ func (w *Watcher) helmReleases(kc Context, keep map[string]bool) (Table, error) 
 // after the pump's coalescing window. A release changes when someone deploys,
 // which is not the rate a pod list changes at.
 func (w *Watcher) SubscribeHelm(kc Context, namespaces []string) (string, error) {
+	return w.SubscribeHelmFor(kc, namespaces, nil)
+}
+
+// SubscribeHelmFor is SubscribeHelm with a claim, called with the new
+// subscription's ID before anything is pushed under it -- see SubscribeFor.
+func (w *Watcher) SubscribeHelmFor(kc Context, namespaces []string, claim func(id string)) (string, error) {
 	cl, err := w.clusterFor(kc)
 	if err != nil {
 		return "", err
@@ -303,6 +309,9 @@ func (w *Watcher) SubscribeHelm(kc Context, namespaces []string) (string, error)
 		live:       live,
 		dirty:      make(chan struct{}, 1),
 		done:       make(chan struct{}),
+	}
+	if claim != nil {
+		claim(sub.id)
 	}
 
 	w.mu.Lock()

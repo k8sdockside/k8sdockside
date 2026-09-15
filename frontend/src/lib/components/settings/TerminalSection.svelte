@@ -10,10 +10,16 @@
 
   The rest of the section is the two things a shell cannot work out for itself:
   which shell a container actually has, and what a node shell is made of.
+
+  The web version has only the first answer. "The terminal you already have" is
+  one on the user's machine, and the server running this cannot open a window
+  there -- so the choice is not offered, and every shell opens in the dock
+  whatever an older preference says. See workspace.openShell.
 -->
 <script lang="ts">
     import { TerminalService } from '../../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
     import type { ExternalTerminals } from '../../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services/models.js';
+    import { session } from '../../state/session.svelte';
     import { workspace } from '../../state/workspace.svelte';
     import Icon from '../Icon.svelte';
     import SegmentedControl from './SegmentedControl.svelte';
@@ -40,6 +46,12 @@
     let looking = $state(true);
 
     $effect(() => {
+        // Nothing to look for in the web version: the machine it would list
+        // the emulators of is the server.
+        if (session.server) {
+            looking = false;
+            return;
+        }
         void (async () => {
             try {
                 externals = await TerminalService.Externals();
@@ -92,8 +104,11 @@
 
 <SettingsSection
     title="Terminal"
-    lede="Where the Shell button opens a shell, which shell it tries, and what a shell on a node is made of."
+    lede={session.server
+        ? 'Which shell the Shell button tries, and what a shell on a node is made of.'
+        : 'Where the Shell button opens a shell, which shell it tries, and what a shell on a node is made of.'}
 >
+    {#if !session.server}
     <SettingsRow
         label="Open shells"
         hint="In this window, a terminal opens in the dock beside the logs and the editor — nothing needs to be installed. In your own terminal, the app runs kubectl in the emulator you use, and everything you have set up there applies."
@@ -138,6 +153,7 @@
                 {externals.reason}
             </p>
         {/if}
+    {/if}
     {/if}
 
     <SettingsRow

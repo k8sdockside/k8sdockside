@@ -1,0 +1,76 @@
+{{define "body"}}
+<h1>Users</h1>
+<p class="muted">Everyone here works with the clusters through the credentials this deployment was given. Administrators also manage users, sign-in providers, clusters and plugins.</p>
+<section class="panel">
+  <div class="scroll">
+  <table>
+    <thead><tr><th>User</th><th>Email</th><th>Signs in with</th><th>Role</th><th>Last sign-in</th><th></th></tr></thead>
+    <tbody>
+    {{range .Users}}
+    <tr class="{{if .Disabled}}off{{end}}">
+      <td>
+        <strong>{{.Username}}</strong>{{if .Self}} <span class="badge">you</span>{{end}}{{if .Disabled}} <span class="badge warn">switched off</span>{{end}}
+        {{if .Name}}<br><small class="muted">{{.Name}}</small>{{end}}
+      </td>
+      <td>{{or .Email "—"}}</td>
+      <td>{{range $i, $m := .SignIn}}{{if $i}}, {{end}}{{$m}}{{else}}—{{end}}</td>
+      <td>{{if .Admin}}Administrator{{else}}User{{end}}</td>
+      <td>{{.LastLogin}}</td>
+      <td class="actions">
+        <details>
+          <summary>Manage</summary>
+          <div class="menu">
+            <form method="post" action="/-/admin/users/{{.ID}}/{{if .Admin}}role-user{{else}}role-admin{{end}}">
+              <input type="hidden" name="csrf" value="{{$.CSRF}}">
+              <button type="submit">{{if .Admin}}Make a regular user{{else}}Make an administrator{{end}}</button>
+            </form>
+            {{if not .Self}}
+            <form method="post" action="/-/admin/users/{{.ID}}/{{if .Disabled}}enable{{else}}disable{{end}}">
+              <input type="hidden" name="csrf" value="{{$.CSRF}}">
+              <button type="submit">{{if .Disabled}}Switch on{{else}}Switch off{{end}}</button>
+            </form>
+            {{end}}
+            <form method="post" action="/-/admin/users/{{.ID}}/password" class="inline">
+              <input type="hidden" name="csrf" value="{{$.CSRF}}">
+              <input type="password" name="password" placeholder="New password" minlength="8" required autocomplete="new-password">
+              <button type="submit">Set the password</button>
+            </form>
+            {{if not .Self}}
+            <form method="post" action="/-/admin/users/{{.ID}}/delete">
+              <input type="hidden" name="csrf" value="{{$.CSRF}}">
+              <button type="submit" class="danger">Remove {{.Username}}</button>
+            </form>
+            {{end}}
+          </div>
+        </details>
+      </td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+</section>
+<section class="panel">
+  <h2>Add a user</h2>
+  <form method="post" action="/-/admin/users" class="grid">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>Username <input name="username" required value="{{index .Form "username"}}"></label>
+    <label>Display name <input name="name" value="{{index .Form "name"}}"></label>
+    <label>Email
+      <input type="email" name="email" value="{{index .Form "email"}}">
+      <small>Someone a sign-in provider vouches for with this address signs in as this user.</small>
+    </label>
+    <label>Role
+      <select name="role">
+        <option value="user">User</option>
+        <option value="admin" {{if eq (index .Form "role") "admin"}}selected{{end}}>Administrator</option>
+      </select>
+    </label>
+    <label>Password
+      <input type="password" name="password" minlength="8" autocomplete="new-password">
+      <small>Leave it empty for someone who signs in only through a provider.</small>
+    </label>
+    <div class="end"><button type="submit" class="primary">Add the user</button></div>
+  </form>
+</section>
+{{end}}

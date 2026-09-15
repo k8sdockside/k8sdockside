@@ -1,0 +1,32 @@
+{{define "body"}}
+<section class="card">
+  <div class="brand-block"><span class="mark" aria-hidden="true"></span><span>K8s Dockside</span></div>
+  <h1>Create the administrator</h1>
+  <p class="muted">Nobody has signed in here yet. The first account is the administrator: it adds users, sign-in providers and clusters.</p>
+  <form method="post" action="/-/setup" class="stack">
+    {{if .SetupToken}}
+    <label>Setup token
+      <input name="token" required autocomplete="off">
+      <small>The value this deployment was given in K8SDOCKSIDE_SETUP_TOKEN.</small>
+    </label>
+    {{end}}
+    <label>Username
+      <input name="username" required autocomplete="username" autofocus value="{{index .Form "username"}}">
+    </label>
+    <label>Display name
+      <input name="name" autocomplete="name" value="{{index .Form "name"}}">
+    </label>
+    <label>Email
+      <input type="email" name="email" autocomplete="email" value="{{index .Form "email"}}">
+      <small>Optional. A sign-in provider that vouches for this address will sign you in to this account too.</small>
+    </label>
+    <label>Password
+      <input type="password" name="password" required minlength="8" autocomplete="new-password">
+    </label>
+    <label>The password again
+      <input type="password" name="confirm" required minlength="8" autocomplete="new-password">
+    </label>
+    <button type="submit" class="primary">Create the administrator</button>
+  </form>
+</section>
+{{end}}

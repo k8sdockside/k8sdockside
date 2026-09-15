@@ -16,6 +16,7 @@
     import { actions, type DrainOptions } from '../state/actions.svelte';
     import { forwards, type PortOption } from '../state/forwards.svelte';
     import { helm } from '../state/helm.svelte';
+    import { session } from '../state/session.svelte';
     import { workspace, type DetailTarget } from '../state/workspace.svelte';
     import Icon from './Icon.svelte';
     import { notices } from '../state/notices.svelte';
@@ -58,10 +59,15 @@
      * the bar carrying two Starts.
      */
     let pluginOwnsKind = $derived(workspace.pluginActsOn(object.kind, { external: true }));
+    /**
+     * Forward is left out of the web version, where the port it opens would be
+     * one on the server rather than on the machine the user is sitting at.
+     */
     let available = $derived(
-        facts.vm.isMachine && !pluginOwnsKind
+        (facts.vm.isMachine && !pluginOwnsKind
             ? [...actionsForVM(facts.vm), ...actionsFor(object.kind)]
-            : actionsFor(object.kind),
+            : actionsFor(object.kind)
+        ).filter((action) => !(session.server && action.id === 'forward')),
     );
 
     // ----- buttons from plugins ----------------------------------------------

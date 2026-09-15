@@ -86,6 +86,9 @@ type UpdateService struct {
 	err       string
 	// stop ends the background loop; nil until ServiceStartup has begun it.
 	stop context.CancelFunc
+	// disabled is set in the web version, which is updated by whoever deploys
+	// it rather than by the person using it. It asks GitHub nothing.
+	disabled bool
 }
 
 // NewUpdateService wires the service to the settings it reads the preference
@@ -105,6 +108,9 @@ func NewUpdateService(store *appconfig.Store) *UpdateService {
 // ServiceStartup begins the background checks. Wails calls it as the app comes
 // up, on every service that has it.
 func (s *UpdateService) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
+	if s.disabled {
+		return nil
+	}
 	ctx, s.stop = context.WithCancel(ctx)
 	go s.loop(ctx)
 	return nil
@@ -148,6 +154,9 @@ func (s *UpdateService) Status() UpdateStatus {
 // button on the About page is the user asking, and the preference is about the
 // app asking on its own.
 func (s *UpdateService) Check() UpdateStatus {
+	if s.disabled {
+		return s.snapshot()
+	}
 	return s.check(context.Background())
 }
 
@@ -217,6 +226,9 @@ func (s *UpdateService) MarkRead() (UpdateStatus, error) {
 // by the checker rather than taken from the window, so nothing the webview
 // says can decide what gets opened.
 func (s *UpdateService) OpenRelease() error {
+	if s.disabled {
+		return errDesktopOnly
+	}
 	s.mu.Lock()
 	target := updates.ReleasesPage
 	if s.latest != nil {
@@ -237,6 +249,9 @@ func (s *UpdateService) OpenRelease() error {
 // to download -- no check yet, or no file for this platform -- it fails, and
 // the window is expected not to have offered the button.
 func (s *UpdateService) OpenDownload() error {
+	if s.disabled {
+		return errDesktopOnly
+	}
 	s.mu.Lock()
 	target := ""
 	if s.latest != nil {

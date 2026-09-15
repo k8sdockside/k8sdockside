@@ -30,16 +30,27 @@ make test-frontend   # Svelte tests (vitest)
 make lint            # golangci-lint
 make lint-frontend   # svelte-check
 make audit           # gosec + govulncheck + npm audit
+make precheck        # everything CI checks, in one go -- run before you push
 make help            # every target
 ```
 
-There is also a headless mode that runs the app as a plain HTTP server with no
-native GUI dependencies, which is handy for poking at the backend:
+`make precheck` runs the formatting and `go mod tidy` checks, vet, lint, both
+Go builds, the Go tests, the bindings, the frontend's type check, tests and
+bundle, the Helm chart checks and the security scans, and stops at the first
+one that fails. It needs the same tools as CI: the `wails3` CLI, the frontend's
+`node_modules`, Playwright's Chromium, and helm.
+
+There is also a server mode that runs the app as an HTTP server behind its own
+sign-in, with no native GUI dependencies — what the container image and the Helm
+chart ship, and handy for poking at the backend:
 
 ```sh
-CGO_ENABLED=0 go build -tags server -o bin/k8sdockside-server .
-WAILS_SERVER_PORT=9741 ./bin/k8sdockside-server
+make build-go-server # compile check with -tags server, no frontend bundle
+make run-server      # build and serve on http://127.0.0.1:8080, state in bin/server-data
 ```
+
+Everything about it — the image, the chart, OAuth — is in
+[server-mode.md](server-mode.md).
 
 ## Tests
 
@@ -83,9 +94,10 @@ K8SDOCKSIDE_TEST_SERVICE=argocd/argocd-server \
 
 | Workflow | Runs on | What it does |
 |---|---|---|
-| [`ci.yml`](../.github/workflows/ci.yml) | every branch push, and PRs into `main` | Go build, test, vet, gofmt check and golangci-lint; bindings generation, svelte-check, vitest and the frontend bundle; gosec, govulncheck and `npm audit --audit-level=high` |
+| [`ci.yml`](../.github/workflows/ci.yml) | every branch push, and PRs into `main` | Go build (desktop and server mode), test, vet, gofmt check and golangci-lint; bindings generation, svelte-check, vitest and the frontend bundle; gosec, govulncheck and `npm audit --audit-level=high`; `helm lint` and `helm template` of the chart |
 | [`security.yml`](../.github/workflows/security.yml) | Mondays 03:00 UTC, manual, and dependency changes on `main` | The same Go scanners in reporting mode with SARIF filed under **Security → Code scanning**, a Trivy filesystem scan for secrets and misconfiguration, and a full npm audit |
 | [`release.yml`](../.github/workflows/release.yml) | tags matching `v*`, and manual | Builds and packages every platform, then publishes the GitHub release |
+| [`server-image.yml`](../.github/workflows/server-image.yml) | tags matching `v*`, and manual | Builds the server-mode image for linux/amd64 and linux/arm64 and pushes it to `ghcr.io/rogerwesterbo/k8sdockside`, then pushes the Helm chart to `oci://ghcr.io/rogerwesterbo/helm` |
 
 CI only runs the jobs a change can affect, via `dorny/paths-filter`. Note that
 the frontend filter includes `**/*.go`: `frontend/bindings/` is generated from

@@ -1,67 +1,111 @@
-# Wails Server Mode Dockerfile
-# Multi-stage build for a minimal image.
+# syntax=docker/dockerfile:1
 #
-# Defaults produce a pure-Go, fully static binary on a distroless/static base:
-# the smallest, most secure image, and correct for the default (CGO-free) app.
+# K8s Dockside in server mode: the app built with -tags server, serving its UI
+# over HTTP behind its own sign-in, for running in Kubernetes. The Helm chart is
+# charts/k8sdockside; the guide is docs/server-mode.md.
 #
-# If your app needs CGO, override the build args, e.g.:
-#   docker build --build-arg CGO_ENABLED=1 \
-#                --build-arg GO_IMAGE=golang:bookworm \
-#                --build-arg RUNTIME_IMAGE=gcr.io/distroless/base-debian12 \
-#                -f build/docker/Dockerfile.server .
-# CGO needs a C toolchain in the builder and a libc in the runtime image; keep
-# the builder and runtime libc compatible (a glibc builder -> a glibc runtime).
-# The Taskfile passes these through: task build:docker CGO_ENABLED=1 GO_IMAGE=... RUNTIME_IMAGE=...
+# The frontend is NOT built in here. Its bindings (frontend/bindings) come from
+# the wails3 CLI, which links against GTK and WebKitGTK on Linux -- far too much
+# to install in an image build -- so bindings and the bundle are built on the
+# host or in CI first, and this file only takes frontend/dist from the context:
+#
+#   make docker-build        # make generate build-frontend, then docker build
+#
+# Multi-arch without emulating the slow part: the Go and Helm stages run on the
+# build platform and cross-compile or download for the target (the binary is
+# pure Go, CGO_ENABLED=0). Only the runtime stage's `apk add` runs as the target.
+#
+# No version is injected with -ldflags. The version the app shows is stamped
+# into the source by .github/scripts/stamp-version.sh before the build, exactly
+# as for the desktop release, and so arrives with the build context.
 
-ARG GO_IMAGE=golang:alpine
-ARG RUNTIME_IMAGE=gcr.io/distroless/static-debian12
-ARG CGO_ENABLED=0
+ARG GO_VERSION=1.27.1
+ARG ALPINE_VERSION=3.22
+ARG HELM_VERSION=3.22.0
 
-# Build stage
-FROM ${GO_IMAGE} AS builder
-ARG CGO_ENABLED
+# ---- Go build -----------------------------------------------------------------
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS builder
+ARG TARGETOS
+ARG TARGETARCH
+WORKDIR /src
 
-WORKDIR /app
+# Before anything slow. main.go embeds frontend/dist, and without a real bundle
+# the image would build and then serve nothing. Checked for index.html rather
+# than for the directory, because `make build-go`'s placeholder satisfies the
+# compiler -- which is the whole problem.
+RUN --mount=type=bind,source=frontend,target=/ctx/frontend \
+    test -f /ctx/frontend/dist/index.html || { \
+      echo "frontend/dist/index.html is missing from the build context." >&2; \
+      echo "Run 'make generate build-frontend' first, or 'make docker-build', which does both." >&2; \
+      exit 1; \
+    }
 
-# Install build dependencies: git always; a C compiler only when CGO is enabled.
-# Supports both apk (alpine) and apt (debian/bookworm) base images.
-RUN if command -v apk >/dev/null 2>&1; then \
-        apk add --no-cache git $([ "$CGO_ENABLED" = "1" ] && echo gcc musl-dev); \
-    else \
-        apt-get update && apt-get install -y --no-install-recommends git $([ "$CGO_ENABLED" = "1" ] && echo gcc libc6-dev) && rm -rf /var/lib/apt/lists/*; \
-    fi
+# Modules in their own layer and cache, so a source change does not download
+# the Kubernetes client libraries again. GOWORK=off: a go.work would name
+# directories that are not in the context.
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    GOWORK=off go mod download
 
-# Copy source code
 COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    GOWORK=off CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -tags server,production -trimpath -buildvcs=false -ldflags="-s -w" \
+      -o /out/k8sdockside .
 
-# Remove local replace directive if present (for production builds)
-RUN sed -i '/^replace/d' go.mod || true
+# ---- Helm ---------------------------------------------------------------------
+# The app shells out to helm for upgrade, rollback and uninstall. Fetched on the
+# build platform for the target, and checked against the published checksum.
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS helm
+ARG TARGETOS
+ARG TARGETARCH
+ARG HELM_VERSION
+RUN apk add --no-cache curl
+WORKDIR /tmp/helm
+RUN set -eu; \
+    tarball="helm-v${HELM_VERSION}-${TARGETOS}-${TARGETARCH}.tar.gz"; \
+    curl -fsSLO "https://get.helm.sh/${tarball}"; \
+    curl -fsSLO "https://get.helm.sh/${tarball}.sha256sum"; \
+    sha256sum -c "${tarball}.sha256sum"; \
+    tar -xzf "${tarball}"; \
+    mkdir -p /out; \
+    install -m 0755 "${TARGETOS}-${TARGETARCH}/helm" /out/helm
 
-# Download dependencies
-RUN go mod tidy
+# ---- Runtime ------------------------------------------------------------------
+# Alpine rather than distroless: the app runs git (plugins installed from a git
+# URL) and helm, and git wants a userland. ca-certificates for every HTTPS call
+# it makes -- clusters, OAuth providers, git remotes; tzdata so TZ works.
+FROM alpine:${ALPINE_VERSION}
+ARG VERSION=dev
 
-# Build the production server binary.
-# - server,production tags: HTTP server mode with production code paths (no dev
-#   logger/asset middleware), matching the desktop production build.
-# - CGO_ENABLED defaults to 0 for a fully static binary (distroless/static);
-#   override with --build-arg CGO_ENABLED=1 (see header) for CGO apps.
-RUN CGO_ENABLED=${CGO_ENABLED} go build -tags server,production -trimpath -buildvcs=false -ldflags="-s -w" -o server .
+LABEL org.opencontainers.image.title="k8sdockside" \
+      org.opencontainers.image.description="K8s Dockside in server mode: the Kubernetes desktop app as a web app, behind its own sign-in" \
+      org.opencontainers.image.source="https://github.com/rogerwesterbo/k8sdockside" \
+      org.opencontainers.image.url="https://github.com/rogerwesterbo/k8sdockside" \
+      org.opencontainers.image.documentation="https://github.com/rogerwesterbo/k8sdockside/blob/main/docs/server-mode.md" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.version="${VERSION}"
 
-# Runtime stage - minimal image
-FROM ${RUNTIME_IMAGE}
+# uid/gid 65532, the conventional "nonroot", matching the chart's
+# securityContext. Its home is the data directory -- with a read-only root
+# filesystem the only writable place besides /tmp -- so git and helm find a
+# $HOME they can use.
+RUN apk add --no-cache ca-certificates git tzdata \
+ && addgroup -S -g 65532 k8sdockside \
+ && adduser -S -D -H -u 65532 -G k8sdockside -h /data -s /sbin/nologin k8sdockside \
+ && mkdir -p /data \
+ && chown 65532:65532 /data
 
-# Copy the binary
-COPY --from=builder /app/server /server
+COPY --from=builder /out/k8sdockside /usr/local/bin/k8sdockside
+COPY --from=helm /out/helm /usr/local/bin/helm
 
-# Copy frontend assets
-COPY --from=builder /app/frontend/dist /frontend/dist
+# No VOLUME: Kubernetes mounts /data (an emptyDir or a PVC, see the chart), and
+# under `docker run` a declared VOLUME only leaves anonymous volumes behind.
+ENV HOME=/data \
+    K8SDOCKSIDE_DATA_DIR=/data \
+    K8SDOCKSIDE_LISTEN_ADDR=:8080
 
-# Expose the default port
 EXPOSE 8080
-
-# Bind to all interfaces (required for Docker)
-# Can be overridden at runtime with -e WAILS_SERVER_HOST=...
-ENV WAILS_SERVER_HOST=0.0.0.0
-
-# Run the server
-ENTRYPOINT ["/server"]
+USER 65532:65532
+ENTRYPOINT ["/usr/local/bin/k8sdockside"]

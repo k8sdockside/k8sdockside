@@ -20,10 +20,15 @@
     import TopBar from './lib/components/TopBar.svelte';
     import { workspace } from './lib/state/workspace.svelte';
     import { notices } from './lib/state/notices.svelte';
+    import { session } from './lib/state/session.svelte';
     import { rowMetrics } from './lib/density';
     import { applyTheme } from './lib/theme/apply';
 
     onMount(() => {
+        // Which version this is -- the desktop app or the web one -- and who
+        // is using it. Not waited for: the window is the desktop app until it
+        // hears otherwise, and the parts that differ follow the answer.
+        void session.load();
         workspace.load();
     });
 
@@ -168,6 +173,15 @@
                         looking at. Drag them to reorder, or into another panel to keep two views side by
                         side.
                     </p>
+                {:else if workspace.loaded && session.server}
+                    <!-- The web version has no disk of the user's to look
+                         on: clusters are kubeconfigs an administrator
+                         uploads on the gateway's own page. -->
+                    <p>No clusters yet.</p>
+                    <p class="hint">
+                        An administrator adds clusters under Administration → Clusters. They appear here as
+                        soon as one has.
+                    </p>
                 {:else if workspace.loaded}
                     <p>No kubeconfig contexts yet.</p>
                     <p class="hint">
@@ -179,6 +193,10 @@
                     <p>Looking for kubeconfig files…</p>
                 {/if}
                 <p class="welcome-links">
+                    {#if workspace.loaded && workspace.contexts.length === 0 && session.admin && session.clustersUrl}
+                        <!-- A page of the same site, so an ordinary link. -->
+                        <a href={session.clustersUrl}><Icon name="server" size={13} /> Manage clusters</a>
+                    {/if}
                     <button onclick={() => workspace.openHelp()}><Icon name="help" size={13} /> How to use K8s Dockside</button>
                     <button onclick={() => workspace.openKubernetesPrimer()}><Icon name="book" size={13} /> New to Kubernetes?</button>
                 </p>
@@ -205,7 +223,9 @@
 
         <span class="spacer"></span>
         <span class="dim">{workspace.contexts.length} contexts · {workspace.files.length} files</span>
-        {#if workspace.configPath}
+        <!-- A path on the server in the web version, which is nothing the
+             user can open or needs to know. -->
+        {#if workspace.configPath && !session.server}
             <span class="dim mono" title="Where your context names, colours and layout are stored">
                 {workspace.configPath}
             </span>
@@ -274,7 +294,8 @@
         margin-top: 18px;
     }
 
-    .welcome-links button {
+    .welcome-links button,
+    .welcome-links a {
         display: inline-flex;
         align-items: center;
         gap: 6px;
@@ -284,9 +305,11 @@
         box-shadow: inset 0 0 0 1px var(--border-soft);
         font-size: 12.5px;
         color: var(--text-dim);
+        text-decoration: none;
     }
 
-    .welcome-links button:hover {
+    .welcome-links button:hover,
+    .welcome-links a:hover {
         background: var(--bg-hover);
         color: var(--text);
     }

@@ -1,0 +1,28 @@
+{{define "body"}}
+<section class="card">
+  <div class="brand-block"><span class="mark" aria-hidden="true"></span><span>K8s Dockside</span></div>
+  <h1>Sign in</h1>
+  {{if .PasswordLogin}}
+  <form method="post" action="/-/login" class="stack">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <label>Username
+      <input name="username" autocomplete="username" required autofocus value="{{index .Form "username"}}">
+    </label>
+    <label>Password
+      <input type="password" name="password" autocomplete="current-password" required>
+    </label>
+    <button type="submit" class="primary">Sign in</button>
+  </form>
+  {{end}}
+  {{if .Providers}}
+  {{if .PasswordLogin}}<div class="or"><span>or</span></div>{{end}}
+  <div class="stack">
+    {{range .Providers}}<a class="button provider {{.Type}}" href="/-/oauth/{{.ID}}/start?next={{$.Next}}">Continue with {{.Name}}</a>
+    {{end}}
+  </div>
+  {{end}}
+  {{if and (not .PasswordLogin) (not .Providers)}}
+  <p class="error">There is no way to sign in here yet. Turn password sign-in back on (K8SDOCKSIDE_PASSWORD_LOGIN), or configure a sign-in provider for the deployment.</p>
+  {{end}}
+</section>
+{{end}}

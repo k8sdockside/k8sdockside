@@ -12,11 +12,15 @@
         NETWORK_GROUP,
         PLUGIN_OVERVIEW,
         PLUGINS_GROUP,
+        PORT_FORWARDS,
         pluginKindFor,
+        type NavGroup,
+        type NavItem,
     } from '../catalogue';
     import { classify } from '../errors';
     import { alpha } from '../colors';
     import { forwards, type Forward } from '../state/forwards.svelte';
+    import { session } from '../state/session.svelte';
     import { workspace, type Health } from '../state/workspace.svelte';
     import { clusters } from '../state/health.svelte';
     import Icon from './Icon.svelte';
@@ -228,8 +232,19 @@
         }
     }
 
-    /** This cluster's forwards, which hang under the Network heading. */
-    let tunnels = $derived(forwards.forContext(context.id));
+    /**
+     * This cluster's forwards, which hang under the Network heading. None in
+     * the web version, where a forward would be a port on the server.
+     */
+    let tunnels = $derived(session.server ? [] : forwards.forContext(context.id));
+
+    /**
+     * The rows a section lists. All of them, except that the web version
+     * leaves out the port forwards view with the forwards themselves.
+     */
+    function itemsOf(group: NavGroup): NavItem[] {
+        return session.server ? group.items.filter((item) => item.kind !== PORT_FORWARDS) : group.items;
+    }
 
     /** What a forward's row says it is doing, for the title attribute. */
     function forwardTitle(forward: Forward): string {
@@ -325,14 +340,16 @@
              heading, which is not shown by default and would remove the whole
              file anyway. Only the app's list changes; the kubeconfig does
              not, and the context appears again if it is added again. -->
-        <button
-            class="remove"
-            onclick={() => workspace.removeContext(context.id)}
-            title="Remove this context from k8sdockside. The kubeconfig is not changed; the context appears again if it is added again."
-            aria-label="Remove {workspace.displayName(context)}"
-        >
-            <Icon name="close" size={12} />
-        </button>
+        {#if session.admin}
+            <button
+                class="remove"
+                onclick={() => workspace.removeContext(context.id)}
+                title="Remove this context from k8sdockside. The kubeconfig is not changed; the context appears again if it is added again."
+                aria-label="Remove {workspace.displayName(context)}"
+            >
+                <Icon name="close" size={12} />
+            </button>
+        {/if}
 
         <!-- Reachability sits at the far right, opposite the colour swatch, so
              "which cluster is this" and "can I reach it" never get confused for
@@ -390,7 +407,7 @@
                          open, the items themselves say how many there are. -->
                     {#if folded}
                         <span class="tally">
-                            {group.label === PLUGINS_GROUP ? workspace.enabledPlugins.length : group.items.length}
+                            {group.label === PLUGINS_GROUP ? workspace.enabledPlugins.length : itemsOf(group).length}
                         </span>
                     {/if}
                 </button>
@@ -421,7 +438,7 @@
                 </div>
 
                 {#if !folded}
-                    {#each group.items as item (item.kind)}
+                    {#each itemsOf(group) as item (item.kind)}
                         <button
                             class="item"
                             data-kind={item.kind}

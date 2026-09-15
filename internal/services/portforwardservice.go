@@ -92,6 +92,9 @@ type PortForwardService struct {
 	// not move under the pointer because its state changed.
 	order  []string
 	nextID atomic.Uint64
+	// server is set in the web version, where a forward would listen on the
+	// pod's localhost -- somewhere no user's browser can reach.
+	server bool
 }
 
 // NewPortForwardService wires the service up and restores the forwards from
@@ -151,6 +154,9 @@ func (s *PortForwardService) ServiceShutdown() error {
 // List is every forward, live and disconnected alike, in the order they were
 // made.
 func (s *PortForwardService) List() []Forward {
+	if s.server {
+		return []Forward{}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -183,6 +189,9 @@ func (s *PortForwardService) Ports(contextID, kind, namespace, name string) ([]k
 // you got -- is the whole point, and a browser cannot be opened on a port that
 // has not been decided yet.
 func (s *PortForwardService) Start(contextID, kind, namespace, name string, remotePort, localPort int, browser bool) (Forward, error) {
+	if s.server {
+		return Forward{}, errDesktopOnly
+	}
 	if _, err := s.resolve(contextID); err != nil {
 		return Forward{}, err
 	}
@@ -219,6 +228,9 @@ func (s *PortForwardService) Start(contextID, kind, namespace, name string, remo
 // Reconnect opens a forward that is not currently up. A forward remembered from
 // a previous session is exactly this: a request with no connection under it.
 func (s *PortForwardService) Reconnect(id string) (Forward, error) {
+	if s.server {
+		return Forward{}, errDesktopOnly
+	}
 	s.mu.Lock()
 	t, found := s.forwards[id]
 	if found && t.cancel != nil {
@@ -401,6 +413,9 @@ func (s *PortForwardService) URL(id string) string {
 // The URL is built here from what the service knows rather than taken from the
 // window, so that nothing the webview says can decide what gets opened.
 func (s *PortForwardService) Open(id string) error {
+	if s.server {
+		return errDesktopOnly
+	}
 	url := s.URL(id)
 	if url == "" {
 		return fmt.Errorf("that forward is not connected")

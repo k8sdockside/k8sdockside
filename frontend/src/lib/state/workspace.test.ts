@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { detail } from './detail.svelte';
 
 // The workspace talks to the Go side the moment it does anything, so the
@@ -109,7 +109,8 @@ const { changes } = await import('./changes.svelte');
 const { views } = await import('./views');
 const { SETTINGS, HELP, KUBERNETES } = await import('../catalogue');
 const { notices } = await import('./notices.svelte');
-const { ResourceService, KubeconfigService, SettingsService, ThemeService, PluginService, MetricsService } = await import(
+const { session } = await import('./session.svelte');
+const { ResourceService, KubeconfigService, SettingsService, ThemeService, PluginService, MetricsService, TerminalService } = await import(
     '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services',
 );
 
@@ -1274,6 +1275,39 @@ describe('the dock', () => {
         workspace.closeAllDockTabs();
         workspace.settings.panes.bottom.open = false;
         expect(workspace.dockTabs).toHaveLength(0);
+    });
+
+    describe('a shell, with the preference saying "in my terminal"', () => {
+        const DESKTOP = session.info;
+
+        beforeEach(() => {
+            vi.mocked(TerminalService.Launch).mockClear();
+            workspace.settings.preferences.terminal.mode = 'external';
+        });
+
+        afterEach(() => {
+            workspace.settings.preferences.terminal.mode = 'app';
+            session.info = DESKTOP;
+        });
+
+        test('opens in the desktop app\'s own terminal emulator', () => {
+            workspace.openShell(object(PROD, 'web'));
+
+            expect(TerminalService.Launch).toHaveBeenCalledOnce();
+            expect(workspace.dockTabs).toHaveLength(0);
+        });
+
+        // The user's own terminal would be one on the server, where nobody is
+        // looking -- and the preference may well have been set on the desktop.
+        test('opens in the dock in the web version, whatever the preference says', () => {
+            session.info = { ...DESKTOP, server: true };
+
+            workspace.openShell(object(PROD, 'web'));
+
+            expect(TerminalService.Launch).not.toHaveBeenCalled();
+            expect(workspace.activeDockTab?.view).toBe('shell');
+            expect(workspace.activeDockTab?.name).toBe('web');
+        });
     });
 
     test('editing an object opens it, focuses it and unfolds the dock', () => {

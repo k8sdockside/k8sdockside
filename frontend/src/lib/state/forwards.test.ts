@@ -35,6 +35,7 @@ vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/service
 }));
 
 const { forwards } = await import('./forwards.svelte');
+const { session } = await import('./session.svelte');
 
 const TARGET = { contextId: 'cfg::prod', kind: 'services', namespace: 'web', name: 'api' };
 
@@ -189,6 +190,26 @@ describe('where a forward can be reached', () => {
         expect(forwards.url(record({ remotePort: 443 }))).toBe('https://localhost:51234');
         expect(forwards.url(record({ remotePort: 8443 }))).toBe('https://localhost:51234');
         expect(forwards.url(record({ remotePort: 8080 }))).toBe('http://localhost:51234');
+    });
+});
+
+// localhost in the web version is the server: a tunnel there would reach
+// nobody in the browser, so the list is not even asked for.
+describe('in the web version', () => {
+    test('the list is empty without asking the backend', async () => {
+        const desktop = session.info;
+        session.info = { ...desktop, server: true };
+        try {
+            List.mockClear();
+
+            await forwards.load();
+
+            expect(List).not.toHaveBeenCalled();
+            expect(forwards.list).toEqual([]);
+            expect(forwards.loaded).toBe(true);
+        } finally {
+            session.info = desktop;
+        }
     });
 });
 

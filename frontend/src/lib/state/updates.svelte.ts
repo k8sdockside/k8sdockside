@@ -4,10 +4,16 @@
 // after, or whenever this side asks -- and pushes what it learnt. This side
 // keeps only the latest answer, and offers the two things that can be done with
 // it: open the release, or mark the notice as read so the bell goes quiet.
+//
+// None of it applies to the web version. There the app is whatever the server
+// was deployed with, and a newer release is news for whoever runs the server,
+// not for the person in the browser, who could neither download nor install
+// it. So there nothing is asked for, and nothing is ever unread.
 
 import { Events } from '@wailsio/runtime';
 import { UpdateService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
 import type * as main from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services/models.js';
+import { session } from './session.svelte';
 
 /** What the backend knows about releases. */
 export type UpdateStatus = main.UpdateStatus;
@@ -41,13 +47,15 @@ class Updates {
         return this.status.latest;
     }
 
-    /** Whether a release newer than this build exists. */
+    /** Whether a release newer than this build exists. Never, in the web version. */
     get available(): boolean {
+        if (session.server) return false;
         return this.status.newer && this.status.latest !== null;
     }
 
     /** Whether that release is still news: newer, and not yet marked as read. */
     get unread(): boolean {
+        if (session.server) return false;
         return this.status.unread;
     }
 
@@ -68,6 +76,14 @@ class Updates {
 
     /** Reads what the backend already knows, without asking GitHub. */
     async load(): Promise<void> {
+        // The bell mounts before the window has heard which version it is,
+        // so it waits for that rather than asking first and ignoring the
+        // answer. The session is asked once; this shares that question.
+        await session.load();
+        if (session.server) {
+            this.loaded = true;
+            return;
+        }
         try {
             this.status = await UpdateService.Status();
         } catch {
@@ -79,8 +95,9 @@ class Updates {
         }
     }
 
-    /** Asks GitHub now, whether or not automatic checks are on. */
+    /** Asks GitHub now, whether or not automatic checks are on. Not in the web version. */
     async check(): Promise<void> {
+        if (session.server) return;
         this.checking = true;
         try {
             this.status = await UpdateService.Check();

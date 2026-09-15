@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const Status = vi.fn();
 const Check = vi.fn();
@@ -19,6 +19,10 @@ vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/service
 }));
 
 const { updates } = await import('./updates.svelte');
+// Not mocked above: the session asks a service this mock does not have, and a
+// session that could not ask is the desktop app -- which is what every test
+// here but the last few is about.
+const { session } = await import('./session.svelte');
 
 const RELEASE = {
     version: 'v0.0.3',
@@ -154,5 +158,40 @@ describe('the download for this install', () => {
         await updates.openDownload();
 
         expect(OpenDownload).toHaveBeenCalledOnce();
+    });
+});
+
+// The server is upgraded by whoever runs it. Nobody in a browser can download
+// or install a release, so there is nothing to ask and nothing to be news.
+describe('in the web version', () => {
+    const DESKTOP = session.info;
+
+    beforeEach(() => {
+        session.info = { ...DESKTOP, server: true, admin: false };
+    });
+
+    afterEach(() => {
+        session.info = DESKTOP;
+    });
+
+    test('nothing is asked for, and the bell still counts as loaded', async () => {
+        await updates.load();
+
+        expect(Status).not.toHaveBeenCalled();
+        expect(updates.loaded).toBe(true);
+    });
+
+    test('a check does nothing', async () => {
+        await updates.check();
+
+        expect(Check).not.toHaveBeenCalled();
+        expect(updates.checking).toBe(false);
+    });
+
+    test('a newer release is never news', () => {
+        updates.status = NEWS;
+
+        expect(updates.unread).toBe(false);
+        expect(updates.available).toBe(false);
     });
 });

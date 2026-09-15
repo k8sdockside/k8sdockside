@@ -22,6 +22,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      charts: ${{ steps.filter.outputs.charts }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -49,6 +50,12 @@ jobs:
               - '**/*.go'
               - 'go.mod'
               - 'go.sum'
+            # The Makefile holds the helm-lint and helm-template targets the
+            # job runs, so a change to those is a change to the check.
+            charts:
+              - 'charts/**'
+              - 'Makefile'
+              - '.github/workflows/ci.yml'
 
   build:
     name: Build (Go)
@@ -71,6 +78,31 @@ jobs:
       # release workflow's.
       - name: Build Go packages
         run: make build-go
+
+  build-server:
+    name: Build (Go, server mode)
+    runs-on: ubuntu-24.04
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      # Server mode does not link GTK, so the headers this installs go unused
+      # here; the shared action is kept anyway so every Go job gets its Go the
+      # same way.
+      - name: Setup build environment
+        uses: ./.github/actions/setup-build
+        with:
+          node-version: none
+          wails: 'false'
+
+      # The server tag compiles files the desktop build never sees -- the HTTP
+      # gateway and its auth -- so without this job they could break unnoticed
+      # until a release tag tried to build the image. A compile check only,
+      # like build-go; the image itself is server-image.yml's.
+      - name: Build Go packages (server mode)
+        run: make build-go-server
 
   test:
     name: Test (Go)
@@ -254,3 +286,25 @@ jobs:
       - name: Run npm audit
         working-directory: frontend
         run: npm audit --audit-level=high
+
+  helm:
+    name: Lint (Helm chart)
+    runs-on: ubuntu-24.04
+    needs: detect-changes
+    if: needs.detect-changes.outputs.charts == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      # Nothing else: the chart targets need helm and make, not Go or Node.
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+
+      # Both run the defaults and every charts/k8sdockside/ci/*-values.yaml:
+      # lint catches schema and convention problems, template catches a values
+      # combination that no longer renders.
+      - name: Lint chart
+        run: make helm-lint
+
+      - name: Render chart
+        run: make helm-template

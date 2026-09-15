@@ -82,6 +82,7 @@ import {
 } from '../catalogue';
 import { clusters } from './health.svelte';
 import { notices } from './notices.svelte';
+import { session } from './session.svelte';
 import { detail, type DetailTarget } from './detail.svelte';
 import { rememberSection } from '../components/settings/section.svelte';
 import { defaultColorFor } from '../colors';
@@ -1709,9 +1710,13 @@ class Workspace {
      * The choice is read here rather than at the button, so that every way of
      * asking for a shell honours it: the action bar, the terminal view's own
      * "External", and whatever asks next.
+     *
+     * The web version always opens it in a pane, whatever the settings say:
+     * "the user's own terminal" would be a window on the server, and the
+     * preference may well have been set in the desktop app before.
      */
     openShell(target: DetailTarget): void {
-        if (this.terminal.mode === 'external') {
+        if (this.terminal.mode === 'external' && !session.server) {
             void this.openExternalShell(target);
             return;
         }

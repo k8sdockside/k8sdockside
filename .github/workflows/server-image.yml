@@ -1,0 +1,177 @@
+name: Server Image
+
+# The server-mode container image and its Helm chart, published to ghcr.io on
+# the same tags that drive release.yml:
+#
+#   ghcr.io/rogerwesterbo/k8sdockside:<version>          linux/amd64 + linux/arm64
+#   oci://ghcr.io/rogerwesterbo/helm/k8sdockside       chart <version>, appVersion <version>
+#
+# Its own workflow rather than a job in release.yml, so a failed image push does
+# not hold back the desktop release or the other way round, and either can be
+# re-run alone. workflow_dispatch rebuilds an existing tag.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and publish, e.g. v1.2.3'
+        required: true
+        type: string
+
+concurrency:
+  group: server-image-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/rogerwesterbo/k8sdockside
+  CHART_REPO: oci://ghcr.io/rogerwesterbo/helm
+
+jobs:
+  publish:
+    name: Image and chart
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Extract version info
+        id: version
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG:-${GITHUB_REF#refs/tags/}}"
+          VERSION="${TAG#v}"
+
+          # Stricter than release.yml's check, because the chart version has to
+          # be valid SemVer 2 as a whole, suffix included.
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag '$TAG' does not look like vMAJOR.MINOR.PATCH[-prerelease]"
+            exit 1
+          fi
+
+          PRERELEASE=false
+          [[ "$VERSION" == *-* ]] && PRERELEASE=true
+
+          {
+            echo "tag=$TAG"
+            echo "version=$VERSION"
+            echo "prerelease=$PRERELEASE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.version.outputs.tag }}
+
+      # Node, and the wails3 CLI with the GTK headers it links against: the
+      # image embeds frontend/dist but cannot build it (see the Dockerfile).
+      - name: Setup build environment
+        uses: ./.github/actions/setup-build
+
+      # The version the app shows under About is stamped into the source, as in
+      # release.yml, so this has to happen before the build context is sent.
+      - name: Stamp version
+        run: .github/scripts/stamp-version.sh "${{ steps.version.outputs.version }}"
+
+      # Same flags as CI's frontend job, via the Makefile.
+      - name: Generate bindings
+        run: make generate
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Read Go version from go.mod
+        id: go
+        run: echo "version=$(awk '/^go /{print $2}' go.mod)" >> "$GITHUB_OUTPUT"
+
+      # QEMU only for the runtime stage's `apk add` on arm64. The Go and Helm
+      # stages run natively and cross-compile or download for the target.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # value= rather than the git ref, so a workflow_dispatch rebuild of a tag
+      # is tagged exactly as the push that first built it. The semver patterns
+      # already skip major.minor for pre-releases; latest is spelled out so it
+      # never lands on an rc.
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.tag }}
+            type=raw,value=latest,enable=${{ steps.version.outputs.prerelease == 'false' }}
+
+      # context: . is load-bearing. Without it build-push-action builds from the
+      # git ref, which has neither the frontend bundle (gitignored) nor the
+      # stamped version -- the two things the steps above just produced.
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: build/docker/Dockerfile.server
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GO_VERSION=${{ steps.go.outputs.version }}
+            VERSION=${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+
+      # Chart version and appVersion both from the tag, so chart X installs
+      # image X unless told otherwise.
+      - name: Package chart
+        run: |
+          set -euo pipefail
+          helm package charts/k8sdockside \
+            --version "${{ steps.version.outputs.version }}" \
+            --app-version "${{ steps.version.outputs.version }}" \
+            --destination dist
+
+      - name: Push chart
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+          helm push "dist/k8sdockside-${{ steps.version.outputs.version }}.tgz" "$CHART_REPO"
+
+      - name: Summary
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "# ${{ steps.version.outputs.tag }} server image"
+            echo
+            echo '```'
+            echo "$TAGS"
+            echo '```'
+            echo
+            echo "Chart: \`helm install k8sdockside $CHART_REPO/k8sdockside --version $VERSION\`"
+          } >> "$GITHUB_STEP_SUMMARY"

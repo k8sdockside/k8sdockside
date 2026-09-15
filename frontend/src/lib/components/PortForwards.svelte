@@ -10,10 +10,15 @@
   Forwards from other clusters are deliberately not here. A tunnel goes to one
   cluster, and a list mixing several would be a list you had to read the fine
   print of before clicking anything in it.
+
+  The web version has none: localhost there is the server. Nothing in it opens
+  this view, but a tab for it can still arrive from a layout saved before, and
+  it says why it is empty rather than offering buttons the backend refuses.
 -->
 <script lang="ts">
     import { singularFor } from '../catalogue';
     import { forwards, type Forward } from '../state/forwards.svelte';
+    import { session } from '../state/session.svelte';
     import { workspace } from '../state/workspace.svelte';
     import Icon from './Icon.svelte';
     import { notices } from '../state/notices.svelte';
@@ -83,6 +88,15 @@
 </script>
 
 <div class="forwards">
+    {#if session.server}
+        <header>
+            <h2>Port forwards</h2>
+            <p>
+                Port forwards are part of the desktop app. A forward is a port on the machine running K8s Dockside,
+                and here that machine is the server rather than yours.
+            </p>
+        </header>
+    {:else}
     <header>
         <h2>Port forwards</h2>
         <p>
@@ -168,6 +182,7 @@
                 {/each}
             </tbody>
         </table>
+    {/if}
     {/if}
 </div>
 

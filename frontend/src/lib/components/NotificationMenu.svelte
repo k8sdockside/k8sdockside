@@ -9,9 +9,14 @@
 
   The only news it carries today is a new release. Drawn by the app rather than
   the platform for the reason the View menu is -- see ViewMenu.svelte.
+
+  The web version keeps the bell, as the fixed place news would arrive, but has
+  no release news to put in it: the server is upgraded by whoever runs it, not
+  from a browser. So there it is quiet, and offers no check.
 -->
 <script lang="ts">
     import { onMount } from 'svelte';
+    import { session } from '../state/session.svelte';
     import { updates } from '../state/updates.svelte';
     import { workspace } from '../state/workspace.svelte';
     import Icon from './Icon.svelte';
@@ -151,7 +156,9 @@
                 </article>
             {:else}
                 <p class="empty">
-                    {#if updates.checking}
+                    {#if session.server}
+                        Nothing yet.
+                    {:else if updates.checking}
                         Checking for updates…
                     {:else if updates.status.error}
                         Could not check for updates.
@@ -165,6 +172,7 @@
                 </p>
             {/if}
 
+            {#if !session.server}
             <footer>
                 {#if updates.status.error}
                     <span class="problem" title={updates.status.error}>{updates.status.error}</span>
@@ -178,6 +186,7 @@
                     {updates.checking ? 'Checking…' : 'Check now'}
                 </button>
             </footer>
+            {/if}
         </div>
     {/if}
 </div>

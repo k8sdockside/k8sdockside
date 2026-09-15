@@ -1,0 +1,52 @@
+{{- /*
+Permissions for the pod's own ServiceAccount, which is what the app uses for
+the cluster it runs in. Nothing here unless that access is on: with
+clusters.inCluster.enabled false the token is not even mounted.
+
+Every signed-in user acts with these permissions, not their own.
+*/ -}}
+{{- if and .Values.clusters.inCluster.enabled .Values.rbac.create -}}
+{{- $fullname := include "k8sdockside.fullname" . -}}
+{{- $mode := .Values.rbac.mode | default "readonly" -}}
+{{- if not (has $mode (list "readonly" "admin" "custom" "none")) -}}
+{{- fail (printf "rbac.mode %q: must be readonly, admin, custom or none" $mode) -}}
+{{- end -}}
+{{- if has $mode (list "readonly" "custom") }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "k8sdockside.labels" . | nindent 4 }}
+rules:
+  {{- if eq $mode "readonly" }}
+  # Read-only, cluster-wide: get, list and watch on every resource in every API
+  # group. This INCLUDES reading Secrets, and -- being a wildcard -- every
+  # subresource (pods/log, but also pods/exec, pods/attach and nodes/proxy,
+  # which some API server and kubelet versions honour over WebSockets with
+  # `get` alone). Use rbac.mode=custom with an explicit list to narrow it.
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  # /version, /apis, /healthz, /metrics and friends.
+  - nonResourceURLs: ["*"]
+    verbs: ["get"]
+  {{- else }}
+  {{- if not .Values.rbac.rules }}
+  {{- fail "rbac.mode=custom needs rbac.rules" }}
+  {{- end }}
+  {{- toYaml .Values.rbac.rules | nindent 2 }}
+  {{- end }}
+---
+{{ include "k8sdockside.clusterRoleBinding" (dict "root" . "name" $fullname "role" $fullname) }}
+{{- else if eq $mode "admin" }}
+---
+# Full control of the cluster, for every user who can sign in.
+{{ include "k8sdockside.clusterRoleBinding" (dict "root" . "name" (printf "%s-cluster-admin" $fullname) "role" "cluster-admin") }}
+{{- end }}
+{{- range .Values.rbac.extraClusterRoles }}
+---
+{{ include "k8sdockside.clusterRoleBinding" (dict "root" $ "name" (printf "%s-%s" $fullname .) "role" .) }}
+{{- end }}
+{{- end }}

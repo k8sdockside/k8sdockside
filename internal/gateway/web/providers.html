@@ -1,0 +1,109 @@
+{{define "body"}}
+<h1>Sign-in providers</h1>
+<p class="muted">Let people sign in with an account they already have. Register K8s Dockside with the provider, giving it the callback address shown here, then add the client ID and secret the provider hands you.</p>
+<section class="panel">
+  {{if .Providers}}
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Provider</th><th>Callback address</th><th>Who can join</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {{range .Providers}}
+    <tr class="{{if not .Enabled}}off{{end}}">
+      <td>
+        <strong>{{.Name}}</strong>
+        <br><small class="muted">{{typeLabel .Type}} · id <code>{{.ID}}</code>{{if .Managed}} · from the deployment{{end}}</small>
+      </td>
+      <td><code class="select">{{$.CallbackBase}}{{.ID}}/callback</code></td>
+      <td>
+        {{if .AutoSignup}}Anyone {{typeLabel .Type}} signs in{{if .AllowedDomains}} from {{join .AllowedDomains ", "}}{{end}}, as {{if eq .DefaultRole "admin"}}an administrator{{else}}a user{{end}}
+        {{else}}Only people already added{{end}}
+      </td>
+      <td>{{if .Enabled}}On{{else}}Off{{end}}</td>
+      <td class="actions">
+        {{if .Managed}}<small class="muted">Change it in the deployment</small>{{else}}
+        <details>
+          <summary>Manage</summary>
+          <div class="menu">
+            <a class="button" href="/-/admin/providers?edit={{.ID}}#edit">Edit</a>
+            <form method="post" action="/-/admin/providers/{{.ID}}/{{if .Enabled}}disable{{else}}enable{{end}}">
+              <input type="hidden" name="csrf" value="{{$.CSRF}}">
+              <button type="submit">{{if .Enabled}}Switch off{{else}}Switch on{{end}}</button>
+            </form>
+            <form method="post" action="/-/admin/providers/{{.ID}}/delete">
+              <input type="hidden" name="csrf" value="{{$.CSRF}}">
+              <button type="submit" class="danger">Remove {{.Name}}</button>
+            </form>
+          </div>
+        </details>
+        {{end}}
+      </td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{else}}
+  <p class="muted">None yet: people sign in with a username and password.</p>
+  {{end}}
+</section>
+<section class="panel" id="edit">
+  <h2>{{if .Editing}}Edit {{index .Form "name"}}{{else}}Add a provider{{end}}</h2>
+  <form method="post" action="/-/admin/providers" class="grid">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="hidden" name="original" value="{{index .Form "original"}}">
+    <label>Kind
+      <select name="type">
+        {{range .ProviderTypes}}<option value="{{.ID}}" {{if eq .ID (index $.Form "type")}}selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+    </label>
+    <label>Id
+      <input name="id" required value="{{index .Form "id"}}" placeholder="github">
+      <small>Lowercase letters, digits and dashes. The callback address is {{.CallbackBase}}<em>id</em>/callback.</small>
+    </label>
+    <label>Button label <input name="name" value="{{index .Form "name"}}" placeholder="GitHub"></label>
+    <label>Client ID <input name="clientId" required autocomplete="off" value="{{index .Form "clientId"}}"></label>
+    <label>Client secret
+      <input type="password" name="clientSecret" autocomplete="off" placeholder="{{if .Editing}}Unchanged{{end}}">
+    </label>
+    <label>Issuer URL
+      <input name="issuer" value="{{index .Form "issuer"}}" placeholder="https://…">
+      <small>OpenID Connect: the issuer. GitLab: your own instance, if it is not gitlab.com.</small>
+    </label>
+    <label>Tenant
+      <input name="tenant" value="{{index .Form "tenant"}}" placeholder="common">
+      <small>Microsoft only: your directory (tenant) ID, to admit only your organisation.</small>
+    </label>
+    <label>Scopes
+      <input name="scopes" value="{{index .Form "scopes"}}" placeholder="The usual ones for the kind">
+    </label>
+    <label>Allowed email domains
+      <input name="allowedDomains" value="{{index .Form "allowedDomains"}}" placeholder="example.com, example.org">
+      <small>Only for people who join on their own: their verified address must be in one of these.</small>
+    </label>
+    <label>People who join are
+      <select name="defaultRole">
+        <option value="user">Users</option>
+        <option value="admin" {{if eq (index .Form "defaultRole") "admin"}}selected{{end}}>Administrators</option>
+      </select>
+    </label>
+    <label class="check wide"><input type="checkbox" name="autoSignup" {{if eq (index .Form "autoSignup") "on"}}checked{{end}}> Let anyone this provider signs in join, not only people already added</label>
+    <label class="check wide"><input type="checkbox" name="enabled" {{if ne (index .Form "enabled") "off"}}checked{{end}}> Offer it on the sign-in page</label>
+    <div class="end">
+      {{if .Editing}}<a class="button" href="/-/admin/providers">Cancel</a>{{end}}
+      <button type="submit" class="primary">{{if .Editing}}Save{{else}}Add the provider{{end}}</button>
+    </div>
+  </form>
+  <details class="help">
+    <summary>Where each provider registers apps</summary>
+    <ul>
+      <li><strong>GitHub</strong>: Settings → Developer settings → OAuth Apps → New OAuth App.</li>
+      <li><strong>Google</strong>: Google Cloud console → APIs &amp; Services → Credentials → Create OAuth client ID, of type web application.</li>
+      <li><strong>Facebook</strong>: developers.facebook.com → My Apps → Create App, then add Facebook Login.</li>
+      <li><strong>GitLab</strong>: Preferences → Applications, with the openid, email and profile scopes.</li>
+      <li><strong>Microsoft</strong>: Microsoft Entra admin center → App registrations → New registration, with a web redirect URI.</li>
+      <li><strong>OpenID Connect</strong>: Keycloak, Dex, Authentik, Okta, Zitadel and the like — give the issuer URL.</li>
+    </ul>
+    <p class="muted">An account is matched to a user here by the email address the provider vouches for. Microsoft does not vouch for addresses, so Microsoft users either join on their own, or sign in once and are then made administrators here.</p>
+  </details>
+</section>
+{{end}}

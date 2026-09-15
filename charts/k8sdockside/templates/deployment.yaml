@@ -1,0 +1,257 @@
+{{- $fullname := include "k8sdockside.fullname" . -}}
+{{- $hasKubeconfigs := include "k8sdockside.hasKubeconfigs" . -}}
+{{- $hasProviders := include "k8sdockside.hasProviders" . -}}
+{{- $adminMode := include "k8sdockside.bootstrapAdminMode" . -}}
+{{- $publicURL := include "k8sdockside.publicURL" . -}}
+{{- if and .Values.auth.providers .Values.auth.existingProvidersSecret.name -}}
+{{- fail "auth.providers and auth.existingProvidersSecret.name both set: use one or the other" -}}
+{{- end -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "k8sdockside.labels" . | nindent 4 }}
+spec:
+  # Always exactly one. Open terminals, log streams and watches live in the
+  # server's memory, so a second replica would be a second, separate app with
+  # users load-balanced between the two.
+  replicas: 1
+  # Recreate rather than RollingUpdate: the old pod has to be gone before the
+  # new one starts, both so there are never two and because a ReadWriteOnce
+  # data volume cannot be attached to both.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "k8sdockside.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # Rolls the pod when anything the chart writes into a Secret changes:
+        # inline kubeconfigs, providers, the bootstrap admin, the setup token.
+        # Secrets referenced by name are not tracked; restart the Deployment
+        # after changing one of those.
+        checksum/secrets: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "k8sdockside.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "k8sdockside.serviceAccountName" . }}
+      # The token is only mounted when the app is meant to use it: with
+      # in-cluster access off, the pod has no credentials for this cluster.
+      automountServiceAccountToken: {{ .Values.clusters.inCluster.enabled }}
+      # Service links would inject K8SDOCKSIDE_SERVICE_HOST, K8SDOCKSIDE_PORT
+      # and friends for a Service named k8sdockside -- the same prefix as the
+      # server's own settings.
+      enableServiceLinks: false
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: k8sdockside
+          image: {{ include "k8sdockside.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: K8SDOCKSIDE_LISTEN_ADDR
+              value: ":8080"
+            - name: K8SDOCKSIDE_DATA_DIR
+              value: /data
+            {{- with $publicURL }}
+            - name: K8SDOCKSIDE_PUBLIC_URL
+              value: {{ . | quote }}
+            {{- end }}
+            - name: K8SDOCKSIDE_TRUST_FORWARDED
+              value: {{ .Values.auth.trustForwardedHeaders | quote }}
+            - name: K8SDOCKSIDE_IN_CLUSTER
+              value: {{ .Values.clusters.inCluster.enabled | quote }}
+            {{- if .Values.clusters.inCluster.enabled }}
+            - name: K8SDOCKSIDE_IN_CLUSTER_NAME
+              value: {{ .Values.clusters.inCluster.name | default "in-cluster" | quote }}
+            {{- end }}
+            {{- if $hasKubeconfigs }}
+            - name: K8SDOCKSIDE_KUBECONFIG_DIRS
+              value: /etc/k8sdockside/kubeconfigs
+            {{- end }}
+            - name: K8SDOCKSIDE_SESSION_TTL
+              value: {{ .Values.auth.sessionTTL | quote }}
+            - name: K8SDOCKSIDE_PASSWORD_LOGIN
+              value: {{ .Values.auth.passwordLogin | quote }}
+            {{- if .Values.auth.existingSetupTokenSecret.name }}
+            - name: K8SDOCKSIDE_SETUP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.existingSetupTokenSecret.name }}
+                  key: {{ .Values.auth.existingSetupTokenSecret.key | default "setup-token" }}
+            {{- else if .Values.auth.setupToken }}
+            - name: K8SDOCKSIDE_SETUP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "k8sdockside.authSecretName" . }}
+                  key: setup-token
+            {{- end }}
+            {{- if eq $adminMode "existing" }}
+            {{- with .Values.auth.bootstrapAdmin.existingSecret }}
+            - name: K8SDOCKSIDE_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .name }}
+                  key: {{ .usernameKey | default "username" }}
+            - name: K8SDOCKSIDE_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .name }}
+                  key: {{ .passwordKey | default "password" }}
+            {{- end }}
+            {{- else if eq $adminMode "inline" }}
+            - name: K8SDOCKSIDE_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "k8sdockside.authSecretName" . }}
+                  key: admin-username
+            - name: K8SDOCKSIDE_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "k8sdockside.authSecretName" . }}
+                  key: admin-password
+            {{- end }}
+            {{- with .Values.auth.adminEmails }}
+            - name: K8SDOCKSIDE_ADMIN_EMAILS
+              value: {{ join "," . | quote }}
+            {{- end }}
+            {{- if $hasProviders }}
+            - name: K8SDOCKSIDE_AUTH_PROVIDERS_FILE
+              value: /etc/k8sdockside/auth/providers.json
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            # The root filesystem is read-only; git and helm need scratch space.
+            - name: tmp
+              mountPath: /tmp
+            {{- if $hasKubeconfigs }}
+            - name: kubeconfigs
+              mountPath: /etc/k8sdockside/kubeconfigs
+              readOnly: true
+            {{- end }}
+            {{- if $hasProviders }}
+            - name: auth-providers
+              mountPath: /etc/k8sdockside/auth
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default $fullname }}
+          {{- else if .Values.persistence.emptyDir.sizeLimit }}
+          emptyDir:
+            sizeLimit: {{ .Values.persistence.emptyDir.sizeLimit }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir: {}
+        {{- if $hasKubeconfigs }}
+        # One directory for every kubeconfig, whichever Secret it comes from.
+        - name: kubeconfigs
+          projected:
+            sources:
+              {{- if .Values.clusters.kubeconfigs }}
+              - secret:
+                  name: {{ include "k8sdockside.kubeconfigsSecretName" . }}
+              {{- end }}
+              {{- range $i, $s := .Values.clusters.existingSecrets }}
+              {{- $src := $s }}
+              {{- if kindIs "string" $s }}
+              {{- $src = dict "name" $s }}
+              {{- end }}
+              - secret:
+                  name: {{ required (printf "clusters.existingSecrets[%d].name is required" $i) $src.name }}
+                  {{- with $src.items }}
+                  items:
+                    {{- toYaml . | nindent 20 }}
+                  {{- end }}
+                  {{- if $src.optional }}
+                  optional: true
+                  {{- end }}
+              {{- end }}
+        {{- end }}
+        {{- if $hasProviders }}
+        - name: auth-providers
+          secret:
+            {{- if .Values.auth.existingProvidersSecret.name }}
+            secretName: {{ .Values.auth.existingProvidersSecret.name }}
+            items:
+              - key: {{ .Values.auth.existingProvidersSecret.key | default "providers.json" }}
+                path: providers.json
+            {{- else }}
+            secretName: {{ include "k8sdockside.authSecretName" . }}
+            items:
+              - key: providers.json
+                path: providers.json
+            {{- end }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

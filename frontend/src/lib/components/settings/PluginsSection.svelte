@@ -7,11 +7,17 @@
   are the same promise made twice — drop a JSON file in a folder and the app
   knows about your thing — and someone who has installed a theme should not have
   to learn a second set of motions to install a plugin.
+
+  The web version keeps the same shape with the same limits as Themes: no
+  folder of the user's to open or pick, and the plugins installed on the server
+  are everyone's, so installing, updating, switching and removing them is for
+  administrators. Everyone else still sees what is installed and what it does.
 -->
 <script lang="ts">
     import { onExternalClick } from '../../links';
     import { authorOf, knownStanding, standingOf } from '../../plugins/credit';
     import type { KnownPlugin, PluginLink } from '../../plugins/types';
+    import { session } from '../../state/session.svelte';
     import { workspace } from '../../state/workspace.svelte';
     import Icon from '../Icon.svelte';
     import PluginCredit from '../PluginCredit.svelte';
@@ -217,46 +223,54 @@
     <div class="path-row">
         <Icon name="folder" size={13} />
         <span class="path selectable">{workspace.pluginDir || '…'}</span>
-        <button onclick={() => workspace.revealPluginDir()}>Open folder</button>
+        {#if !session.server}
+            <button onclick={() => workspace.revealPluginDir()}>Open folder</button>
+        {/if}
     </div>
 
     <div class="actions">
-        <button class="primary" onclick={() => workspace.createExamplePlugin()}>
-            <Icon name="plus" size={14} /> Write a starter plugin
-        </button>
-        <button onclick={() => workspace.addPluginFolder()}>
-            <Icon name="folder-plus" size={14} /> Watch another folder
-        </button>
+        {#if session.admin}
+            <button class="primary" onclick={() => workspace.createExamplePlugin()}>
+                <Icon name="plus" size={14} /> Write a starter plugin
+            </button>
+        {/if}
+        {#if !session.server}
+            <button onclick={() => workspace.addPluginFolder()}>
+                <Icon name="folder-plus" size={14} /> Watch another folder
+            </button>
+        {/if}
         <button onclick={() => workspace.reloadPlugins()}>
             <Icon name="refresh" size={14} /> Reload
         </button>
     </div>
 
-    <h3>From a repository</h3>
-    <p class="note">
-        A plugin kept in a repository of its own — with <code>plugin.json</code> at its root — is cloned into the
-        plugins folder, and updated from its card. Needs <code>git</code> on this machine.
-    </p>
-    <form
-        class="repo-row"
-        onsubmit={(e) => {
-            e.preventDefault();
-            void install();
-        }}
-    >
-        <input
-            type="text"
-            placeholder="https://github.com/you/your-plugin.git"
-            spellcheck="false"
-            autocomplete="off"
-            aria-label="Repository address"
-            bind:value={repoUrl}
-        />
-        <button type="submit" disabled={cloning || !repoUrl.trim()}>
-            <Icon name="download" size={13} />
-            {cloning ? 'Cloning…' : 'Install'}
-        </button>
-    </form>
+    {#if session.admin}
+        <h3>From a repository</h3>
+        <p class="note">
+            A plugin kept in a repository of its own — with <code>plugin.json</code> at its root — is cloned into the
+            plugins folder, and updated from its card. Needs <code>git</code> on this machine.
+        </p>
+        <form
+            class="repo-row"
+            onsubmit={(e) => {
+                e.preventDefault();
+                void install();
+            }}
+        >
+            <input
+                type="text"
+                placeholder="https://github.com/you/your-plugin.git"
+                spellcheck="false"
+                autocomplete="off"
+                aria-label="Repository address"
+                bind:value={repoUrl}
+            />
+            <button type="submit" disabled={cloning || !repoUrl.trim()}>
+                <Icon name="download" size={13} />
+                {cloning ? 'Cloning…' : 'Install'}
+            </button>
+        </form>
+    {/if}
 
     {#if workspace.pluginFolders.length > 0}
         <h3>Extra folders</h3>
@@ -265,14 +279,16 @@
                 <li>
                     <Icon name="folder" size={13} />
                     <span class="path selectable">{folder}</span>
-                    <button
-                        class="drop"
-                        onclick={() => workspace.removePluginFolder(folder)}
-                        title="Stop reading plugins from {folder}"
-                        aria-label="Stop reading plugins from {folder}"
-                    >
-                        <Icon name="close" size={12} />
-                    </button>
+                    {#if session.admin}
+                        <button
+                            class="drop"
+                            onclick={() => workspace.removePluginFolder(folder)}
+                            title="Stop reading plugins from {folder}"
+                            aria-label="Stop reading plugins from {folder}"
+                        >
+                            <Icon name="close" size={12} />
+                        </button>
+                    {/if}
                 </li>
             {/each}
         </ul>
@@ -355,16 +371,18 @@
             </div>
             <!-- The wanted state is sent rather than a toggle, so a card that
                  fires twice cannot end up disagreeing with what is on disk. -->
-            <label class="switch" title={plugin.disabled ? `Switch ${plugin.name} on` : `Switch ${plugin.name} off`}>
-                <input
-                    type="checkbox"
-                    checked={!plugin.disabled}
-                    onchange={(event) =>
-                        void workspace.setPluginEnabled(plugin.id, event.currentTarget.checked)}
-                />
-                <span class="track"><span class="knob"></span></span>
-                <span class="sr-only">{plugin.disabled ? 'Off' : 'On'}</span>
-            </label>
+            {#if session.admin}
+                <label class="switch" title={plugin.disabled ? `Switch ${plugin.name} on` : `Switch ${plugin.name} off`}>
+                    <input
+                        type="checkbox"
+                        checked={!plugin.disabled}
+                        onchange={(event) =>
+                            void workspace.setPluginEnabled(plugin.id, event.currentTarget.checked)}
+                    />
+                    <span class="track"><span class="knob"></span></span>
+                    <span class="sr-only">{plugin.disabled ? 'Off' : 'On'}</span>
+                </label>
+            {/if}
         </header>
         <p class="credit-line">
             <PluginCredit author={authorOf(plugin)} authorUrl={plugin.authorUrl} standing={standingOf(plugin)} />
@@ -393,7 +411,11 @@
                 {#if plugin.pack}{plugin.pack} · {/if}{watchedFolder(plugin) || fileOf(plugin.origin)}
             </p>
         {/if}
-        {#if watchedFolder(plugin)}
+        <!-- What changes the installed plugins, which in the web version
+             every signed-in user shares -- so only an administrator's. -->
+        {#if !session.admin}
+            <!-- Nothing: the card says what the plugin is, and that is all. -->
+        {:else if watchedFolder(plugin)}
             <!-- The user's own checkout: the app neither pulls into it nor
                  deletes it. It can only stop reading it. -->
             <div class="card-actions">
@@ -483,15 +505,17 @@
                 <p class="name">{offer.name}</p>
                 <p class="tagline">{offer.tagline}</p>
             </div>
-            <button
-                class="install"
-                disabled={installing !== null}
-                title="git clone {offer.repo}"
-                onclick={() => void installKnown(offer)}
-            >
-                <Icon name="download" size={12} />
-                {installing === offer.id ? 'Installing…' : 'Install'}
-            </button>
+            {#if session.admin}
+                <button
+                    class="install"
+                    disabled={installing !== null}
+                    title="git clone {offer.repo}"
+                    onclick={() => void installKnown(offer)}
+                >
+                    <Icon name="download" size={12} />
+                    {installing === offer.id ? 'Installing…' : 'Install'}
+                </button>
+            {/if}
         </header>
         <p class="credit-line">
             <PluginCredit author={offer.author ?? ''} authorUrl={offer.authorUrl} standing={knownStanding(offer)} />

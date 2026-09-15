@@ -1,0 +1,26 @@
+{{define "body"}}
+<h1>Your account</h1>
+<section class="panel">
+  <dl class="facts">
+    <dt>Username</dt><dd>{{.User.Username}}</dd>
+    <dt>Name</dt><dd>{{or .User.Name "—"}}</dd>
+    <dt>Email</dt><dd>{{or .User.Email "—"}}</dd>
+    <dt>Role</dt><dd>{{if .User.Admin}}Administrator{{else}}User{{end}}</dd>
+    <dt>Signs in with</dt><dd>{{range $i, $m := .SignIn}}{{if $i}}, {{end}}{{$m}}{{else}}—{{end}}</dd>
+  </dl>
+</section>
+{{if .PasswordLogin}}
+<section class="panel">
+  <h2>{{if .User.HasPassword}}Change your password{{else}}Set a password{{end}}</h2>
+  <form method="post" action="/-/account/password" class="stack narrow">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    {{if .User.HasPassword}}
+    <label>Current password <input type="password" name="current" required autocomplete="current-password"></label>
+    {{end}}
+    <label>New password <input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
+    <label>The new password again <input type="password" name="confirm" required minlength="8" autocomplete="new-password"></label>
+    <button type="submit" class="primary">Save the password</button>
+  </form>
+</section>
+{{end}}
+{{end}}

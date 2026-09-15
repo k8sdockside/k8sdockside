@@ -8,6 +8,7 @@ import (
 	"github.com/rogerwesterbo/k8sdockside/internal/appconfig"
 	"github.com/rogerwesterbo/k8sdockside/internal/helmcli"
 	"github.com/rogerwesterbo/k8sdockside/internal/kube"
+	"github.com/rogerwesterbo/k8sdockside/internal/session"
 )
 
 // HelmService serves Helm releases: the tab that lists them, and the drawer
@@ -39,6 +40,9 @@ type HelmService struct {
 	// on macOS it has to be: an app started from Finder cannot see the PATH the
 	// user's helm is on.
 	store *appconfig.Store
+	// owners files each releases view under whoever opened it, in the web
+	// version -- the same way ResourceService does its tabs.
+	owners *session.Owners
 }
 
 // NewHelmService wires the service to the kubeconfig cache it resolves context
@@ -187,12 +191,12 @@ func (s *HelmService) Releases(contextID string, namespaces []string) (kube.Tabl
 // special. What is different is underneath: the watch is on the Secrets holding
 // the releases, and each change re-reads them rather than serving a cache --
 // see kube.SubscribeHelm for why a release payload is never kept.
-func (s *HelmService) Subscribe(contextID string, namespaces []string) (string, error) {
+func (s *HelmService) Subscribe(caller context.Context, contextID string, namespaces []string) (string, error) {
 	ctx, err := s.resolve(contextID)
 	if err != nil {
 		return "", err
 	}
-	return s.watcher.SubscribeHelm(ctx, namespaces)
+	return s.watcher.SubscribeHelmFor(ctx, namespaces, claimSubscription(caller, s.owners, s.watcher))
 }
 
 // Unsubscribe closes a releases view.
@@ -200,8 +204,11 @@ func (s *HelmService) Subscribe(contextID string, namespaces []string) (string, 
 // It goes through this service rather than ResourceService only so that a
 // caller holding a Helm subscription has one place to give it back; the watcher
 // underneath is the same one, and the IDs come from the same sequence.
-func (s *HelmService) Unsubscribe(subscriptionID string) {
-	s.watcher.Unsubscribe(subscriptionID)
+func (s *HelmService) Unsubscribe(caller context.Context, subscriptionID string) {
+	if !s.owners.Allowed(caller, subscriptionID) {
+		return
+	}
+	dropSubscription(s.owners, s.watcher, subscriptionID)
 }
 
 // SetNamespaces re-points an open releases view at other namespaces, none
@@ -210,7 +217,10 @@ func (s *HelmService) Unsubscribe(subscriptionID string) {
 // Unlike a watched kind, this does re-read: the filter is applied to a fresh
 // listing rather than to a cache that already holds every namespace. It is
 // still one call, and still no watch is reopened.
-func (s *HelmService) SetNamespaces(subscriptionID string, namespaces []string) {
+func (s *HelmService) SetNamespaces(caller context.Context, subscriptionID string, namespaces []string) {
+	if !s.owners.Allowed(caller, subscriptionID) {
+		return
+	}
 	s.watcher.SetNamespaces(subscriptionID, namespaces)
 }
 

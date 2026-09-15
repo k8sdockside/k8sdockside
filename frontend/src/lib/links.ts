@@ -11,9 +11,15 @@
 // to the machine's own browser. The anchors keep their href and their target:
 // the href is what the address is, and the inert target is what makes a click
 // this module somehow misses do nothing rather than something bad.
+//
+// The web version is the exception. There the window *is* a tab in the user's
+// browser, and the backend handing an address to "the machine's own browser"
+// would open it on the server, where nobody is looking. A new tab is exactly
+// what a browser is for, so there it is asked for one directly.
 
 import { Browser } from '@wailsio/runtime';
 import { notices } from './state/notices.svelte';
+import { session } from './state/session.svelte';
 
 /**
  * Whether this is an address we are willing to hand to the browser.
@@ -42,6 +48,14 @@ function allowed(url: string): boolean {
 export async function openExternal(url: string): Promise<void> {
     if (!allowed(url)) {
         notices.fail(`Not a web address: ${url}`);
+        return;
+    }
+    if (session.server) {
+        // noopener and noreferrer, because the page is somebody else's and
+        // must not be handed a way back into this one. With noopener the
+        // browser returns no window, so there is no telling from here whether
+        // a popup blocker ate it -- which is also true of an ordinary link.
+        window.open(url, '_blank', 'noopener,noreferrer');
         return;
     }
     try {

@@ -1,11 +1,13 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/rogerwesterbo/k8sdockside/internal/kube"
 	"github.com/rogerwesterbo/k8sdockside/internal/plugins"
+	"github.com/rogerwesterbo/k8sdockside/internal/session"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -37,6 +39,9 @@ type ResourceService struct {
 	// usage fallback. Set after construction for the same reason: it is built
 	// from this service's watcher.
 	graphs *MetricsService
+	// owners files each subscription under whoever opened it, in the web
+	// version, so a tab's rows go to the user looking at that tab.
+	owners *session.Owners
 }
 
 // NewResourceService wires the service to the kubeconfig cache it resolves
@@ -79,7 +84,7 @@ func (s *ResourceService) ServiceShutdown() error {
 // It returns as soon as the watch is started. The first rows arrive as an event
 // once the cluster has answered, so a slow or unreachable cluster leaves the
 // tab in its loading state rather than blocking the UI.
-func (s *ResourceService) Subscribe(contextID, kind string, namespaces []string) (string, error) {
+func (s *ResourceService) Subscribe(caller context.Context, contextID, kind string, namespaces []string) (string, error) {
 	ctx, err := s.resolve(contextID)
 	if err != nil {
 		return "", err
@@ -93,7 +98,7 @@ func (s *ResourceService) Subscribe(contextID, kind string, namespaces []string)
 	if err != nil {
 		return "", err
 	}
-	return s.watcher.Subscribe(ctx, kind, namespaces, selector)
+	return s.watcher.SubscribeFor(ctx, kind, namespaces, selector, claimSubscription(caller, s.owners, s.watcher))
 }
 
 // view resolves a tab's kind, which may name a plugin's view, into the kind to
@@ -130,14 +135,20 @@ func (s *ResourceService) view(kind string, namespaces []string) (string, []stri
 
 // Unsubscribe closes a tab's view. The underlying watch stays open if another
 // tab is still using it.
-func (s *ResourceService) Unsubscribe(subscriptionID string) {
-	s.watcher.Unsubscribe(subscriptionID)
+func (s *ResourceService) Unsubscribe(caller context.Context, subscriptionID string) {
+	if !s.owners.Allowed(caller, subscriptionID) {
+		return
+	}
+	dropSubscription(s.owners, s.watcher, subscriptionID)
 }
 
 // SetNamespaces re-points an open subscription at other namespaces, none
 // meaning all. The watch is cluster-wide, so this is a filter change: the new
 // rows arrive as an event without anything being re-fetched.
-func (s *ResourceService) SetNamespaces(subscriptionID string, namespaces []string) {
+func (s *ResourceService) SetNamespaces(caller context.Context, subscriptionID string, namespaces []string) {
+	if !s.owners.Allowed(caller, subscriptionID) {
+		return
+	}
 	s.watcher.SetNamespaces(subscriptionID, namespaces)
 }
 

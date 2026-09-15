@@ -10,6 +10,7 @@
 -->
 <script lang="ts">
     import { NAV_GROUPS } from '../../catalogue';
+    import { session } from '../../state/session.svelte';
     import { workspace } from '../../state/workspace.svelte';
     import SettingsRow from './SettingsRow.svelte';
     import SettingsSection from './SettingsSection.svelte';
@@ -41,16 +42,20 @@
         />
     </SettingsRow>
 
-    <SettingsRow
-        label="Check for new versions"
-        hint="Asks GitHub shortly after launch, and every six hours after, whether a newer release is out, and says so on the bell in the title bar. The request carries nothing but the app's name and version. Off, the About page can still check when you ask it to."
-    >
-        <Toggle
-            checked={workspace.checkForUpdates}
+    <!-- Not in the web version, which is upgraded by whoever runs the server
+         and never asks GitHub anything on a user's behalf. -->
+    {#if !session.server}
+        <SettingsRow
             label="Check for new versions"
-            onchange={(v) => workspace.setCheckForUpdates(v)}
-        />
-    </SettingsRow>
+            hint="Asks GitHub shortly after launch, and every six hours after, whether a newer release is out, and says so on the bell in the title bar. The request carries nothing but the app's name and version. Off, the About page can still check when you ask it to."
+        >
+            <Toggle
+                checked={workspace.checkForUpdates}
+                label="Check for new versions"
+                onchange={(v) => workspace.setCheckForUpdates(v)}
+            />
+        </SettingsRow>
+    {/if}
 </SettingsSection>
 
 <div class="folding">

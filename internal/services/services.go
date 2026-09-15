@@ -7,15 +7,44 @@ package services
 
 import (
 	"github.com/rogerwesterbo/k8sdockside/internal/appconfig"
+	"github.com/rogerwesterbo/k8sdockside/internal/session"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-// New wires the thirteen services the frontend calls and returns them ready to
-// register with the application, along with the asset middleware that serves
-// plugins' own views -- which needs the plugin catalogue, and so comes from
-// here rather than from main.go.
-func New(settings *appconfig.Store) ([]application.Service, application.Middleware) {
+// Options says how the services are being run. The zero value is the desktop
+// app.
+type Options struct {
+	// Server is set in the web version, built with -tags server, where the app
+	// runs in a pod behind the gateway rather than in a window on the user's
+	// own machine.
+	Server bool
+	// Owners records who opened each stream, so the gateway can deliver its
+	// events to that user alone. Nil in the desktop app, which has one user.
+	Owners *session.Owners
+	// KubeconfigFolders are scanned on every sync on top of the user's own
+	// sources, and are not the user's to stop watching: in the web version, the
+	// in-cluster context, the Secrets the Helm chart mounts and the files
+	// uploaded through the admin page.
+	KubeconfigFolders []string
+}
+
+// Built is what New hands back for main to register.
+type Built struct {
+	Services []application.Service
+	// PluginViews is the asset middleware that serves plugins' own views --
+	// which needs the plugin catalogue, and so comes from here rather than from
+	// main.go.
+	PluginViews application.Middleware
+	// Resync rescans the kubeconfig sources, for the web version's admin page
+	// to call once it has added or removed a cluster.
+	Resync func()
+}
+
+// New wires the fourteen services the frontend calls and returns them ready to
+// register with the application.
+func New(settings *appconfig.Store, opts Options) Built {
 	configs := NewKubeconfigService(settings)
+	configs.extra = opts.KubeconfigFolders
 	// The action service borrows the resource service's watcher rather than
 	// opening its own: acting on an object in a context already showing in a
 	// tab should cost no second connection and no second credential exec.
@@ -50,20 +79,48 @@ func New(settings *appconfig.Store) ([]application.Service, application.Middlewa
 	// asks GitHub whether a newer release exists. It reads the settings for
 	// whether it may, and writes them for what the user has already seen.
 	news := NewUpdateService(settings)
+	actions := NewActionService(configs, resources.watcher)
+	logs := NewLogService(configs, resources.watcher)
+	prefs := NewSettingsService(settings)
+	looks := NewThemeService(settings)
 
-	return []application.Service{
-		application.NewService(configs),
-		application.NewService(NewSettingsService(settings)),
-		application.NewService(resources),
-		application.NewService(NewActionService(configs, resources.watcher)),
-		application.NewService(NewLogService(configs, resources.watcher)),
-		application.NewService(NewThemeService(settings)),
-		application.NewService(solutions),
-		application.NewService(graphs),
-		application.NewService(charts),
-		application.NewService(shells),
-		application.NewService(tunnels),
-		application.NewService(finder),
-		application.NewService(news),
-	}, solutions.assetMiddleware()
+	// Every service that opens a stream files it under whoever opened it, so
+	// the web version can deliver the stream's events to that user alone.
+	resources.owners = opts.Owners
+	charts.owners = opts.Owners
+	shells.owners = opts.Owners
+	finder.owners = opts.Owners
+	actions.owners = opts.Owners
+	logs.owners = opts.Owners
+	// And every feature that needs the user's own machine stands down in the
+	// web version, where "this machine" is a pod nobody is sitting at.
+	shells.server = opts.Server
+	tunnels.server = opts.Server
+	solutions.server = opts.Server
+	prefs.server = opts.Server
+	looks.server = opts.Server
+	// The web version is updated by whoever deploys it, not by the person
+	// using it, so it has no business telling them about new releases.
+	news.disabled = opts.Server
+
+	return Built{
+		Services: []application.Service{
+			application.NewService(configs),
+			application.NewService(prefs),
+			application.NewService(resources),
+			application.NewService(actions),
+			application.NewService(logs),
+			application.NewService(looks),
+			application.NewService(solutions),
+			application.NewService(graphs),
+			application.NewService(charts),
+			application.NewService(shells),
+			application.NewService(tunnels),
+			application.NewService(finder),
+			application.NewService(news),
+			application.NewService(&SessionService{server: opts.Server}),
+		},
+		PluginViews: solutions.assetMiddleware(),
+		Resync:      func() { configs.Sync() },
+	}
 }

@@ -1,0 +1,37 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="same-origin">
+<title>{{.Title}} · K8s Dockside</title>
+<link rel="stylesheet" href="/-/static/gateway.css">
+</head>
+<body>
+{{if .User}}
+<header class="bar">
+  <a class="brand" href="/"><span class="mark" aria-hidden="true"></span>K8s Dockside</a>
+  <nav>
+    {{if .User.Admin}}
+    <a class="{{if eq .Page "users"}}active{{end}}" href="/-/admin/users">Users</a>
+    <a class="{{if eq .Page "providers"}}active{{end}}" href="/-/admin/providers">Sign-in providers</a>
+    <a class="{{if eq .Page "clusters"}}active{{end}}" href="/-/admin/clusters">Clusters</a>
+    {{end}}
+    <a class="{{if eq .Page "account"}}active{{end}}" href="/-/account">Account</a>
+  </nav>
+  <div class="who">
+    <span class="name">{{.User.DisplayName}}{{if .User.Admin}} <span class="badge">admin</span>{{end}}</span>
+    <a class="button" href="/">Open the app</a>
+    <form method="post" action="/-/logout"><button class="plain" type="submit">Sign out</button></form>
+  </div>
+</header>
+<main class="page">
+{{else}}
+<main class="centered">
+{{end}}
+{{if .Notice}}<p class="notice" role="status">{{.Notice}}</p>{{end}}
+{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+{{template "body" .}}
+</main>
+</body>
+</html>{{end}}

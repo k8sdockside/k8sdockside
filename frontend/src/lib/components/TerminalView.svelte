@@ -14,6 +14,7 @@
     import '@xterm/xterm/css/xterm.css';
     import { singularFor } from '../catalogue';
     import { alpha } from '../colors';
+    import { session } from '../state/session.svelte';
     import { terminals } from '../state/terminals.svelte';
     import { workspace, type DockTab } from '../state/workspace.svelte';
     import ErrorState from './ErrorState.svelte';
@@ -128,14 +129,18 @@
             </button>
         {/if}
 
-        <button
-            class="toggle"
-            title="Open this shell in your own terminal instead"
-            onclick={() => workspace.openExternalShell(tab)}
-        >
-            <Icon name="terminal" size={13} />
-            External
-        </button>
+        <!-- Not in the web version: "your own terminal" would be one on the
+             server, where nobody is looking. -->
+        {#if !session.server}
+            <button
+                class="toggle"
+                title="Open this shell in your own terminal instead"
+                onclick={() => workspace.openExternalShell(tab)}
+            >
+                <Icon name="terminal" size={13} />
+                External
+            </button>
+        {/if}
     </div>
 
     {#if doc.status === 'error' && !doc.pod && !doc.node}

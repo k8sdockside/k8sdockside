@@ -1,0 +1,25 @@
+apiVersion: v2
+name: k8sdockside
+description: >-
+  K8s Dockside in server mode -- the Kubernetes desktop app run as a web app
+  inside a cluster, behind its own sign-in (local users, OAuth2 and OIDC).
+type: application
+# version and appVersion move together: .github/workflows/server-image.yml
+# packages the chart with both set from the release tag, so 0.1.0 is only what
+# a checkout of the repository renders.
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.27.0-0"
+home: https://github.com/rogerwesterbo/k8sdockside
+icon: https://raw.githubusercontent.com/rogerwesterbo/k8sdockside/main/build/appicon.png
+sources:
+  - https://github.com/rogerwesterbo/k8sdockside
+keywords:
+  - kubernetes
+  - dashboard
+  - ui
+  - kubeconfig
+  - oauth
+maintainers:
+  - name: Roger Westerbø
+    url: https://github.com/rogerwesterbo

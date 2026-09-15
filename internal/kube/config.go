@@ -299,11 +299,16 @@ func scanFolder(dir string) []string {
 		if e.IsDir() || strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
-		// Sockets, devices and the like are not files we should be opening.
-		if info, err := e.Info(); err != nil || !info.Mode().IsRegular() {
+		// Sockets, devices and the like are not files we should be opening. A
+		// symlink is followed rather than refused: a Kubernetes Secret mounted as
+		// a volume is a folder of symlinks into a hidden, versioned directory, and
+		// a kubeconfig linked in from elsewhere is still a kubeconfig. The path
+		// kept is the link's, which stays put when the Secret is updated.
+		path := filepath.Join(resolved, e.Name())
+		if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
 			continue
 		}
-		found = append(found, filepath.Join(resolved, e.Name()))
+		found = append(found, path)
 	}
 	sort.Strings(found)
 	return found

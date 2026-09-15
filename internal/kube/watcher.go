@@ -165,6 +165,14 @@ type subscription struct {
 // every object of the kind. See subscription.selector for why it is not pushed
 // down to the informer.
 func (w *Watcher) Subscribe(kc Context, kind string, namespaces []string, selector string) (string, error) {
+	return w.SubscribeFor(kc, kind, namespaces, selector, nil)
+}
+
+// SubscribeFor is Subscribe with a claim: claim, when given, is called with the
+// new subscription's ID before anything can be pushed under it. The web
+// version routes each snapshot to whoever opened the subscription, and a first
+// snapshot that raced ahead of the claim would have nobody to go to.
+func (w *Watcher) SubscribeFor(kc Context, kind string, namespaces []string, selector string, claim func(id string)) (string, error) {
 	// Left nil when there is no selector, rather than labels.Everything(): the
 	// overwhelming majority of tabs have none, and nil is what lets project()
 	// skip the match entirely instead of asking a selector that always says yes.
@@ -210,6 +218,9 @@ func (w *Watcher) Subscribe(kc Context, kind string, namespaces []string, select
 		live:       live,
 		dirty:      make(chan struct{}, 1),
 		done:       make(chan struct{}),
+	}
+	if claim != nil {
+		claim(sub.id)
 	}
 
 	w.mu.Lock()

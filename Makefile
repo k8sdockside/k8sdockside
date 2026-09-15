@@ -49,6 +49,11 @@ WAILS_VERSION = $(shell go list -m -f '{{.Version}}' github.com/wailsapp/wails/v
 # plain `go build ./...` fails to link it on Linux. Filter it out.
 GO_PKGS = $(shell go list ./... | grep -v '/build/ios')
 
+# The same list as the server build sees it. Listed with the tag, because a
+# package whose files are all `//go:build server` does not exist as far as a
+# plain `go list` is concerned -- GO_PKGS would quietly leave it out.
+GO_PKGS_SERVER = $(shell go list -tags server ./... | grep -v '/build/ios')
+
 ##@ Help
 .PHONY: help
 help: ## Display this help.
@@ -104,7 +109,7 @@ generate: ## Regenerate the TypeScript bindings from the Go services.
 .PHONY: clean
 clean: clean-frontend ## Clean build artifacts, caches and frontend output.
 	@printf "$(YELLOW)Cleaning build artifacts...$(RESET)\n"
-	@rm -rf bin/$(APP_NAME) bin/$(APP_NAME).exe .task
+	@rm -rf bin/$(APP_NAME) bin/$(APP_NAME).exe bin/$(APP_NAME)-server bin/helm-template .task
 	@rm -f coverage.out coverage.html bench.cpu bench.mem
 	@go clean -testcache
 	@printf "$(GREEN)✓ Clean complete$(RESET)\n"
@@ -121,6 +126,115 @@ clean-tools: ## Remove the locally installed tools in bin/tools.
 	@rm -rf $(LOCALBIN)
 	@printf "$(GREEN)✓ Tools removed$(RESET)\n"
 
+##@ Server
+# Server mode: the same app built with `-tags server`, serving its UI over HTTP
+# behind its own sign-in, for running in Kubernetes. See docs/server-mode.md.
+# The image cannot build the frontend itself -- the bindings come from the
+# wails3 CLI, which needs the GTK headers -- so the image targets build bindings
+# and the bundle here first, and the Dockerfile copies frontend/dist in.
+
+IMG ?= ghcr.io/rogerwesterbo/k8sdockside:dev
+PLATFORMS ?= linux/amd64,linux/arm64
+KIND_CLUSTER ?= kind
+CHART_DIR ?= charts/k8sdockside
+HELM_RELEASE ?= k8sdockside
+HELM_NAMESPACE ?= k8sdockside
+# Extra flags for helm-install, e.g. HELM_ARGS='-f my-values.yaml --set rbac.mode=admin'.
+HELM_ARGS ?=
+
+# IMG split into repository and tag for the chart. The tag is what follows the
+# last colon with no slash after it, so a registry port
+# (localhost:5000/k8sdockside:dev) is not mistaken for one.
+IMG_REPOSITORY = $(shell echo '$(IMG)' | sed -E 's|:[^:/]+$$||')
+IMG_TAG = $(shell echo '$(IMG)' | sed -nE 's|.*:([^:/]+)$$|\1|p')
+
+.PHONY: build-server
+build-server: generate build-frontend ## Build the production server-mode binary into bin/ (bindings and frontend first).
+	@printf "$(CYAN)Building $(APP_NAME)-server...$(RESET)\n"
+	@go build -tags server,production -trimpath -buildvcs=false -ldflags="-s -w" -o bin/$(APP_NAME)-server .
+	@printf "$(GREEN)✓ Build complete: $(BOLD)bin/$(APP_NAME)-server$(RESET)\n"
+
+.PHONY: build-go-server
+build-go-server: frontend-dist-stub ## Compile the Go packages with -tags server (no frontend build).
+	@printf "$(CYAN)Building Go packages (server mode)...$(RESET)\n"
+	@go build -tags server $(GO_PKGS_SERVER)
+	@printf "$(GREEN)✓ Go build complete (server mode)$(RESET)\n"
+
+# Local clusters come from ~/.kube, read-only; everything the server stores
+# (users, sessions, uploads, settings) goes to bin/server-data, so `make clean`
+# leaves it alone and deleting that directory is a factory reset.
+.PHONY: run-server
+run-server: build-server ## Build and run the server on http://127.0.0.1:8080 (state in bin/server-data).
+	@mkdir -p bin/server-data
+	@printf "$(CYAN)Serving on $(BOLD)http://127.0.0.1:8080$(RESET)$(CYAN), state in bin/server-data...$(RESET)\n"
+	@K8SDOCKSIDE_DATA_DIR=$(CURDIR)/bin/server-data \
+		K8SDOCKSIDE_LISTEN_ADDR=127.0.0.1:8080 \
+		K8SDOCKSIDE_IN_CLUSTER=false \
+		K8SDOCKSIDE_KUBECONFIG_DIRS=$(HOME)/.kube \
+		./bin/$(APP_NAME)-server
+
+.PHONY: docker-build
+docker-build: generate build-frontend ## Build the server image IMG for this machine's platform.
+	@printf "$(CYAN)Building image $(BOLD)$(IMG)$(RESET)$(CYAN)...$(RESET)\n"
+	@docker build -f build/docker/Dockerfile.server --build-arg GO_VERSION=$(GO_VERSION) -t $(IMG) .
+	@printf "$(GREEN)✓ Image built: $(BOLD)$(IMG)$(RESET)\n"
+
+# Pushes. The classic docker image store cannot hold a multi-platform image, so
+# buildx sends it straight to the registry: needs `docker login` for IMG's
+# registry, and a builder that can target both platforms (Docker Desktop's
+# default can; elsewhere `docker buildx create --use` first).
+.PHONY: docker-buildx
+docker-buildx: generate build-frontend ## Build AND PUSH a multi-arch (linux/amd64, linux/arm64) image to IMG.
+	@printf "$(YELLOW)Building and PUSHING $(BOLD)$(IMG)$(RESET)$(YELLOW) for $(PLATFORMS)...$(RESET)\n"
+	@docker buildx build --platform $(PLATFORMS) -f build/docker/Dockerfile.server --build-arg GO_VERSION=$(GO_VERSION) -t $(IMG) --push .
+	@printf "$(GREEN)✓ Pushed: $(BOLD)$(IMG)$(RESET)\n"
+
+.PHONY: kind-load
+kind-load: ## Load IMG into the kind cluster KIND_CLUSTER (default: kind).
+	@printf "$(CYAN)Loading $(BOLD)$(IMG)$(RESET)$(CYAN) into kind cluster $(KIND_CLUSTER)...$(RESET)\n"
+	@kind load docker-image $(IMG) --name $(KIND_CLUSTER)
+	@printf "$(GREEN)✓ Image loaded$(RESET)\n"
+
+.PHONY: helm-lint
+helm-lint: ## Lint the Helm chart with default values and with every ci/*-values.yaml.
+	@printf "$(CYAN)Linting $(CHART_DIR)...$(RESET)\n"
+	@helm lint --strict $(CHART_DIR)
+	@for f in $(CHART_DIR)/ci/*-values.yaml; do \
+		printf "$(CYAN)Linting $(CHART_DIR) with $$f...$(RESET)\n"; \
+		helm lint --strict $(CHART_DIR) -f $$f; \
+	done
+	@printf "$(GREEN)✓ Chart lint complete$(RESET)\n"
+
+.PHONY: helm-template
+helm-template: ## Render the chart (defaults and every ci/*-values.yaml) into bin/helm-template/.
+	@printf "$(CYAN)Rendering $(CHART_DIR)...$(RESET)\n"
+	@mkdir -p bin/helm-template
+	@helm template $(HELM_RELEASE) $(CHART_DIR) --namespace $(HELM_NAMESPACE) > bin/helm-template/default.yaml
+	@for f in $(CHART_DIR)/ci/*-values.yaml; do \
+		helm template $(HELM_RELEASE) $(CHART_DIR) --namespace $(HELM_NAMESPACE) -f $$f > bin/helm-template/$$(basename $$f); \
+	done
+	@printf "$(GREEN)✓ Rendered into $(BOLD)bin/helm-template/$(RESET)\n"
+
+# pullPolicy IfNotPresent so a kind-loaded image, which is in no registry, is
+# used as is. Re-running this after a rebuild with the same tag changes nothing
+# Helm can see: `kubectl -n $(HELM_NAMESPACE) rollout restart deployment/$(HELM_RELEASE)`.
+.PHONY: helm-install
+helm-install: ## Install or upgrade the chart into HELM_NAMESPACE (default: k8sdockside), running IMG.
+	@printf "$(CYAN)Installing $(HELM_RELEASE) into namespace $(BOLD)$(HELM_NAMESPACE)$(RESET)$(CYAN) with $(IMG)...$(RESET)\n"
+	@helm upgrade --install $(HELM_RELEASE) $(CHART_DIR) \
+		--namespace $(HELM_NAMESPACE) --create-namespace \
+		--set image.repository=$(IMG_REPOSITORY) \
+		--set-string image.tag=$(IMG_TAG) \
+		--set image.pullPolicy=IfNotPresent \
+		$(HELM_ARGS)
+	@printf "$(GREEN)✓ Installed. Reach it with: $(BOLD)kubectl -n $(HELM_NAMESPACE) port-forward svc/$(HELM_RELEASE) 8080:80$(RESET)\n"
+
+.PHONY: helm-uninstall
+helm-uninstall: ## Uninstall the chart from HELM_NAMESPACE.
+	@printf "$(YELLOW)Uninstalling $(HELM_RELEASE) from namespace $(HELM_NAMESPACE)...$(RESET)\n"
+	@helm uninstall $(HELM_RELEASE) --namespace $(HELM_NAMESPACE)
+	@printf "$(GREEN)✓ Uninstalled$(RESET)\n"
+
 ##@ Code sanity
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -128,10 +242,34 @@ fmt: ## Run go fmt against code.
 	@go fmt ./...
 	@printf "$(GREEN)✓ Code formatted$(RESET)\n"
 
+# What CI's "Check formatting" step catches, without rewriting anything: a check
+# before a commit should say what is wrong, not quietly change the tree. Both
+# package lists, because a directory whose files are all `//go:build server`
+# is missing from the plain one; gofmt then reads every file in each directory,
+# whatever its build tags.
+.PHONY: fmt-check
+fmt-check: frontend-dist-stub ## Fail if any Go file is not gofmt-formatted (`make fmt` fixes it).
+	@printf "$(CYAN)Checking Go formatting...$(RESET)\n"
+	@dirs=$$( { go list -e -f '{{.Dir}}' ./...; go list -e -tags server -f '{{.Dir}}' ./...; } | sort -u ); \
+	unformatted=$$(gofmt -l $$dirs); \
+	if [ -n "$$unformatted" ]; then \
+		printf "$(RED)✗ Not gofmt-formatted -- run $(BOLD)make fmt$(RESET)$(RED):$(RESET)\n$$unformatted\n"; \
+		exit 1; \
+	fi
+	@printf "$(GREEN)✓ Formatting OK$(RESET)\n"
+
+.PHONY: tidy-check
+tidy-check: ## Fail if go.mod/go.sum are not tidy (`go mod tidy` fixes it).
+	@printf "$(CYAN)Checking go.mod and go.sum are tidy...$(RESET)\n"
+	@go mod tidy -diff || { printf "$(RED)✗ go.mod/go.sum are not tidy -- run $(BOLD)go mod tidy$(RESET)\n"; exit 1; }
+	@printf "$(GREEN)✓ Modules tidy$(RESET)\n"
+
 .PHONY: vet
-vet: frontend-dist-stub ## Run go vet against code.
+vet: frontend-dist-stub ## Run go vet against code (default and server build tags).
 	@printf "$(CYAN)Running go vet...$(RESET)\n"
 	@go vet ./...
+	@printf "$(CYAN)Running go vet (server mode)...$(RESET)\n"
+	@go vet -tags server $(GO_PKGS_SERVER)
 	@printf "$(GREEN)✓ Vet complete$(RESET)\n"
 
 .PHONY: fix
@@ -141,9 +279,13 @@ fix: ## Run go fix against code.
 	@printf "$(GREEN)✓ Fix complete$(RESET)\n"
 
 .PHONY: lint
-lint: golangci-lint frontend-dist-stub ## Run golangci-lint against the Go code.
+lint: golangci-lint frontend-dist-stub ## Run golangci-lint against the Go code (default and server build tags).
 	@printf "$(CYAN)Running golangci-lint...$(RESET)\n"
 	@$(GOLANGCI_LINT) run --timeout 5m ./...
+	@# Files behind `//go:build server` are invisible to the run above, and the
+	@# desktop-only ones to this one, so it takes both to cover the code.
+	@printf "$(CYAN)Running golangci-lint (server mode)...$(RESET)\n"
+	@$(GOLANGCI_LINT) run --timeout 5m --build-tags server ./...
 	@printf "$(GREEN)✓ Lint complete$(RESET)\n"
 
 .PHONY: lint-frontend
@@ -281,6 +423,33 @@ npm-audit: ## Run npm audit against the frontend dependencies.
 	@printf "$(CYAN)Running npm audit...$(RESET)\n"
 	@cd $(FRONTEND_DIR) && npm audit
 	@printf "$(GREEN)✓ npm audit complete$(RESET)\n"
+
+##@ Before you push
+# Everything CI checks, on this machine, before a commit goes anywhere: the Go
+# build, tests, vet, formatting and lint (desktop and server mode), the
+# frontend's bindings, type check, tests and bundle, the Helm chart, and the
+# security scans. Ordered so the cheapest checks fail first and the scans, which
+# need the network, come last; it stops at the first failure and says which.
+#
+# It needs what CI installs: the wails3 CLI (`make install-wails`) for the
+# bindings, the frontend's node_modules (`make deps`) and Playwright's Chromium
+# (`cd frontend && npx playwright install chromium`) for its browser tests, and
+# helm. npm audit here is `make npm-audit`, which fails on any advisory -- CI's
+# frontend audit only fails on high, so this is the stricter of the two.
+PRECHECK_STEPS = fmt-check tidy-check vet lint build-go build-go-server test \
+	generate lint-frontend test-frontend build-frontend helm-lint helm-template audit
+
+.PHONY: precheck
+precheck: ## Run every check CI runs (Go, frontend, chart, security) -- use before commit and push.
+	@start=$$SECONDS; \
+	for step in $(PRECHECK_STEPS); do \
+		printf "\n$(BOLD)$(BLUE)━━ precheck: $$step$(RESET)\n"; \
+		$(MAKE) --no-print-directory $$step || { \
+			printf "\n$(RED)$(BOLD)✗ precheck failed at: $$step$(RESET)\n"; \
+			exit 1; \
+		}; \
+	done; \
+	printf "\n$(GREEN)$(BOLD)✓ precheck passed in $$((SECONDS - start))s -- all %d checks green$(RESET)\n" $(words $(PRECHECK_STEPS))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary

@@ -5,8 +5,14 @@
   a setting the moment there was more than one of it: choosing a theme is
   picking from pictures, and installing one is a small piece of file management.
   Neither fits on a line next to a zoom slider.
+
+  In the web version that file management is on the server: nothing there can
+  open a folder on the user's machine or pick one from it, and the folders
+  every user's themes come from are the administrators' to change. Choosing a
+  theme is still everyone's.
 -->
 <script lang="ts">
+    import { session } from '../../state/session.svelte';
     import { workspace } from '../../state/workspace.svelte';
     import Icon from '../Icon.svelte';
     import SettingsSection from './SettingsSection.svelte';
@@ -74,16 +80,22 @@
     <div class="path-row">
         <Icon name="folder" size={13} />
         <span class="path selectable">{workspace.themeDir || '…'}</span>
-        <button onclick={() => workspace.revealThemeDir()}>Open folder</button>
+        {#if !session.server}
+            <button onclick={() => workspace.revealThemeDir()}>Open folder</button>
+        {/if}
     </div>
 
     <div class="actions">
-        <button class="primary" onclick={() => workspace.createExampleTheme()}>
-            <Icon name="plus" size={14} /> Write a starter theme
-        </button>
-        <button onclick={() => workspace.addThemeFolder()}>
-            <Icon name="folder-plus" size={14} /> Watch another folder
-        </button>
+        {#if session.admin}
+            <button class="primary" onclick={() => workspace.createExampleTheme()}>
+                <Icon name="plus" size={14} /> Write a starter theme
+            </button>
+        {/if}
+        {#if !session.server}
+            <button onclick={() => workspace.addThemeFolder()}>
+                <Icon name="folder-plus" size={14} /> Watch another folder
+            </button>
+        {/if}
         <button onclick={() => workspace.reloadThemes()}>
             <Icon name="refresh" size={14} /> Reload
         </button>
@@ -101,14 +113,16 @@
                 <li>
                     <Icon name="folder" size={13} />
                     <span class="path selectable">{folder}</span>
-                    <button
-                        class="drop"
-                        onclick={() => workspace.removeThemeFolder(folder)}
-                        title="Stop reading themes from {folder}"
-                        aria-label="Stop reading themes from {folder}"
-                    >
-                        <Icon name="close" size={12} />
-                    </button>
+                    {#if session.admin}
+                        <button
+                            class="drop"
+                            onclick={() => workspace.removeThemeFolder(folder)}
+                            title="Stop reading themes from {folder}"
+                            aria-label="Stop reading themes from {folder}"
+                        >
+                            <Icon name="close" size={12} />
+                        </button>
+                    {/if}
                 </li>
             {/each}
         </ul>

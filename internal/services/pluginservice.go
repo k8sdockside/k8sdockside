@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	json "encoding/json/v2"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"github.com/rogerwesterbo/k8sdockside/internal/appconfig"
 	"github.com/rogerwesterbo/k8sdockside/internal/kube"
 	"github.com/rogerwesterbo/k8sdockside/internal/plugins"
+	"github.com/rogerwesterbo/k8sdockside/internal/session"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -29,10 +31,15 @@ import (
 // Unlike themes, the catalogue is cached. A theme is read when the settings
 // view asks; a plugin is read every time a tab is opened, because a tab's kind
 // has to be resolved back to the view it names -- see Resolve.
+//
+// In the web version the installed plugins are everyone's, so only an
+// administrator may install, remove, switch or add folders of them.
 type PluginService struct {
 	store   *appconfig.Store
 	watcher *kube.Watcher
 	configs *KubeconfigService
+	// server is set in the web version, which has no file manager to open.
+	server bool
 
 	mu     sync.RWMutex
 	cached *plugins.Catalogue
@@ -330,7 +337,10 @@ func (c *clusterFor) CountBy(kind, namespace, selector string, path kube.FieldPa
 //
 // The wanted state is passed rather than toggled so that the switch in the
 // settings view cannot drift out of step with what is on disk.
-func (s *PluginService) SetEnabled(id string, enabled bool) (plugins.Catalogue, error) {
+func (s *PluginService) SetEnabled(ctx context.Context, id string, enabled bool) (plugins.Catalogue, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.catalogue(), err
+	}
 	if _, ok := s.catalogue().Find(id); !ok {
 		return s.catalogue(), fmt.Errorf("no plugin called %q is installed", id)
 	}
@@ -367,6 +377,9 @@ func (s *PluginService) Dir() string {
 // it first if it has never been used. The path comes from the store rather than
 // the frontend, so nothing the webview says can decide what gets opened.
 func (s *PluginService) RevealDir() error {
+	if s.server {
+		return errDesktopOnly
+	}
 	dir := s.store.PluginsDir()
 	if err := plugins.EnsureDir(dir); err != nil {
 		return err
@@ -376,7 +389,10 @@ func (s *PluginService) RevealDir() error {
 
 // CreateExample writes a starter plugin into the plugins folder and returns the
 // path it wrote.
-func (s *PluginService) CreateExample() (string, error) {
+func (s *PluginService) CreateExample(ctx context.Context) (string, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return "", err
+	}
 	path, err := plugins.WriteExample(s.store.PluginsDir())
 	if err != nil {
 		return "", err
@@ -394,7 +410,10 @@ func (s *PluginService) CreateExample() (string, error) {
 // that leaves the user with no idea where to look. The clone is kept either
 // way, so a plugin waiting on a newer app loads once the app is updated, and
 // one with a mistake in it can be fixed and updated in place.
-func (s *PluginService) InstallFromGit(url string) (plugins.Catalogue, error) {
+func (s *PluginService) InstallFromGit(ctx context.Context, url string) (plugins.Catalogue, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.catalogue(), err
+	}
 	dest, err := plugins.Install(s.store.PluginsDir(), url)
 	if err != nil {
 		return s.catalogue(), err
@@ -407,7 +426,10 @@ func (s *PluginService) InstallFromGit(url string) (plugins.Catalogue, error) {
 // InstallKnown installs one of the plugins the app knows of, from the
 // repository the app has for it. The frontend names the plugin rather than the
 // address, so the known list is the only place that address comes from.
-func (s *PluginService) InstallKnown(id string) (plugins.Catalogue, error) {
+func (s *PluginService) InstallKnown(ctx context.Context, id string) (plugins.Catalogue, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.catalogue(), err
+	}
 	known, ok := plugins.FindKnown(id)
 	if !ok {
 		return s.catalogue(), fmt.Errorf("%q is not a plugin this app knows of", id)
@@ -417,7 +439,7 @@ func (s *PluginService) InstallKnown(id string) (plugins.Catalogue, error) {
 	if _, ok := s.catalogue().InstalledHere(id); ok {
 		return s.catalogue(), fmt.Errorf("%s is already installed", known.Name)
 	}
-	return s.InstallFromGit(known.Repo)
+	return s.InstallFromGit(ctx, known.Repo)
 }
 
 // Known is the list of plugins the app knows of, each marked with whether it
@@ -452,7 +474,10 @@ func installed(cat plugins.Catalogue, dest string) error {
 
 // UpdateFromGit pulls the repository a plugin was cloned from and reads it
 // again.
-func (s *PluginService) UpdateFromGit(id string) (plugins.Catalogue, error) {
+func (s *PluginService) UpdateFromGit(ctx context.Context, id string) (plugins.Catalogue, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.catalogue(), err
+	}
 	plugin, ok := s.catalogue().Find(id)
 	if !ok {
 		return s.catalogue(), fmt.Errorf("no plugin called %q is installed", id)
@@ -490,7 +515,10 @@ func (s *PluginService) UninstallPreview(id string) (plugins.Removal, error) {
 // folders again -- see plugins.Uninstall. A built-in, or a plugin read from a
 // folder the user added, is refused: the first is only switched off, and the
 // second is theirs.
-func (s *PluginService) Uninstall(id string) (plugins.Catalogue, error) {
+func (s *PluginService) Uninstall(ctx context.Context, id string) (plugins.Catalogue, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.catalogue(), err
+	}
 	cat := s.catalogue()
 	plugin, ok := cat.Find(id)
 	if !ok {
@@ -504,7 +532,10 @@ func (s *PluginService) Uninstall(id string) (plugins.Catalogue, error) {
 }
 
 // AddFolder starts reading plugins from another directory.
-func (s *PluginService) AddFolder(path string) (plugins.Catalogue, error) {
+func (s *PluginService) AddFolder(ctx context.Context, path string) (plugins.Catalogue, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.catalogue(), err
+	}
 	path = filepath.Clean(path)
 	info, err := os.Stat(path)
 	if err != nil {
@@ -523,7 +554,10 @@ func (s *PluginService) AddFolder(path string) (plugins.Catalogue, error) {
 // RemoveFolder stops reading plugins from a directory. Nothing is deleted; the
 // plugins in it stop being offered, and a tab open on one of their views says
 // so rather than emptying.
-func (s *PluginService) RemoveFolder(path string) (plugins.Catalogue, error) {
+func (s *PluginService) RemoveFolder(ctx context.Context, path string) (plugins.Catalogue, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.catalogue(), err
+	}
 	if _, err := s.store.RemovePluginFolder(path); err != nil {
 		return s.catalogue(), err
 	}
@@ -533,7 +567,10 @@ func (s *PluginService) RemoveFolder(path string) (plugins.Catalogue, error) {
 
 // BrowseForFolder opens the native picker in directory mode and adds the folder
 // chosen. Cancelling leaves everything as it was and is not an error.
-func (s *PluginService) BrowseForFolder() (plugins.Catalogue, error) {
+func (s *PluginService) BrowseForFolder(ctx context.Context) (plugins.Catalogue, error) {
+	if s.server {
+		return s.catalogue(), errDesktopOnly
+	}
 	dialog := application.Get().Dialog.OpenFile().
 		SetTitle("Add a folder of plugins").
 		CanChooseFiles(false).
@@ -551,5 +588,5 @@ func (s *PluginService) BrowseForFolder() (plugins.Catalogue, error) {
 	if path == "" {
 		return s.catalogue(), nil // cancelled
 	}
-	return s.AddFolder(path)
+	return s.AddFolder(ctx, path)
 }

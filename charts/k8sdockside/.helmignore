@@ -1,0 +1,14 @@
+# Patterns to ignore when building packages.
+.DS_Store
+.git/
+.gitignore
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+.idea/
+.vscode/
+# CI-only values files: exercised by `make helm-lint` and `make helm-template`,
+# of no use to anyone installing the packaged chart.
+ci/

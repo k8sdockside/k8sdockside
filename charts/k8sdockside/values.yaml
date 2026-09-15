@@ -1,0 +1,398 @@
+# Default values for the k8sdockside chart.
+#
+# K8s Dockside in server mode: the desktop app built with `-tags server`, serving
+# its UI over HTTP behind a sign-in of its own. One pod, one replica -- see the
+# comments on the Deployment for why it cannot be scaled out.
+#
+# The full guide, including setting up each OAuth provider, is docs/server-mode.md
+# in the repository:
+# https://github.com/rogerwesterbo/k8sdockside/blob/main/docs/server-mode.md
+
+image:
+  # Built from build/docker/Dockerfile.server and published for linux/amd64 and
+  # linux/arm64 by .github/workflows/server-image.yml on every release tag.
+  repository: ghcr.io/rogerwesterbo/k8sdockside
+  # Defaults to the chart's appVersion.
+  tag: ""
+  # Pin by digest instead, e.g. sha256:0123...; takes precedence over tag.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+#  - name: ghcr-pull
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Create a ServiceAccount for the pod. With clusters.inCluster.enabled this is
+  # the identity the app uses for the cluster it runs in, and what rbac binds.
+  create: true
+  # Generated from the fullname when empty. With create=false, the name of an
+  # existing ServiceAccount -- bind whatever permissions it needs yourself and
+  # set rbac.create=false.
+  name: ""
+  annotations: {}
+  labels: {}
+
+podAnnotations: {}
+podLabels: {}
+
+# The image runs as uid/gid 65532 with nothing to write outside /data and /tmp,
+# both of which the chart mounts, so all of this holds without changes.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  # Makes the data volume (and the mounted Secrets) group-owned by 65532.
+  fsGroup: 65532
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+priorityClassName: ""
+
+# The server shuts down cleanly on SIGTERM. Open terminals and log streams end
+# with the process whatever this is set to.
+terminationGracePeriodSeconds: 30
+
+service:
+  type: ClusterIP
+  # The container always listens on 8080 (named port "http"); this is the
+  # Service's port in front of it.
+  port: 80
+  # Only used with type NodePort or LoadBalancer. Empty lets Kubernetes pick.
+  nodePort: ""
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  # The app streams watches, logs and terminals over WebSockets. Most ingress
+  # controllers pass WebSockets through by default, but many close a connection
+  # that has been quiet for a minute, which cuts an idle terminal or a log
+  # stream on a quiet pod. For ingress-nginx:
+  #   nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+  #   nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  # Behind an ingress, also set auth.publicURL and auth.trustForwardedHeaders.
+  annotations: {}
+  hosts:
+    - host: dockside.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: dockside-tls
+  #    hosts:
+  #      - dockside.example.com
+
+# Gateway API alternative to ingress. Needs the Gateway API CRDs and a Gateway to
+# attach to.
+httpRoute:
+  enabled: false
+  annotations: {}
+  # Required when enabled: the Gateway (and listener) to attach to.
+  parentRefs: []
+  #  - name: public
+  #    namespace: gateway-system
+  #    sectionName: https
+  hostnames: []
+  #  - dockside.example.com
+  matches:
+    - path:
+        type: PathPrefix
+        value: /
+  # Per-rule timeouts (an extended Gateway API feature). Leave empty unless the
+  # gateway cuts long-lived WebSocket connections; "0s" disables the request
+  # timeout on implementations that support it:
+  #   request: "0s"
+  timeouts: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    # Memory grows with open watches -- one informer cache per kind per context
+    # a user has open -- so size it for how many clusters and users you expect.
+    memory: 1Gi
+
+# /-/healthz answers as soon as the process serves; /-/readyz once the app behind
+# the auth gateway answers too.
+startupProbe:
+  httpGet:
+    path: /-/healthz
+    port: http
+  periodSeconds: 2
+  failureThreshold: 30
+livenessProbe:
+  httpGet:
+    path: /-/healthz
+    port: http
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+readinessProbe:
+  httpGet:
+    path: /-/readyz
+    port: http
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# /data holds everything the server remembers: users and sessions, OAuth
+# providers added in the admin UI, uploaded kubeconfigs, app settings, installed
+# plugins and themes, and Helm's cache.
+persistence:
+  # false: /data is an emptyDir, and all of the above is gone whenever the pod is
+  # restarted or rescheduled. That is fine for a fully declarative install --
+  # auth.bootstrapAdmin, auth.providers and clusters.* all come back from values
+  # on every start -- but users who signed up, sessions and anything changed in
+  # the UI do not.
+  enabled: false
+  # Use an existing PVC instead of creating one (persistence.enabled must be true).
+  existingClaim: ""
+  # "" uses the cluster's default StorageClass; "-" sets storageClassName: "" to
+  # bind to a pre-provisioned volume without dynamic provisioning.
+  storageClass: ""
+  # The Deployment is a single replica with strategy Recreate, so ReadWriteOnce
+  # is enough.
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+  annotations: {}
+  # Annotate the chart's PVC with helm.sh/resource-policy: keep, so `helm
+  # uninstall` leaves it (and the users on it) behind. Reinstalling the same
+  # release name into the same namespace picks it up again.
+  keep: false
+  # Only used when persistence.enabled is false.
+  emptyDir:
+    # e.g. 500Mi. Empty means no limit beyond the node's ephemeral storage.
+    sizeLimit: ""
+
+clusters:
+  # Offer the cluster the pod runs in as a context, using the pod's
+  # ServiceAccount. What it may do there is decided by rbac below. Disabling it
+  # also stops the ServiceAccount token being mounted into the pod at all.
+  inCluster:
+    enabled: true
+    # The context name shown in the app.
+    name: in-cluster
+
+  # Kubeconfigs written into a Secret by the chart, one file per entry
+  # (<name>.yaml). kubeconfig may be a string (the file's contents) or the same
+  # document as YAML. Every context in them shows up in the app, and they cannot
+  # be removed from the UI.
+  #
+  # The image contains no cloud CLIs, so a kubeconfig whose user runs an `exec`
+  # credential plugin (aws, gke-gcloud-auth-plugin, kubelogin, ...) will not
+  # authenticate. Use tokens or client certificates -- for example a
+  # ServiceAccount token created in the target cluster.
+  kubeconfigs: []
+  #  - name: staging
+  #    kubeconfig: |
+  #      apiVersion: v1
+  #      kind: Config
+  #      clusters:
+  #        - name: staging
+  #          cluster:
+  #            server: https://staging.example.com:6443
+  #            certificate-authority-data: LS0t...
+  #      users:
+  #        - name: dockside
+  #          user:
+  #            token: eyJhbGciOi...
+  #      contexts:
+  #        - name: staging
+  #          context:
+  #            cluster: staging
+  #            user: dockside
+  #      current-context: staging
+
+  # Existing Secrets holding kubeconfigs. Every key of each Secret becomes a file
+  # beside the chart's own (keys starting with "." are ignored), so key names
+  # must not collide across Secrets -- use items to pick and rename keys. A plain
+  # string is shorthand for {name: <string>}.
+  #
+  #   kubectl create secret generic prod-kubeconfig --from-file=prod.yaml=./prod.kubeconfig
+  existingSecrets: []
+  #  - name: prod-kubeconfig
+  #  - name: team-clusters
+  #    items:
+  #      - key: eu-west
+  #        path: eu-west.yaml
+  #    optional: true
+
+  # All of the above are mounted as one read-only directory,
+  # /etc/k8sdockside/kubeconfigs, named in K8SDOCKSIDE_KUBECONFIG_DIRS. Admins can
+  # also upload kubeconfigs at /-/admin; those are stored under /data.
+
+# RBAC for the pod's own ServiceAccount. Only rendered when
+# clusters.inCluster.enabled is true.
+#
+# Every signed-in user acts with these permissions -- not their own. Grant only
+# what you are happy for everyone who can sign in to do.
+rbac:
+  create: true
+  # readonly: a ClusterRole allowing get, list and watch on every resource in
+  #   every API group, plus GET on non-resource URLs. Enough to browse, follow
+  #   logs and watch; not enough to edit, scale, delete or open shells. It
+  #   includes reading Secrets, and the wildcard covers subresources too
+  #   (pods/exec, pods/attach, pods/portforward, nodes/proxy): API servers
+  #   before Kubernetes 1.35, and kubelets reached through nodes/proxy, may
+  #   authorise a command over a WebSocket with only `get`. If that matters,
+  #   use custom with an explicit resource list.
+  # admin: bind the built-in cluster-admin ClusterRole. Everything the app can
+  #   do, for every user.
+  # custom: a ClusterRole made of rbac.rules below.
+  # none: no chart ClusterRole or binding (extraClusterRoles are still bound).
+  mode: readonly
+  # Rules for mode custom, in ClusterRole format.
+  rules: []
+  #  - apiGroups: [""]
+  #    resources: [pods, pods/log, services, configmaps, events, namespaces]
+  #    verbs: [get, list, watch]
+  #  - apiGroups: [apps]
+  #    resources: [deployments, statefulsets, daemonsets, replicasets]
+  #    verbs: [get, list, watch, patch]
+  # Names of existing ClusterRoles to bind to the ServiceAccount as well, e.g.
+  # the built-in view or edit.
+  extraClusterRoles: []
+
+auth:
+  # The address users type into their browser, e.g. https://dockside.example.com.
+  # Used to build OAuth callback URLs (<publicURL>/-/oauth/<id>/callback) and to
+  # mark cookies Secure. When empty and ingress is enabled, it is derived from
+  # the first ingress host (https if that host is listed under ingress.tls).
+  publicURL: ""
+  # Honour X-Forwarded-Proto, X-Forwarded-Host and X-Forwarded-For. Turn on
+  # behind an ingress or gateway, which sets them; leave off when the Service is
+  # reached directly, or clients can claim any address they like.
+  trustForwardedHeaders: false
+  # How long a sign-in lasts (a Go duration).
+  sessionTTL: 168h
+  # Allow username + password sign-in for local users. With false, only the
+  # OAuth providers below (and in the admin UI) can sign anyone in.
+  passwordLogin: true
+
+  # On first start, with no users yet, the first visitor creates the admin
+  # account. On an address anyone can reach, protect that page with a token the
+  # visitor must present -- or skip it entirely with bootstrapAdmin.
+  setupToken: ""
+  # Or take the token from an existing Secret (wins over setupToken).
+  existingSetupTokenSecret:
+    name: ""
+    key: setup-token
+
+  # Create this admin at startup while there are no users yet. Ignored once any
+  # user exists, so changing it later does not reset a password.
+  bootstrapAdmin:
+    username: ""
+    password: ""
+    # Or read both from an existing Secret (wins over username/password).
+    existingSecret:
+      name: ""
+      usernameKey: username
+      passwordKey: password
+
+  # Users who sign in through OAuth with one of these (verified) email
+  # addresses become admins.
+  adminEmails: []
+  #  - alice@example.com
+
+  # OAuth providers managed by the chart. They are written to a Secret as JSON,
+  # mounted as a file, and shown read-only in the admin UI; admins can still add
+  # more there. Register <publicURL>/-/oauth/<id>/callback as the redirect URL
+  # with each provider.
+  #
+  # Fields:
+  #   id               slug used in the callback URL (required)
+  #   type             github | google | facebook | gitlab | microsoft | oidc (required)
+  #   name             label on the sign-in button
+  #   clientId         (required)
+  #   clientSecret     the secret itself -- or, better:
+  #   clientSecretEnv  the name of an environment variable holding it; fill that
+  #                    variable from an existing Secret with extraEnv below
+  #   issuer           oidc: the issuer URL; gitlab: the instance's base URL
+  #                    (default https://gitlab.com)
+  #   tenant           microsoft: tenant ID, or common | organizations |
+  #                    consumers (default common)
+  #   scopes           override the default scopes
+  #   allowedDomains   only let in email addresses from these domains
+  #   autoSignup       create a user on first sign-in (otherwise an admin has
+  #                    to create the user first)
+  #   defaultRole      user | admin, for auto-signed-up users (default user)
+  #   enabled          default true
+  providers: []
+  #  - id: github
+  #    type: github
+  #    name: GitHub
+  #    clientId: Ov23li0000000000000
+  #    clientSecretEnv: GITHUB_CLIENT_SECRET
+  #    autoSignup: true
+  #    allowedDomains: [example.com]
+  #
+  #  - id: google
+  #    type: google
+  #    name: Google
+  #    clientId: 000000000000-xxxxxxxx.apps.googleusercontent.com
+  #    clientSecretEnv: GOOGLE_CLIENT_SECRET
+  #    allowedDomains: [example.com]
+  #    autoSignup: true
+  #
+  #  - id: facebook
+  #    type: facebook
+  #    name: Facebook
+  #    clientId: "000000000000000"
+  #    clientSecretEnv: FACEBOOK_CLIENT_SECRET
+  #
+  #  - id: sso
+  #    type: oidc
+  #    name: Company SSO
+  #    issuer: https://sso.example.com/realms/main
+  #    clientId: dockside
+  #    clientSecretEnv: SSO_CLIENT_SECRET
+  #    scopes: [openid, email, profile]
+  #    autoSignup: true
+  #
+  # ...with the secrets coming from an existing Secret:
+  #
+  # extraEnv:
+  #   - name: GITHUB_CLIENT_SECRET
+  #     valueFrom:
+  #       secretKeyRef:
+  #         name: dockside-oauth
+  #         key: github-client-secret
+
+  # Or mount a providers file you manage yourself: a Secret holding the same
+  # JSON array. Mutually exclusive with providers above.
+  existingProvidersSecret:
+    name: ""
+    key: providers.json
+
+# Extra environment variables for the container, e.g. the OAuth client secrets
+# named by clientSecretEnv above, or any K8SDOCKSIDE_* setting the chart does not
+# have a value for.
+extraEnv: []
+extraEnvFrom: []
+#  - secretRef:
+#      name: dockside-env
+
+extraVolumes: []
+extraVolumeMounts: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

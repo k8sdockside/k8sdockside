@@ -13,6 +13,7 @@ import (
 
 	"github.com/rogerwesterbo/k8sdockside/internal/appconfig"
 	"github.com/rogerwesterbo/k8sdockside/internal/kube"
+	"github.com/rogerwesterbo/k8sdockside/internal/session"
 	"github.com/rogerwesterbo/k8sdockside/internal/termapp"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
@@ -77,6 +78,12 @@ type TerminalService struct {
 	// node image and the namespace it is created in. What a privileged pod is
 	// made of is a setting the user chose, not a parameter the window passes.
 	store *appconfig.Store
+	// owners files each session under whoever opened it, in the web version,
+	// where one user's shell must not answer another's keystrokes.
+	owners *session.Owners
+	// server is set in the web version, which has no terminal emulator of the
+	// user's to hand a shell to.
+	server bool
 
 	mu       sync.Mutex
 	sessions map[string]*live
@@ -133,7 +140,7 @@ func (s *TerminalService) Containers(contextID, kind, namespace, name string) ([
 // An empty pod means "work out which one": a workload resolves to one of its
 // running pods. An empty container means the pod's first, which is what
 // `kubectl exec` picks without -c.
-func (s *TerminalService) Open(contextID, kind, namespace, name, pod, container string) (TerminalSession, error) {
+func (s *TerminalService) Open(ctx context.Context, contextID, kind, namespace, name, pod, container string) (TerminalSession, error) {
 	kc, err := s.resolve(contextID)
 	if err != nil {
 		return TerminalSession{}, err
@@ -151,7 +158,7 @@ func (s *TerminalService) Open(contextID, kind, namespace, name, pod, container 
 	}
 
 	prefs := s.store.Get().Preferences.Terminal
-	id, sess := s.register()
+	id, sess := s.register(ctx)
 
 	go func() {
 		defer s.finished(id)
@@ -173,7 +180,7 @@ func (s *TerminalService) Open(contextID, kind, namespace, name, pod, container 
 // creating a pod and pulling an image take long enough that a window with
 // nothing in it would look broken, and the terminal says what it is doing while
 // it waits.
-func (s *TerminalService) OpenNode(contextID, node string) (TerminalSession, error) {
+func (s *TerminalService) OpenNode(ctx context.Context, contextID, node string) (TerminalSession, error) {
 	kc, err := s.resolve(contextID)
 	if err != nil {
 		return TerminalSession{}, err
@@ -181,7 +188,7 @@ func (s *TerminalService) OpenNode(contextID, node string) (TerminalSession, err
 
 	prefs := s.store.Get().Preferences.Terminal
 	spec := kube.NodeShellSpec{Namespace: prefs.NodeNamespace, Image: prefs.NodeImage}
-	id, sess := s.register()
+	id, sess := s.register(ctx)
 
 	s.say(id, fmt.Sprintf(
 		"Creating a privileged pod on %s from %s, in namespace %s. It is deleted when this terminal closes.",
@@ -204,11 +211,13 @@ func (s *TerminalService) OpenNode(contextID, node string) (TerminalSession, err
 // Send passes what was typed to the shell. The data is base64 for the same
 // reason the output is: a terminal carries bytes, and a paste is as likely to
 // hold something that is not text as not.
-func (s *TerminalService) Send(sessionID, data string) error {
+func (s *TerminalService) Send(ctx context.Context, sessionID, data string) error {
 	s.mu.Lock()
 	sess, found := s.sessions[sessionID]
 	s.mu.Unlock()
-	if !found {
+	// Someone else's session answers as a closed one would: whether it exists
+	// is not this caller's to learn.
+	if !found || !s.owners.Allowed(ctx, sessionID) {
 		return fmt.Errorf("this terminal has closed")
 	}
 
@@ -226,7 +235,10 @@ func (s *TerminalService) Send(sessionID, data string) error {
 // A size that nothing is waiting for is dropped rather than queued: the current
 // size is the only one that matters, and a queue of stale ones would replay
 // every intermediate width of a window somebody dragged.
-func (s *TerminalService) Resize(sessionID string, cols, rows int) {
+func (s *TerminalService) Resize(ctx context.Context, sessionID string, cols, rows int) {
+	if !s.owners.Allowed(ctx, sessionID) {
+		return
+	}
 	// A terminal is measured in cells, and the protocol carries each dimension
 	// in two bytes. Anything outside that did not come from a window somebody
 	// is looking at, and narrowing it would send the far end a size that is not
@@ -248,9 +260,18 @@ func (s *TerminalService) Resize(sessionID string, cols, rows int) {
 }
 
 // Close ends one session.
-func (s *TerminalService) Close(sessionID string) {
+func (s *TerminalService) Close(ctx context.Context, sessionID string) {
+	if !s.owners.Allowed(ctx, sessionID) {
+		return
+	}
+	s.closeSession(sessionID)
+}
+
+// closeSession ends a session whoever asks: the window through Close, or the
+// web version cleaning up behind a tab that went away without closing it.
+func (s *TerminalService) closeSession(id string) {
 	s.mu.Lock()
-	sess, found := s.sessions[sessionID]
+	sess, found := s.sessions[id]
 	s.mu.Unlock()
 	if found {
 		sess.stop()
@@ -261,6 +282,9 @@ func (s *TerminalService) Close(sessionID string) {
 // view, together with whether kubectl -- which is what actually runs over
 // there -- was found.
 func (s *TerminalService) Externals() ExternalTerminals {
+	if s.server {
+		return ExternalTerminals{Terminals: []termapp.Terminal{}, Reason: errDesktopOnly.Error()}
+	}
 	out := ExternalTerminals{Terminals: termapp.Available()}
 	path, err := termapp.Kubectl()
 	if err != nil {
@@ -277,6 +301,9 @@ func (s *TerminalService) Externals() ExternalTerminals {
 // this process and cannot be handed to another one, so the other terminal is
 // pointed at the same kubeconfig and context and left to make its own.
 func (s *TerminalService) Launch(contextID, kind, namespace, name, pod, container string) error {
+	if s.server {
+		return errDesktopOnly
+	}
 	kc, err := s.resolve(contextID)
 	if err != nil {
 		return err
@@ -307,6 +334,9 @@ func (s *TerminalService) Launch(contextID, kind, namespace, name, pod, containe
 // -- the same privileged pod this app would create, made by kubectl instead so
 // that the pod belongs to the process that will clean it up.
 func (s *TerminalService) LaunchNode(contextID, node string) error {
+	if s.server {
+		return errDesktopOnly
+	}
 	kc, err := s.resolve(contextID)
 	if err != nil {
 		return err
@@ -386,9 +416,12 @@ func (l *live) stop() {
 	})
 }
 
-// register makes a session and files it under a new id.
-func (s *TerminalService) register() (string, *live) {
+// register makes a session and files it under a new id, claimed for the caller
+// before anything can be written to it.
+func (s *TerminalService) register(caller context.Context) (string, *live) {
 	id := fmt.Sprintf("term-%d", s.nextID.Add(1))
+	// A fresh ID cannot be anyone else's, so there is no error to report.
+	_ = s.owners.Claim(caller, id, func() { s.closeSession(id) })
 	ctx, cancel := context.WithCancel(context.Background())
 	reader, writer := io.Pipe()
 	sizes := make(chan kube.TerminalSize, 1)
@@ -443,6 +476,7 @@ func (s *TerminalService) finished(id string) {
 		sess.stop()
 		delete(s.sessions, id)
 	}
+	s.owners.Release(id)
 }
 
 func (s *TerminalService) push(chunk kube.TerminalChunk) {

@@ -17,6 +17,9 @@ import (
 // disk rather than assuming its optimistic update stuck.
 type SettingsService struct {
 	store *appconfig.Store
+	// server is set in the web version, which has no file manager to show
+	// anyone the settings file in.
+	server bool
 }
 
 // NewSettingsService wires the service to the settings store.
@@ -44,6 +47,9 @@ func (s *SettingsService) ConfigPath() string {
 // missing one falls back to its directory rather than failing. That is still
 // the answer to "where does this live?", which is what was asked.
 func (s *SettingsService) RevealConfig() error {
+	if s.server {
+		return errDesktopOnly
+	}
 	path := s.store.Path()
 	if _, err := os.Stat(path); err != nil {
 		return application.Get().Env.OpenFileManager(filepath.Dir(path), false)

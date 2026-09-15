@@ -1,7 +1,8 @@
+//go:build !server
+
 package main
 
 import (
-	"embed"
 	"log"
 
 	"github.com/rogerwesterbo/k8sdockside/internal/appconfig"
@@ -9,17 +10,12 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-// Wails uses Go's `embed` package to embed the frontend files into the binary.
-// Any files in the frontend/dist folder will be embedded into the binary and
-// made available to the frontend.
-// See https://pkg.go.dev/embed for more information.
-
-//go:embed all:frontend/dist
-var assets embed.FS
-
 // main starts the app: it opens the settings file, registers the services the
 // frontend calls -- built and wired in internal/services -- and shows the
 // main window.
+//
+// This is the desktop app. The web version, built with -tags server, starts
+// from main_server.go instead.
 func main() {
 	// The settings store holds the user's kubeconfig paths, context aliases and
 	// colours. A failure here means we could not read an existing settings file,
@@ -29,7 +25,7 @@ func main() {
 		log.Fatalf("k8sdockside: %v", err)
 	}
 
-	registered, pluginViews := services.New(settings)
+	built := services.New(settings, services.Options{})
 
 	app := application.New(application.Options{
 		Name: "K8s Dockside",
@@ -37,12 +33,12 @@ func main() {
 		// About dialog under the app menu, and uses Description nowhere else,
 		// so the version goes here to be seen there.
 		Description: "A Kubernetes workspace for your local kubeconfig contexts\n\nVersion " + services.DisplayVersion(),
-		Services:    registered,
+		Services:    built.Services,
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 			// Serves plugins' own views from their folders, and refuses those
 			// views' sandboxed frames any direct call into the services above.
-			Middleware: pluginViews,
+			Middleware: built.PluginViews,
 		},
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,

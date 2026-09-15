@@ -1,0 +1,43 @@
+# Build context for build/docker/Dockerfile.server. The image compiles the Go
+# module and embeds frontend/dist, so everything else is dead weight -- and
+# node_modules alone is hundreds of megabytes.
+#
+# frontend/dist must NOT be listed here: it is gitignored build output, but it
+# is exactly what the image embeds. `make docker-build` builds it first.
+
+.git
+.github
+.task
+.vscode
+.idea
+**/.DS_Store
+.env
+# A developer's workspace file points at directories outside the context; the
+# Dockerfile builds with GOWORK=off regardless.
+go.work
+go.work.sum
+
+# Build output and caches
+bin/
+/k8sdockside
+*.exe
+*.test
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+bench.cpu
+bench.mem
+
+# Frontend dependencies and tool caches (dist stays)
+**/node_modules
+frontend/.vite
+frontend/.vitest-attachments
+
+# Mobile scaffolding: separate `package main`s the server build never touches
+build/ios
+build/android
+
+# Not part of the binary
+docs/
+charts/

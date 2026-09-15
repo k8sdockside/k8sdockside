@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/rogerwesterbo/k8sdockside/internal/appconfig"
 	"github.com/rogerwesterbo/k8sdockside/internal/kube"
+	"github.com/rogerwesterbo/k8sdockside/internal/session"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -18,8 +20,14 @@ import (
 // caches the last scan so that opening tabs and rendering the sidebar does not
 // re-read every file, and rescans only when the user asks (Sync) or changes the
 // set of files.
+//
+// In the web version the clusters are everyone's, so every change to the
+// sources is an administrator's to make.
 type KubeconfigService struct {
 	store *appconfig.Store
+	// extra are folders scanned on every sync beside the user's own sources,
+	// which the user cannot stop watching -- see Options.KubeconfigFolders.
+	extra []string
 
 	mu    sync.RWMutex
 	files []kube.File
@@ -38,7 +46,7 @@ func NewKubeconfigService(store *appconfig.Store) *KubeconfigService {
 func (s *KubeconfigService) Sync() []kube.File {
 	files := s.withoutRemoved(kube.Discover(kube.Sources{
 		Files:    s.store.ManualFiles(),
-		Folders:  s.store.ManualFolders(),
+		Folders:  slices.Concat(s.store.ManualFolders(), s.extra),
 		Excluded: s.store.ExcludedFiles(),
 	}))
 
@@ -141,7 +149,10 @@ func (s *KubeconfigService) Contexts() []kube.Context {
 // is parsed before being stored so that picking something that is not a
 // kubeconfig fails immediately, with a message, instead of quietly adding a
 // broken entry to the sidebar.
-func (s *KubeconfigService) AddFile(path string) ([]kube.File, error) {
+func (s *KubeconfigService) AddFile(ctx context.Context, path string) ([]kube.File, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.Files(), err
+	}
 	if path == "" {
 		return s.Files(), errors.New("no file selected")
 	}
@@ -164,7 +175,10 @@ func (s *KubeconfigService) AddFile(path string) ([]kube.File, error) {
 // it has two implementations. A file they added by hand is simply forgotten. A
 // file discovery found cannot be forgotten, because the next sync would find it
 // again, so refusing it is recorded as an exclusion instead.
-func (s *KubeconfigService) RemoveFile(path string) ([]kube.File, error) {
+func (s *KubeconfigService) RemoveFile(ctx context.Context, path string) ([]kube.File, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.Files(), err
+	}
 	if path == "" {
 		return s.Files(), errors.New("no file given")
 	}
@@ -191,7 +205,10 @@ func (s *KubeconfigService) RemoveFile(path string) ([]kube.File, error) {
 
 // RestoreFile un-hides a file that was excluded, letting discovery find it
 // again on this sync.
-func (s *KubeconfigService) RestoreFile(path string) ([]kube.File, error) {
+func (s *KubeconfigService) RestoreFile(ctx context.Context, path string) ([]kube.File, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.Files(), err
+	}
 	if _, err := s.store.UnexcludeFile(path); err != nil {
 		return s.Files(), err
 	}
@@ -207,7 +224,10 @@ func (s *KubeconfigService) RestoreFile(path string) ([]kube.File, error) {
 // hides it again, so without somewhere to undo the removal the only way back
 // was to take the context out of the kubeconfig, sync, and put it back --
 // something nobody would guess and the confirmation did not say.
-func (s *KubeconfigService) RemoveContext(id string) ([]kube.File, error) {
+func (s *KubeconfigService) RemoveContext(ctx context.Context, id string) ([]kube.File, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.Files(), err
+	}
 	if id == "" {
 		return s.Files(), errors.New("no context given")
 	}
@@ -224,7 +244,10 @@ func (s *KubeconfigService) RemoveContext(id string) ([]kube.File, error) {
 // since left its file is forgotten by withoutRemoved on the next scan anyway,
 // and refusing to undo a removal because the thing behind it is missing would
 // leave the entry on screen with a button that does nothing.
-func (s *KubeconfigService) RestoreContext(id string) ([]kube.File, error) {
+func (s *KubeconfigService) RestoreContext(ctx context.Context, id string) ([]kube.File, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.Files(), err
+	}
 	if id == "" {
 		return s.Files(), errors.New("no context given")
 	}
@@ -259,7 +282,10 @@ func (s *KubeconfigService) Folders() []string {
 // The folder is scanned before being stored so that choosing one with nothing
 // in it fails with a message, rather than being accepted and then appearing to
 // have done nothing.
-func (s *KubeconfigService) AddFolder(path string) ([]kube.File, error) {
+func (s *KubeconfigService) AddFolder(ctx context.Context, path string) ([]kube.File, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.Files(), err
+	}
 	if path == "" {
 		return s.Files(), errors.New("no folder selected")
 	}
@@ -289,7 +315,10 @@ func (s *KubeconfigService) AddFolder(path string) ([]kube.File, error) {
 // Anything hidden inside that folder is forgotten with it: keeping those
 // exclusions would mean re-adding the folder silently produced fewer files than
 // it contains, with nothing on screen explaining why.
-func (s *KubeconfigService) RemoveFolder(path string) ([]kube.File, error) {
+func (s *KubeconfigService) RemoveFolder(ctx context.Context, path string) ([]kube.File, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.Files(), err
+	}
 	if _, err := s.store.RemoveManualFolder(path); err != nil {
 		return s.Files(), err
 	}
@@ -305,7 +334,10 @@ func (s *KubeconfigService) RemoveFolder(path string) ([]kube.File, error) {
 //
 // Several files can be picked at once, and one bad choice does not discard the
 // good ones: every file is tried, and the failures are reported together.
-func (s *KubeconfigService) BrowseForFile() ([]kube.File, error) {
+func (s *KubeconfigService) BrowseForFile(ctx context.Context) ([]kube.File, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.Files(), err
+	}
 	dialog := application.Get().Dialog.OpenFile().
 		SetTitle("Add kubeconfigs").
 		CanChooseFiles(true).
@@ -323,18 +355,21 @@ func (s *KubeconfigService) BrowseForFile() ([]kube.File, error) {
 	if len(paths) == 0 {
 		return s.Files(), nil // cancelled
 	}
-	return s.AddFiles(paths)
+	return s.AddFiles(ctx, paths)
 }
 
 // AddFiles remembers several kubeconfig paths at once. Files that parse are
 // kept even when others alongside them do not, because discarding a good
 // selection over one bad file would mean picking them all again.
-func (s *KubeconfigService) AddFiles(paths []string) ([]kube.File, error) {
+func (s *KubeconfigService) AddFiles(ctx context.Context, paths []string) ([]kube.File, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.Files(), err
+	}
 	var failures []string
 	added := 0
 
 	for _, path := range paths {
-		if _, err := s.AddFile(path); err != nil {
+		if _, err := s.AddFile(ctx, path); err != nil {
 			failures = append(failures, filepath.Base(path)+": "+err.Error())
 			continue
 		}
@@ -353,7 +388,10 @@ func (s *KubeconfigService) AddFiles(paths []string) ([]kube.File, error) {
 
 // BrowseForFolder opens the native picker in directory mode and watches the
 // folder the user chose.
-func (s *KubeconfigService) BrowseForFolder() ([]kube.File, error) {
+func (s *KubeconfigService) BrowseForFolder(ctx context.Context) ([]kube.File, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return s.Files(), err
+	}
 	dialog := application.Get().Dialog.OpenFile().
 		SetTitle("Add a folder of kubeconfigs").
 		CanChooseFiles(false).
@@ -371,7 +409,7 @@ func (s *KubeconfigService) BrowseForFolder() ([]kube.File, error) {
 	if path == "" {
 		return s.Files(), nil // cancelled
 	}
-	return s.AddFolder(path)
+	return s.AddFolder(ctx, path)
 }
 
 // lookup resolves a context ID against the last scan. It is unexported so it

@@ -1,0 +1,232 @@
+# Kitchen sink for `make helm-lint` and `make helm-template` (chart-testing picks
+# up ci/*-values.yaml by the same convention). Not a sensible install: it turns
+# on nearly everything at once so that every template branch renders. The
+# alternatives that cannot be on at the same time as these are in
+# existing-claim-values.yaml. Every credential below is a placeholder.
+
+image:
+  tag: "1.2.3"
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: ghcr-pull
+
+serviceAccount:
+  annotations:
+    example.com/purpose: dockside
+  labels:
+    team: platform
+
+podAnnotations:
+  example.com/scrape: "false"
+podLabels:
+  team: platform
+
+priorityClassName: high-priority
+
+service:
+  type: NodePort
+  nodePort: 30080
+  annotations:
+    example.com/internal: "true"
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  hosts:
+    - host: dockside.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: dockside.internal.example.com
+      paths:
+        - path: /
+  tls:
+    - secretName: dockside-tls
+      hosts:
+        - dockside.example.com
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    memory: 2Gi
+
+persistence:
+  enabled: true
+  storageClass: fast-ssd
+  size: 5Gi
+  annotations:
+    example.com/backup: "daily"
+  keep: true
+
+clusters:
+  inCluster:
+    enabled: true
+    name: home
+  kubeconfigs:
+    # As a string: the file's contents.
+    - name: staging
+      kubeconfig: |
+        apiVersion: v1
+        kind: Config
+        clusters:
+          - name: staging
+            cluster:
+              server: https://staging.example.com:6443
+              insecure-skip-tls-verify: true
+        users:
+          - name: dockside
+            user:
+              token: placeholder-not-a-token
+        contexts:
+          - name: staging
+            context:
+              cluster: staging
+              user: dockside
+        current-context: staging
+    # As YAML: the same document, inline.
+    - name: lab
+      kubeconfig:
+        apiVersion: v1
+        kind: Config
+        clusters:
+          - name: lab
+            cluster:
+              server: https://lab.example.com:6443
+        users:
+          - name: dockside
+            user:
+              token: placeholder-not-a-token
+        contexts:
+          - name: lab
+            context:
+              cluster: lab
+              user: dockside
+        current-context: lab
+  existingSecrets:
+    - name: prod-kubeconfig
+    - name: team-clusters
+      items:
+        - key: eu-west
+          path: eu-west.yaml
+      optional: true
+    # String shorthand.
+    - legacy-kubeconfig
+
+rbac:
+  create: true
+  mode: custom
+  rules:
+    - apiGroups: [""]
+      resources: [pods, pods/log, services, configmaps, events, namespaces, nodes]
+      verbs: [get, list, watch]
+    - apiGroups: [apps]
+      resources: [deployments, statefulsets, daemonsets, replicasets]
+      verbs: [get, list, watch, patch]
+  extraClusterRoles:
+    - view
+
+auth:
+  # Trailing slash on purpose: the chart trims it.
+  publicURL: https://dockside.example.com/
+  trustForwardedHeaders: true
+  sessionTTL: 12h
+  passwordLogin: false
+  existingSetupTokenSecret:
+    name: dockside-setup
+    key: token
+  bootstrapAdmin:
+    existingSecret:
+      name: dockside-admin
+      usernameKey: user
+      passwordKey: pass
+  adminEmails:
+    - alice@example.com
+    - bob@example.com
+  providers:
+    - id: github
+      type: github
+      name: GitHub
+      clientId: placeholder-github-client-id
+      clientSecretEnv: GITHUB_CLIENT_SECRET
+      allowedDomains: [example.com]
+      autoSignup: true
+      defaultRole: user
+    - id: sso
+      type: oidc
+      name: Company SSO
+      issuer: https://sso.example.com/realms/main
+      clientId: dockside
+      clientSecretEnv: SSO_CLIENT_SECRET
+      scopes: [openid, email, profile, groups]
+      autoSignup: true
+    - id: gitlab
+      type: gitlab
+      name: GitLab
+      issuer: https://gitlab.example.com
+      clientId: placeholder-gitlab-client-id
+      clientSecretEnv: GITLAB_CLIENT_SECRET
+    - id: entra
+      type: microsoft
+      name: Microsoft
+      tenant: organizations
+      clientId: placeholder-entra-client-id
+      clientSecret: placeholder-not-a-secret
+      defaultRole: admin
+      enabled: false
+
+extraEnv:
+  - name: GITHUB_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: dockside-oauth
+        key: github-client-secret
+  - name: SSO_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: dockside-oauth
+        key: sso-client-secret
+  - name: GITLAB_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: dockside-oauth
+        key: gitlab-client-secret
+  - name: TZ
+    value: Europe/Oslo
+
+extraEnvFrom:
+  - configMapRef:
+      name: dockside-extra
+      optional: true
+
+extraVolumes:
+  - name: corporate-ca
+    configMap:
+      name: corporate-ca
+extraVolumeMounts:
+  - name: corporate-ca
+    mountPath: /etc/ssl/certs/corporate-ca.crt
+    subPath: ca.crt
+    readOnly: true
+
+nodeSelector:
+  kubernetes.io/os: linux
+tolerations:
+  - key: dedicated
+    operator: Equal
+    value: tools
+    effect: NoSchedule
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 50
+        preference:
+          matchExpressions:
+            - key: node-role.example.com/tools
+              operator: Exists

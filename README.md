@@ -250,6 +250,26 @@ Settings go to `$XDG_CONFIG_HOME/k8sdockside/settings.json` (falling back to
 is shown in the status bar. Themes and plugins you install sit in `themes/` and
 `plugins/` folders beside it.
 
+## Server mode (Kubernetes)
+
+The same app also builds as a web server, to run inside a cluster and open in a
+browser. It sits behind a sign-in of its own — local accounts, the first of
+which becomes the admin, and GitHub, Google, Facebook, GitLab, Microsoft or any
+OIDC provider — and reaches clusters through the pod's ServiceAccount, through
+kubeconfig Secrets you mount, or through kubeconfigs an admin uploads.
+
+```sh
+helm install k8sdockside oci://ghcr.io/rogerwesterbo/helm/k8sdockside \
+  --namespace k8sdockside --create-namespace
+kubectl -n k8sdockside port-forward svc/k8sdockside 8080:80
+```
+
+The difference from the desktop app is whose credentials are used: everyone
+who signs in acts with the pod's, so choose its RBAC with care — the chart
+defaults to read-only. [docs/server-mode.md](docs/server-mode.md) covers OAuth
+setup, persistence and the security model; the chart's options are in
+[charts/k8sdockside](charts/k8sdockside/README.md).
+
 ## Documentation
 
 In the app: **Help** (F1, or the question mark in the sidebar) is the guide to
@@ -260,6 +280,8 @@ for anyone new to it.
 - [Architecture](docs/architecture.md) — how the cluster data gets here, and the
   code layout
 - [Development](docs/development.md) — building, testing, and cutting a release
+- [Server mode](docs/server-mode.md) — running it in Kubernetes as a web app,
+  with sign-in, OAuth and the Helm chart
 - [Themes](docs/themes.md) — the theme format
 - [Writing a plugin](docs/writing-plugins.md) — step by step: JSON only, pages
   in plain JavaScript or TypeScript, publishing, credit, and getting listed

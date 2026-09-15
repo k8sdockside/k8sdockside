@@ -5,9 +5,15 @@
   It is the content of a tab rather than a fixed strip down the left, so it can
   be put wherever the user wants it -- see lib/state/panes.ts. Its width belongs
   to the pane holding it, which is why nothing here sets one.
+
+  In the web version the kubeconfigs are the server's, and shared: a cluster is
+  added by an administrator uploading one on the gateway's clusters page, so the
+  two file pickers become a link there, for administrators only, and removing
+  or restoring a source is theirs alone too. See SourcesSection.svelte.
 -->
 <script lang="ts">
     import { splitContextId, type ConfigFile, type ContextSort } from '../state/adopt';
+    import { session } from '../state/session.svelte';
     import { workspace } from '../state/workspace.svelte';
     import ContextSettings from './ContextSettings.svelte';
     import ContextTree from './ContextTree.svelte';
@@ -118,22 +124,33 @@
         >
             <Icon name="refresh" size={15} />
         </button>
-        <button
-            class="action"
-            onclick={() => workspace.addFile()}
-            title="Add kubeconfig files"
-            aria-label="Add kubeconfig files"
-        >
-            <Icon name="plus" size={15} />
-        </button>
-        <button
-            class="action"
-            onclick={() => workspace.addFolder()}
-            title="Watch a folder of kubeconfigs"
-            aria-label="Watch a folder of kubeconfigs"
-        >
-            <Icon name="folder-plus" size={15} />
-        </button>
+        {#if session.server}
+            {#if session.admin && session.clustersUrl}
+                <!-- A page of the same site, replacing this one as any link
+                     would: there is no picker that could reach the user's
+                     disk from here. -->
+                <a class="action" href={session.clustersUrl} title="Manage clusters" aria-label="Manage clusters">
+                    <Icon name="server" size={15} />
+                </a>
+            {/if}
+        {:else}
+            <button
+                class="action"
+                onclick={() => workspace.addFile()}
+                title="Add kubeconfig files"
+                aria-label="Add kubeconfig files"
+            >
+                <Icon name="plus" size={15} />
+            </button>
+            <button
+                class="action"
+                onclick={() => workspace.addFolder()}
+                title="Watch a folder of kubeconfigs"
+                aria-label="Watch a folder of kubeconfigs"
+            >
+                <Icon name="folder-plus" size={15} />
+            </button>
+        {/if}
 
         <!-- Separated from the kubeconfig controls beside it: those act on the
              list below, this opens a view of its own. -->
@@ -170,16 +187,18 @@
         <div class="file-head" title={file.path}>
             <Icon name="file" size={12} />
             <span class="file-name">{basename(file.path)}</span>
-            <button
-                class="remove"
-                onclick={() => workspace.removeFile(file.path)}
-                title={file.source === 'manual'
-                    ? 'Stop tracking this file'
-                    : 'Hide this file. Discovery would find it again, so it is remembered as hidden.'}
-                aria-label="Remove {basename(file.path)}"
-            >
-                <Icon name="close" size={12} />
-            </button>
+            {#if session.admin}
+                <button
+                    class="remove"
+                    onclick={() => workspace.removeFile(file.path)}
+                    title={file.source === 'manual'
+                        ? 'Stop tracking this file'
+                        : 'Hide this file. Discovery would find it again, so it is remembered as hidden.'}
+                    aria-label="Remove {basename(file.path)}"
+                >
+                    <Icon name="close" size={12} />
+                </button>
+            {/if}
         </div>
 
         {#if file.error}
@@ -216,6 +235,16 @@
             <div class="empty">
                 {#if filter.trim()}
                     <p>No context matches “{filter}”.</p>
+                {:else if session.server}
+                    <p>No clusters yet.</p>
+                    <p class="hint">An administrator adds clusters under Administration → Clusters.</p>
+                    {#if session.admin && session.clustersUrl}
+                        <div class="ctas">
+                            <a class="cta" href={session.clustersUrl}>
+                                <Icon name="server" size={14} /> Manage clusters
+                            </a>
+                        </div>
+                    {/if}
                 {:else}
                     <p>No kubeconfig found.</p>
                     <p class="hint">
@@ -243,14 +272,16 @@
                     <div class="source-row">
                         <Icon name="folder" size={12} />
                         <span class="path" title={folder}>{basename(folder)}</span>
-                        <button
-                            class="drop"
-                            onclick={() => workspace.removeFolder(folder)}
-                            title="Stop watching {folder}"
-                            aria-label="Stop watching {folder}"
-                        >
-                            <Icon name="close" size={11} />
-                        </button>
+                        {#if session.admin}
+                            <button
+                                class="drop"
+                                onclick={() => workspace.removeFolder(folder)}
+                                title="Stop watching {folder}"
+                                aria-label="Stop watching {folder}"
+                            >
+                                <Icon name="close" size={11} />
+                            </button>
+                        {/if}
                     </div>
                 {/each}
             {/if}
@@ -266,14 +297,16 @@
                     <div class="source-row">
                         <Icon name="file" size={12} />
                         <span class="path" title={path}>{basename(path)}</span>
-                        <button
-                            class="drop restore"
-                            onclick={() => workspace.restoreFile(path)}
-                            title="Show {path} again"
-                            aria-label="Show {basename(path)} again"
-                        >
-                            <Icon name="undo" size={11} />
-                        </button>
+                        {#if session.admin}
+                            <button
+                                class="drop restore"
+                                onclick={() => workspace.restoreFile(path)}
+                                title="Show {path} again"
+                                aria-label="Show {basename(path)} again"
+                            >
+                                <Icon name="undo" size={11} />
+                            </button>
+                        {/if}
                     </div>
                 {/each}
                 {#each workspace.removedContexts as id (id)}
@@ -281,14 +314,16 @@
                     <div class="source-row">
                         <Icon name="server" size={12} />
                         <span class="path" title="{context.name} in {context.file}">{context.name}</span>
-                        <button
-                            class="drop restore"
-                            onclick={() => workspace.restoreContext(id)}
-                            title="Show {context.name} again"
-                            aria-label="Show context {context.name} again"
-                        >
-                            <Icon name="undo" size={11} />
-                        </button>
+                        {#if session.admin}
+                            <button
+                                class="drop restore"
+                                onclick={() => workspace.restoreContext(id)}
+                                title="Show {context.name} again"
+                                aria-label="Show context {context.name} again"
+                            >
+                                <Icon name="undo" size={11} />
+                            </button>
+                        {/if}
                     </div>
                 {/each}
             {/if}
@@ -545,6 +580,7 @@
         border-radius: var(--radius-sm);
         background: var(--bg-raised);
         color: var(--text);
+        text-decoration: none;
     }
 
     .cta:hover {

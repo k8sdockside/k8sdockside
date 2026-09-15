@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/rogerwesterbo/k8sdockside/internal/kube"
+	"github.com/rogerwesterbo/k8sdockside/internal/session"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -29,6 +30,8 @@ func init() {
 type LogService struct {
 	configs *KubeconfigService
 	watcher *kube.Watcher
+	// owners files each stream under whoever opened it, in the web version.
+	owners *session.Owners
 
 	mu      sync.Mutex
 	streams map[string]context.CancelFunc
@@ -71,7 +74,7 @@ func (s *LogService) Containers(contextID, kind, namespace, name string) ([]kube
 //
 // It returns as soon as the streams are opening. Lines arrive as events,
 // because a log view is a thing that goes on happening rather than an answer.
-func (s *LogService) Open(contextID, kind, namespace, name string, containers []string, follow bool) (string, error) {
+func (s *LogService) Open(caller context.Context, contextID, kind, namespace, name string, containers []string, follow bool) (string, error) {
 	kc, err := s.resolve(contextID)
 	if err != nil {
 		return "", err
@@ -83,6 +86,9 @@ func (s *LogService) Open(contextID, kind, namespace, name string, containers []
 	s.mu.Lock()
 	s.streams[id] = cancel
 	s.mu.Unlock()
+	// Claimed before the stream starts, so its first lines have an owner to go
+	// to. A fresh ID cannot be anyone else's.
+	_ = s.owners.Claim(caller, id, cancel)
 
 	go func() {
 		defer s.finished(id)
@@ -104,7 +110,10 @@ func (s *LogService) Open(contextID, kind, namespace, name string, containers []
 }
 
 // Close stops one view's streams.
-func (s *LogService) Close(streamID string) {
+func (s *LogService) Close(caller context.Context, streamID string) {
+	if !s.owners.Allowed(caller, streamID) {
+		return
+	}
 	s.mu.Lock()
 	cancel, found := s.streams[streamID]
 	s.mu.Unlock()
@@ -121,6 +130,7 @@ func (s *LogService) finished(id string) {
 		cancel()
 		delete(s.streams, id)
 	}
+	s.owners.Release(id)
 }
 
 // push forwards one batch to the frontend. Called from the streams' own

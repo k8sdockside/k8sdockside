@@ -74,7 +74,7 @@ func TestAddFilesKeepsTheGoodOnesWhenOneIsBad(t *testing.T) {
 	good2 := write(t, dir, "b.config", sampleConfig)
 	bad := write(t, dir, "notes.txt", "not a kubeconfig\n")
 
-	files, err := s.AddFiles([]string{good1, bad, good2})
+	files, err := s.AddFiles(t.Context(), []string{good1, bad, good2})
 	if err == nil {
 		t.Fatal("want an error naming the file that failed")
 	}
@@ -97,7 +97,7 @@ func TestAddFilesReportsPlainlyWhenNoneWork(t *testing.T) {
 	dir := t.TempDir()
 	bad := write(t, dir, "notes.txt", "nope\n")
 
-	files, err := s.AddFiles([]string{bad})
+	files, err := s.AddFiles(t.Context(), []string{bad})
 	if err == nil {
 		t.Fatal("want an error")
 	}
@@ -117,7 +117,7 @@ func TestAddFolderTakesEveryConfigWhateverItIsNamed(t *testing.T) {
 	write(t, dir, "kubeconfig-test01-af3e", sampleConfig)
 	write(t, dir, "readme.md", "# notes\n")
 
-	files, err := s.AddFolder(dir)
+	files, err := s.AddFolder(t.Context(), dir)
 	if err != nil {
 		t.Fatalf("AddFolder: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestAddFolderRefusesAFolderWithNothingInIt(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "readme.md", "# no configs here\n")
 
-	if _, err := s.AddFolder(dir); err == nil {
+	if _, err := s.AddFolder(t.Context(), dir); err == nil {
 		t.Fatal("want an error rather than a folder that silently does nothing")
 	}
 	if got := s.Folders(); len(got) != 0 {
@@ -151,7 +151,7 @@ func TestAddFolderRefusesAFile(t *testing.T) {
 	s := service(t)
 	path := write(t, t.TempDir(), "a.config", sampleConfig)
 
-	if _, err := s.AddFolder(path); err == nil {
+	if _, err := s.AddFolder(t.Context(), path); err == nil {
 		t.Fatal("want an error")
 	}
 }
@@ -161,10 +161,10 @@ func TestRemoveFolderTakesItsConfigsWithIt(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "a.config", sampleConfig)
 
-	if _, err := s.AddFolder(dir); err != nil {
+	if _, err := s.AddFolder(t.Context(), dir); err != nil {
 		t.Fatal(err)
 	}
-	files, err := s.RemoveFolder(dir)
+	files, err := s.RemoveFolder(t.Context(), dir)
 	if err != nil {
 		t.Fatalf("RemoveFolder: %v", err)
 	}
@@ -182,11 +182,11 @@ func TestAFileFromAWatchedFolderCanBeRemovedOnItsOwn(t *testing.T) {
 	keep := write(t, dir, "a.config", sampleConfig)
 	drop := write(t, dir, "b.config", sampleConfig)
 
-	if _, err := s.AddFolder(dir); err != nil {
+	if _, err := s.AddFolder(t.Context(), dir); err != nil {
 		t.Fatal(err)
 	}
 
-	files, err := s.RemoveFile(drop)
+	files, err := s.RemoveFile(t.Context(), drop)
 	if err != nil {
 		t.Fatalf("RemoveFile: %v", err)
 	}
@@ -204,10 +204,10 @@ func TestAnExcludedFileStaysGoneAcrossSyncs(t *testing.T) {
 	write(t, dir, "a.config", sampleConfig)
 	drop := write(t, dir, "b.config", sampleConfig)
 
-	if _, err := s.AddFolder(dir); err != nil {
+	if _, err := s.AddFolder(t.Context(), dir); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.RemoveFile(drop); err != nil {
+	if _, err := s.RemoveFile(t.Context(), drop); err != nil {
 		t.Fatal(err)
 	}
 
@@ -224,14 +224,14 @@ func TestRestoreFileBringsAHiddenConfigBack(t *testing.T) {
 	write(t, dir, "a.config", sampleConfig)
 	drop := write(t, dir, "b.config", sampleConfig)
 
-	if _, err := s.AddFolder(dir); err != nil {
+	if _, err := s.AddFolder(t.Context(), dir); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.RemoveFile(drop); err != nil {
+	if _, err := s.RemoveFile(t.Context(), drop); err != nil {
 		t.Fatal(err)
 	}
 
-	files, err := s.RestoreFile(drop)
+	files, err := s.RestoreFile(t.Context(), drop)
 	if err != nil {
 		t.Fatalf("RestoreFile: %v", err)
 	}
@@ -247,10 +247,10 @@ func TestRemovingAManualFileForgetsItRatherThanHidingIt(t *testing.T) {
 	s := service(t)
 	path := write(t, t.TempDir(), "a.config", sampleConfig)
 
-	if _, err := s.AddFile(path); err != nil {
+	if _, err := s.AddFile(t.Context(), path); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.RemoveFile(path); err != nil {
+	if _, err := s.RemoveFile(t.Context(), path); err != nil {
 		t.Fatalf("RemoveFile: %v", err)
 	}
 
@@ -264,7 +264,7 @@ func TestRemovingAManualFileForgetsItRatherThanHidingIt(t *testing.T) {
 	}
 
 	// ...and re-adding it works, rather than being silently hidden.
-	files, err := s.AddFile(path)
+	files, err := s.AddFile(t.Context(), path)
 	if err != nil {
 		t.Fatalf("re-adding: %v", err)
 	}
@@ -279,19 +279,19 @@ func TestUnwatchingAFolderForgetsWhatWasHiddenInIt(t *testing.T) {
 	write(t, dir, "a.config", sampleConfig)
 	drop := write(t, dir, "b.config", sampleConfig)
 
-	if _, err := s.AddFolder(dir); err != nil {
+	if _, err := s.AddFolder(t.Context(), dir); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.RemoveFile(drop); err != nil {
+	if _, err := s.RemoveFile(t.Context(), drop); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.RemoveFolder(dir); err != nil {
+	if _, err := s.RemoveFolder(t.Context(), dir); err != nil {
 		t.Fatal(err)
 	}
 
 	// Re-adding the folder must show everything in it. Keeping the exclusion
 	// would mean quietly returning fewer files with nothing explaining why.
-	files, err := s.AddFolder(dir)
+	files, err := s.AddFolder(t.Context(), dir)
 	if err != nil {
 		t.Fatalf("re-adding the folder: %v", err)
 	}
@@ -305,7 +305,7 @@ func TestWatchedFolderIsRescannedOnSync(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "a.config", sampleConfig)
 
-	if _, err := s.AddFolder(dir); err != nil {
+	if _, err := s.AddFolder(t.Context(), dir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -363,13 +363,13 @@ func idOf(t *testing.T, files []kube.File, name string) string {
 func TestRemoveContextTakesOneContextOutOfItsFile(t *testing.T) {
 	s := service(t)
 	path := write(t, t.TempDir(), "both.config", twoContexts)
-	added, err := s.AddFile(path)
+	added, err := s.AddFile(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	before, _ := os.ReadFile(path)
 
-	files, err := s.RemoveContext(idOf(t, added, "two"))
+	files, err := s.RemoveContext(t.Context(), idOf(t, added, "two"))
 	if err != nil {
 		t.Fatalf("RemoveContext: %v", err)
 	}
@@ -392,11 +392,11 @@ func TestRemovedContextAppearsAgainWhenAddedToItsFileAgain(t *testing.T) {
 	s := service(t)
 	dir := t.TempDir()
 	path := write(t, dir, "both.config", twoContexts)
-	added, err := s.AddFile(path)
+	added, err := s.AddFile(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.RemoveContext(idOf(t, added, "two")); err != nil {
+	if _, err := s.RemoveContext(t.Context(), idOf(t, added, "two")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -421,18 +421,18 @@ func TestRemovedContextAppearsAgainWhenAddedToItsFileAgain(t *testing.T) {
 func TestRemovedContextAppearsAgainWithItsFile(t *testing.T) {
 	s := service(t)
 	path := write(t, t.TempDir(), "both.config", twoContexts)
-	added, err := s.AddFile(path)
+	added, err := s.AddFile(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.RemoveContext(idOf(t, added, "two")); err != nil {
+	if _, err := s.RemoveContext(t.Context(), idOf(t, added, "two")); err != nil {
 		t.Fatal(err)
 	}
-	if files, err := s.RemoveFile(path); err != nil || len(files) != 0 {
+	if files, err := s.RemoveFile(t.Context(), path); err != nil || len(files) != 0 {
 		t.Fatalf("RemoveFile: %v, %+v", err, files)
 	}
 
-	files, err := s.AddFile(path)
+	files, err := s.AddFile(t.Context(), path)
 	if err != nil {
 		t.Fatalf("re-adding the file: %v", err)
 	}
@@ -447,11 +447,11 @@ func TestRemovalSurvivesTheFileBeingUnreadable(t *testing.T) {
 	s := service(t)
 	dir := t.TempDir()
 	path := write(t, dir, "both.config", twoContexts)
-	added, err := s.AddFile(path)
+	added, err := s.AddFile(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.RemoveContext(idOf(t, added, "two")); err != nil {
+	if _, err := s.RemoveContext(t.Context(), idOf(t, added, "two")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -472,16 +472,16 @@ func TestRemovalSurvivesTheFileBeingUnreadable(t *testing.T) {
 func TestARemovedContextCanBeRestored(t *testing.T) {
 	s := service(t)
 	path := write(t, t.TempDir(), "both.config", twoContexts)
-	added, err := s.AddFile(path)
+	added, err := s.AddFile(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := idOf(t, added, "two")
-	if _, err := s.RemoveContext(id); err != nil {
+	if _, err := s.RemoveContext(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
 
-	files, err := s.RestoreContext(id)
+	files, err := s.RestoreContext(t.Context(), id)
 	if err != nil {
 		t.Fatalf("RestoreContext: %v", err)
 	}
@@ -504,12 +504,12 @@ func TestARemovedContextCanBeRestored(t *testing.T) {
 func TestRemovedContextsAreListedSoTheyCanBeUndone(t *testing.T) {
 	s := service(t)
 	path := write(t, t.TempDir(), "both.config", twoContexts)
-	added, err := s.AddFile(path)
+	added, err := s.AddFile(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := idOf(t, added, "two")
-	if _, err := s.RemoveContext(id); err != nil {
+	if _, err := s.RemoveContext(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
 
@@ -522,14 +522,14 @@ func TestRemovedContextsAreListedSoTheyCanBeUndone(t *testing.T) {
 
 func TestRestoreContextRefusesNothing(t *testing.T) {
 	s := service(t)
-	if _, err := s.RestoreContext(""); err == nil {
+	if _, err := s.RestoreContext(t.Context(), ""); err == nil {
 		t.Error("RestoreContext(\"\") = nil error, want a complaint")
 	}
 }
 
 func TestRemoveContextRefusesNothing(t *testing.T) {
 	s := service(t)
-	if _, err := s.RemoveContext(""); err == nil {
+	if _, err := s.RemoveContext(t.Context(), ""); err == nil {
 		t.Error("RemoveContext(\"\") = nil error, want a complaint")
 	}
 }
