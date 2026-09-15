@@ -43,6 +43,19 @@ func writeFile(t *testing.T, dir, name, content string) string {
 	return path
 }
 
+// realTempDir is t.TempDir with its symlinks resolved. Discover reports files
+// by their real path -- it is how a symlinked config is told apart from a
+// second one -- and on macOS the temp folder is itself behind a symlink, /var
+// to /private/var, so a path built on the unresolved folder never matches.
+func realTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func TestParseFileFlattensContexts(t *testing.T) {
 	path := writeFile(t, t.TempDir(), "config", twoContexts)
 
@@ -111,8 +124,8 @@ func TestParseFileReportsMissingFile(t *testing.T) {
 }
 
 func TestDiscoverFindsEverySource(t *testing.T) {
-	home := t.TempDir()
-	elsewhere := t.TempDir()
+	home := realTempDir(t)
+	elsewhere := realTempDir(t)
 	t.Setenv("HOME", home)
 
 	def := writeFile(t, filepath.Join(home, ".kube"), "config", twoContexts)
@@ -215,8 +228,8 @@ func TestResolveExpandsHome(t *testing.T) {
 }
 
 func TestDiscoverIgnoresAMissingDefaultConfig(t *testing.T) {
-	home := t.TempDir()
-	elsewhere := t.TempDir()
+	home := realTempDir(t)
+	elsewhere := realTempDir(t)
 	t.Setenv("HOME", home)
 
 	// No ~/.kube/config at all: the user keeps their clusters elsewhere.
@@ -308,8 +321,8 @@ func TestParseFileRejectsBinaryAsNotText(t *testing.T) {
 }
 
 func TestDiscoverIncludesWatchedFolders(t *testing.T) {
-	home := t.TempDir()
-	watched := t.TempDir()
+	home := realTempDir(t)
+	watched := realTempDir(t)
 	t.Setenv("HOME", home)
 	t.Setenv("KUBECONFIG", "")
 

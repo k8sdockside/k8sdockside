@@ -18,7 +18,7 @@ var Icons = []string{
 	"terminal", "forward", "chevron-left", "chevron-right", "chevron-down", "copies", "scale", "gauge",
 	"shield", "priority", "chip", "webhook", "policy", "link", "graph", "user",
 	"users", "helm", "refresh", "download", "expand-all", "collapse-all", "sort-asc", "sort-desc",
-	"sort-off", "plus", "folder-plus", "folder", "close", "dot", "edit", "save",
+	"sort-off", "plus", "minus", "folder-plus", "folder", "close", "dot", "edit", "save",
 	"chevron-up", "alert", "file", "search", "trash", "undo", "dock-right", "dock-bottom",
 	"dock-left", "pin", "settings", "sun", "moon", "monitor", "display", "rows",
 	"columns", "type", "restore", "info", "help", "book",

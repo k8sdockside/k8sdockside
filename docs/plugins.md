@@ -376,12 +376,12 @@ Any of: `alert`, `bell`, `book`, `box`, `check`, `chevron-down`, `chevron-left`,
 `columns`, `copies`, `dashboard`, `database`, `display`, `dock-bottom`,
 `dock-left`, `dock-right`, `dot`, `download`, `drive`, `edit`, `expand-all`,
 `file`, `folder`, `folder-plus`, `forward`, `gateway`, `gauge`, `globe`,
-`grant`, `graph`, `helm`, `help`, `info`, `layers`, `link`, `lock`, `monitor`,
-`moon`, `pause`, `pin`, `play`, `plus`, `policy`, `power`, `priority`, `puzzle`,
-`refresh`, `repeat`, `restore`, `rocket`, `route`, `rows`, `save`, `scale`,
-`search`, `server`, `settings`, `share`, `shield`, `sliders`, `sort-asc`,
-`sort-desc`, `sort-off`, `stop`, `sun`, `terminal`, `trash`, `type`, `undo`,
-`unlock`, `user`, `users`, `webhook`.
+`grant`, `graph`, `helm`, `help`, `info`, `layers`, `link`, `lock`, `minus`,
+`monitor`, `moon`, `pause`, `pin`, `play`, `plus`, `policy`, `power`,
+`priority`, `puzzle`, `refresh`, `repeat`, `restore`, `rocket`, `route`,
+`rows`, `save`, `scale`, `search`, `server`, `settings`, `share`, `shield`,
+`sliders`, `sort-asc`, `sort-desc`, `sort-off`, `stop`, `sun`, `terminal`,
+`trash`, `type`, `undo`, `unlock`, `user`, `users`, `webhook`.
 
 The same names go for views and actions. Any other name is refused when the
 file is read, with the nearest real one suggested, rather than drawing an

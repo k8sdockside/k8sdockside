@@ -54,6 +54,18 @@ func write(t *testing.T, dir, name, content string) string {
 	return path
 }
 
+// realTempDir is t.TempDir with its symlinks resolved. Discovery reports files
+// by their real path, and on macOS the temp folder is itself behind a symlink,
+// /var to /private/var, so a path built on the unresolved folder never matches.
+func realTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func TestAddFilesKeepsTheGoodOnesWhenOneIsBad(t *testing.T) {
 	s := service(t)
 	dir := t.TempDir()
@@ -166,7 +178,7 @@ func TestRemoveFolderTakesItsConfigsWithIt(t *testing.T) {
 
 func TestAFileFromAWatchedFolderCanBeRemovedOnItsOwn(t *testing.T) {
 	s := service(t)
-	dir := t.TempDir()
+	dir := realTempDir(t)
 	keep := write(t, dir, "a.config", sampleConfig)
 	drop := write(t, dir, "b.config", sampleConfig)
 
