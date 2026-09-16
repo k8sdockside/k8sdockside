@@ -1,13 +1,13 @@
 {
   "fill": {
-    "automatic-gradient": "extended-gray:1.00000,1.00000"
+    "solid": "srgb:0.05490,0.16471,0.22745,1.00000"
   },
   "groups": [
     {
       "layers": [
         {
-          "image-name": "icon-ship.svg",
-          "name": "icon-ship",
+          "image-name": "icon-ship-glyph.svg",
+          "name": "icon-ship-glyph",
           "position": {
             "scale": 1.0,
             "translation-in-points": [
@@ -23,7 +23,7 @@
       },
       "specular": true,
       "translucency": {
-        "enabled": true,
+        "enabled": false,
         "value": 0.5
       }
     }
