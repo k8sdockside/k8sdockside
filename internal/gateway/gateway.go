@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/rogerwesterbo/k8sdockside/internal/plugins"
 	"github.com/rogerwesterbo/k8sdockside/internal/session"
 )
 
@@ -280,14 +281,34 @@ func (g *Gateway) routes() error {
 type forwardedUser struct{}
 
 // app passes a signed-in request through to the app, and sends anyone else to
-// sign in.
+// sign in -- except for a plugin view's own files, which are passed through for
+// nobody in particular.
 func (g *Gateway) app(w http.ResponseWriter, r *http.Request) {
 	u, _, ok := g.current(r)
 	if !ok {
+		if pluginView(r) {
+			g.proxy.ServeHTTP(w, r)
+			return
+		}
 		g.unauthenticated(w, r)
 		return
 	}
 	g.proxy.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), forwardedUser{}, u.ID)))
+}
+
+// pluginView reports whether a request reads a file of a plugin's own view.
+//
+// Those need no session. The views are drawn in frames sandboxed without
+// allow-same-origin, and the browser treats what such a frame asks for as
+// cross-site: the SameSite session cookie is left off the requests for its own
+// stylesheets, scripts and images, and a view that cannot load them is a bare
+// page that never gets past "Looking for…". What is served there is the
+// plugins' static files and nothing else; whatever a view shows of a cluster it
+// asks the frame around it for, and that goes through the app, signed in. See
+// plugins.Middleware.
+func pluginView(r *http.Request) bool {
+	return (r.Method == http.MethodGet || r.Method == http.MethodHead) &&
+		strings.HasPrefix(r.URL.Path, plugins.UIPath)
 }
 
 // rewrite points a request at the app and says who it is for. Whatever the
@@ -303,8 +324,10 @@ func (g *Gateway) rewrite(pr *httputil.ProxyRequest) {
 	pr.Out.Header.Del(headerSecret)
 	pr.Out.Header.Del(headerUser)
 	stripCookies(pr.Out, sessionCookie, oauthCookie)
+	// Everything proxied came through the gateway; only what a user asked for
+	// names one.
+	pr.Out.Header.Set(headerSecret, g.secret)
 	if id, ok := pr.In.Context().Value(forwardedUser{}).(string); ok {
-		pr.Out.Header.Set(headerSecret, g.secret)
 		pr.Out.Header.Set(headerUser, id)
 	}
 }
@@ -322,7 +345,14 @@ func (g *Gateway) Identity(next http.Handler) http.Handler {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
-		u, ok := g.store.user(r.Header.Get(headerUser))
+		id := r.Header.Get(headerUser)
+		if id == "" && pluginView(r) {
+			// Nobody in particular, and nothing but a plugin view's files:
+			// the plugin middleware answers every such request itself.
+			next.ServeHTTP(w, r)
+			return
+		}
+		u, ok := g.store.user(id)
 		if !ok || u.Disabled {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return

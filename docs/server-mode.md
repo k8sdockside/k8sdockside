@@ -422,6 +422,14 @@ running it some other way.
 - **The admin role is the server's, not the cluster's.** Admins manage users,
   sign-in providers, clusters and plugins; a plugin an admin installs is there
   for every user.
+- **Plugin views' files are served without a sign-in.** Everything under
+  `/plugin-ui/` — the HTML, scripts, styles and images of enabled plugins'
+  own views — can be read (`GET`/`HEAD` only) by anyone who can reach the
+  address. The views run in sandboxed frames, and browsers leave the session
+  cookie off the requests such a frame makes for its own files. Nothing about
+  a cluster is served there: a view gets its data through the app, which does
+  need a sign-in. Don't install a plugin whose view files you want kept
+  private.
 - **Claim admin before anyone else can.** On a public address, set a setup token
   or a bootstrap admin (see [Signing in](#signing-in)).
 - **Terminate TLS in front of it** and set `auth.publicURL` to the `https://`

@@ -374,6 +374,88 @@ func TestIdentityRefusesRequestsTheGatewayDidNotSend(t *testing.T) {
 	}
 }
 
+func TestPluginViewsNeedNoSignIn(t *testing.T) {
+	h := newHarness(t, nil)
+	h.setUp("alice")
+	// A sandboxed view's requests for its own files carry no cookie.
+	frame := h.browser()
+	seen := func() int {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		return len(h.seen)
+	}
+	get := func(method, path string) int {
+		req, _ := http.NewRequest(method, h.srv.URL+path, nil)
+		req.Header.Set("Origin", "null")
+		return h.do(frame, req).StatusCode
+	}
+
+	for _, method := range []string{http.MethodGet, http.MethodHead} {
+		if code := get(method, "/plugin-ui/argocd/argo.css"); code != http.StatusOK {
+			t.Fatalf("%s a view's file = %d, want 200", method, code)
+		}
+		req := h.lastSeen()
+		if req.Header.Get(headerSecret) != h.gw.secret {
+			t.Fatal("the app must be told the request came through the gateway")
+		}
+		if id := req.Header.Get(headerUser); id != "" {
+			t.Fatalf("a request without a session was sent to the app as %q", id)
+		}
+	}
+
+	before := seen()
+	for _, c := range []struct{ method, path string }{
+		{http.MethodPost, "/plugin-ui/argocd/argo.css"},
+		{http.MethodGet, "/wails/runtime.js"},
+		{http.MethodGet, "/plugin-uix/argocd/argo.css"},
+		// Cleaned, and so redirected, before it is matched.
+		{http.MethodGet, "/plugin-ui/../wails/runtime.js"},
+	} {
+		if code := get(c.method, c.path); code == http.StatusOK {
+			t.Errorf("%s %s without a session = 200", c.method, c.path)
+		}
+	}
+	if n := seen() - before; n != 0 {
+		t.Fatalf("the app saw %d requests without a session that were not for a view's files", n)
+	}
+}
+
+func TestIdentityLetsNobodyReadOnlyPluginViews(t *testing.T) {
+	h := newHarness(t, nil)
+
+	var reached bool
+	var named bool
+	handler := h.gw.Identity(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		_, named = session.FromContext(r.Context())
+	}))
+	serve := func(secret, method, path string) int {
+		reached = false
+		req := httptest.NewRequest(method, path, nil)
+		req.Header.Set(headerSecret, secret)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	if code := serve(h.gw.secret, http.MethodGet, "/plugin-ui/argocd/overview.html"); code != http.StatusOK || !reached {
+		t.Fatalf("a view's file from the gateway = %d, want 200", code)
+	}
+	if named {
+		t.Fatal("a request for nobody must not carry a user")
+	}
+	for _, c := range []struct{ secret, method, path string }{
+		{"", http.MethodGet, "/plugin-ui/argocd/overview.html"},
+		{h.gw.secret, http.MethodPost, "/plugin-ui/argocd/overview.html"},
+		{h.gw.secret, http.MethodGet, "/wails/runtime.js"},
+		{h.gw.secret, http.MethodPost, "/wails/runtime"},
+	} {
+		if code := serve(c.secret, c.method, c.path); code != http.StatusForbidden || reached {
+			t.Errorf("%s %s for nobody (secret %t) = %d, want 403", c.method, c.path, c.secret != "", code)
+		}
+	}
+}
+
 // ---- signing in -------------------------------------------------------------------
 
 func TestSignInAndOut(t *testing.T) {
