@@ -27,6 +27,7 @@ vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/service
     ResourceService: {
         Describe: vi.fn().mockResolvedValue(''),
         Ping: vi.fn().mockResolvedValue(undefined),
+        Disconnect: vi.fn().mockResolvedValue(undefined),
         CustomResourceKinds: vi.fn().mockResolvedValue([]),
     },
     LogService: {
@@ -2687,6 +2688,70 @@ describe('removing a context', () => {
 
         expect(workspace.settings.excludedContexts).toEqual([STAGING]);
         expect(workspace.excluded).toEqual([]);
+    });
+});
+
+describe('disconnecting a context', () => {
+    const FILE = '/home/u/.kube/config';
+    const ctx = (id: string, name: string) => ({ id, name, cluster: name, user: 'admin', namespace: '', server: '', file: FILE, current: false });
+
+    beforeEach(() => {
+        workspace.files = [{ path: FILE, source: 'manual', error: '', contexts: [ctx(PROD, 'admin@prod'), ctx(STAGING, 'admin@staging')] }];
+        workspace.closeAllDockTabs();
+        vi.mocked(ResourceService.Disconnect).mockReset().mockResolvedValue(undefined);
+    });
+
+    test('closes its tabs, folds it away and forgets that it answered, and leaves the context listed', async () => {
+        await clusters.probe(PROD);
+        await clusters.probe(STAGING);
+        open([PROD, 'pods'], [STAGING, 'pods'], [STAGING, 'nodes']);
+        workspace.selectContext(STAGING);
+        expect(workspace.isConnected(STAGING)).toBe(true);
+
+        await workspace.disconnect(STAGING);
+
+        expect(ResourceService.Disconnect).toHaveBeenCalledWith(STAGING);
+        expect(workspace.tabs.map((t) => t.contextId)).toEqual([PROD]);
+        expect(workspace.isExpanded(STAGING)).toBe(false);
+        expect(clusters.of(STAGING).status).toBe('unknown');
+        expect(workspace.isConnected(STAGING)).toBe(false);
+        expect(workspace.contexts.map((c) => c.id)).toEqual([PROD, STAGING]);
+        // The other context is untouched.
+        expect(clusters.of(PROD).status).toBe('connected');
+        expect(workspace.connectedContexts.map((c) => c.id)).toEqual([PROD]);
+    });
+
+    test('a probe that set out before the disconnect does not mark it connected again', async () => {
+        let answer!: () => void;
+        vi.mocked(ResourceService.Ping).mockReturnValueOnce(new Promise<void>((r) => (answer = r)) as never);
+        const probing = clusters.probe(STAGING);
+
+        await workspace.disconnect(STAGING);
+        answer();
+        await probing;
+
+        expect(clusters.of(STAGING).status).toBe('unknown');
+    });
+
+    test('opening it again connects again', async () => {
+        await clusters.probe(STAGING);
+        await workspace.disconnect(STAGING);
+
+        workspace.selectContext(STAGING);
+        await Promise.resolve();
+
+        expect(ResourceService.Ping).toHaveBeenLastCalledWith(STAGING);
+    });
+
+    test('everything connected can be disconnected at once', async () => {
+        await clusters.probe(PROD);
+        open([STAGING, 'pods']);
+
+        await workspace.disconnectAll();
+
+        expect(vi.mocked(ResourceService.Disconnect).mock.calls.map(([id]) => id)).toEqual([PROD, STAGING]);
+        expect(workspace.tabs).toHaveLength(0);
+        expect(workspace.connectedContexts).toEqual([]);
     });
 });
 

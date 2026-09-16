@@ -27,6 +27,11 @@ function message(err: unknown): string {
 
 class Clusters {
     private states = $state<Record<string, Health>>({});
+    /**
+     * Bumped per context by forget, so a probe that set out before the
+     * context was disconnected does not paint it connected when it returns.
+     */
+    private generations = new Map<string, number>();
 
     /** How a context last responded. Never probed is `unknown`, not an error. */
     of(contextId: string): Health {
@@ -61,12 +66,25 @@ class Clusters {
         if (!force && status !== 'unknown') return;
 
         this.report(contextId, 'checking');
+        const generation = this.generations.get(contextId) ?? 0;
+        const current = () => (this.generations.get(contextId) ?? 0) === generation;
         try {
             await ResourceService.Ping(contextId);
-            this.report(contextId, 'connected');
+            if (current()) this.report(contextId, 'connected');
         } catch (err) {
-            this.report(contextId, 'error', message(err));
+            if (current()) this.report(contextId, 'error', message(err));
         }
+    }
+
+    /**
+     * Forgets what a context said, as if it had never been asked: the
+     * sidebar draws no indicator for it, and a recheck leaves it alone. What
+     * a disconnected context looks like.
+     */
+    forget(contextId: string): void {
+        this.generations.set(contextId, (this.generations.get(contextId) ?? 0) + 1);
+        const { [contextId]: _, ...rest } = this.states;
+        this.states = rest;
     }
 
     /**

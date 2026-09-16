@@ -143,6 +143,7 @@ export const HELP: Page = {
                         '**Contexts** are listed one per row, flat by default. Turn on **Show kubeconfig names** under Settings → Appearance to group them under their files.',
                         '**The dot at the right** says whether the cluster answered: green for connected, red with a reason when it did not. Nothing is drawn until the cluster has actually been asked.',
                         '**current** marks the context the kubeconfig itself points at.',
+                        '**Disconnecting.** The power button on a connected context’s row closes its tabs, stops its port forwards and stops talking to the cluster, leaving the context listed. Opening it again connects again. **Clusters → Disconnect all** does it for every context at once.',
                         '**Sections** — Cluster, Workloads, Network and the rest — fold and unfold. Folding one applies to every context; hold **Alt** to fold it for this context only, and a section set differently from the rest wears a small mark.',
                         '**Plugins** lists the installed plugins for every cluster and says in the margin which of them this cluster does not appear to have.',
                         '**Custom Resource Definitions** reads the cluster’s CRDs on first unfold and lists them by API group. Any of them opens as a table with the columns `kubectl get` would print.',

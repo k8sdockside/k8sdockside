@@ -196,6 +196,25 @@ func (s *ResourceService) Ping(contextID string) error {
 	return s.watcher.Ping(ctx)
 }
 
+// Disconnect lets go of a context without removing it: its watches stop and
+// its client is forgotten, so nothing talks to that cluster until something
+// asks for it again -- which connects afresh. The window closes its own tabs
+// first; this is for whatever is left.
+//
+// In the web version the connection is shared by everyone signed in, and the
+// tabs on it may be someone else's, so there is nothing more to let go of
+// than what the caller's own tabs already have.
+func (s *ResourceService) Disconnect(contextID string) error {
+	if s.owners != nil {
+		return nil
+	}
+	if _, err := s.resolve(contextID); err != nil {
+		return err
+	}
+	s.watcher.Disconnect(contextID)
+	return nil
+}
+
 // CustomResourceKinds lists what a cluster defines, grouped by API group, for
 // the definitions section of the sidebar.
 func (s *ResourceService) CustomResourceKinds(contextID string) ([]kube.CustomResourceGroup, error) {

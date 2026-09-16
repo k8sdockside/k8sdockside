@@ -885,6 +885,67 @@ class Workspace {
         }
     }
 
+    /**
+     * Whether a context is connected, as far as the window can tell: it has
+     * been asked whether it answers, or something is open on it. What the
+     * sidebar offers Disconnect for.
+     */
+    isConnected(contextId: string): boolean {
+        return clusters.of(contextId).status !== 'unknown' || this.allTabs.some((t) => !isAppTab(t) && t.contextId === contextId);
+    }
+
+    /** The contexts that are connected, in the sidebar's order. */
+    connectedContexts = $derived(this.contexts.filter((c) => this.isConnected(c.id)));
+
+    /**
+     * Lets go of a context without removing it. Its tabs close, its port
+     * forwards stop, its tree folds away and the app forgets that it
+     * answered, so it looks as it did before it was first opened -- and
+     * nothing talks to the cluster until it is opened again, which connects
+     * afresh.
+     *
+     * Asked first only when an editor on it holds changes that are not in
+     * the cluster: those are lost with the tab.
+     */
+    async disconnect(contextId: string, { quiet = false } = {}): Promise<void> {
+        const context = this.contexts.find((c) => c.id === contextId);
+        const name = context ? this.displayName(context) : contextId;
+        const unsaved = this.allTabs.filter((t) => t.contextId === contextId && editors.isDirty(t.id)).length;
+        if (
+            unsaved > 0 &&
+            typeof window !== 'undefined' &&
+            window.confirm &&
+            !window.confirm(`Disconnect from ${name}?\n\n${unsaved === 1 ? 'An editor has' : `${unsaved} editors have`} changes that are not in the cluster, and will be closed without them.`)
+        ) {
+            return;
+        }
+
+        for (const pane of PANE_IDS) this.retain(pane, (tab) => isAppTab(tab) || tab.contextId !== contextId);
+        if (detail.target?.contextId === contextId) detail.close();
+        for (const forward of forwards.forContext(contextId)) {
+            if (forward.state === 'active' || forward.state === 'connecting') forwards.stop(forward.id);
+        }
+        this.expanded = this.expanded.filter((id) => id !== contextId);
+        clusters.forget(contextId);
+
+        try {
+            await ResourceService.Disconnect(contextId);
+        } catch (err) {
+            notices.fail(message(err));
+            return;
+        }
+        if (!quiet) notices.inform(`Disconnected from ${name}`);
+    }
+
+    /** Disconnects every connected context. */
+    async disconnectAll(): Promise<void> {
+        const connected = this.connectedContexts.map((c) => c.id);
+        for (const id of connected) await this.disconnect(id, { quiet: true });
+        if (connected.length > 0) {
+            notices.inform(`Disconnected from ${connected.length} context${connected.length === 1 ? '' : 's'}`);
+        }
+    }
+
     // ----- contexts ------------------------------------------------------
 
     /** The name to show for a context: the user's alias, or the kubeconfig name. */

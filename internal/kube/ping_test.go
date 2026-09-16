@@ -239,7 +239,7 @@ func TestEvictionWaitsWhileTheClusterIsInUse(t *testing.T) {
 		t.Fatal("evicted a cluster that had a reference on it")
 	}
 
-	w.releaseCluster(kc.ID)
+	w.releaseCluster(kc.ID, cl)
 
 	w.mu.Lock()
 	armed := cl.evict != nil
@@ -247,6 +247,57 @@ func TestEvictionWaitsWhileTheClusterIsInUse(t *testing.T) {
 	if !armed {
 		t.Error("releasing the last reference did not arm the grace again")
 	}
+}
+
+// Disconnecting forgets the client at once rather than after the grace, and a
+// call that borrowed the old one and returns afterwards leaves the new one
+// alone.
+func TestDisconnectForgetsTheClientAtOnce(t *testing.T) {
+	w, kc := pinged(t)
+
+	w.mu.Lock()
+	old := w.clusters[kc.ID]
+	w.mu.Unlock()
+	// A call in flight across the disconnect.
+	if _, err := w.clusterFor(kc); err != nil {
+		t.Fatalf("clusterFor: %v", err)
+	}
+
+	if closed := w.Disconnect(kc.ID); closed != 0 {
+		t.Errorf("closed %d subscriptions, want 0: the context had none", closed)
+	}
+	w.mu.Lock()
+	_, held := w.clusters[kc.ID]
+	w.mu.Unlock()
+	if held {
+		t.Fatal("the client is still held after Disconnect")
+	}
+
+	if err := w.Ping(kc); err != nil {
+		t.Fatalf("Ping after Disconnect: %v", err)
+	}
+	w.mu.Lock()
+	fresh := w.clusters[kc.ID]
+	w.mu.Unlock()
+	if fresh == nil || fresh == old {
+		t.Fatal("the ping after Disconnect did not build a new client")
+	}
+
+	// The call in flight returns now.
+	w.releaseCluster(kc.ID, old)
+	w.mu.Lock()
+	still := w.clusters[kc.ID]
+	oldArmed := old.evict != nil
+	w.mu.Unlock()
+	if still != fresh {
+		t.Error("releasing the old client disturbed the new one")
+	}
+	if oldArmed {
+		t.Error("the forgotten client armed an eviction")
+	}
+
+	// Disconnecting a context nothing is connected to is fine.
+	w.Disconnect("nobody")
 }
 
 // A client that could not be built is not worth keeping: the next caller

@@ -24,7 +24,7 @@ func (w *Watcher) withClient(kc Context, fn func(*clusterClient) error) error {
 	if err != nil {
 		return err
 	}
-	defer w.releaseCluster(kc.ID)
+	defer w.releaseCluster(kc.ID, cl)
 	return fn(cl.client)
 }
 

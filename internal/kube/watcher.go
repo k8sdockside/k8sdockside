@@ -151,6 +151,11 @@ type subscription struct {
 	// that works this way -- see SubscribeHelm.
 	reread bool
 
+	// cluster is the connection the subscription's informer belongs to. It
+	// is released by identity, not looked up by contextID: after Disconnect
+	// the context may have a new connection that this one must not touch.
+	cluster *cluster
+
 	dirty chan struct{} // buffered(1): a pending "something changed"
 	done  chan struct{}
 }
@@ -192,7 +197,7 @@ func (w *Watcher) SubscribeFor(kc Context, kind string, namespaces []string, sel
 
 	mapping, err := cl.client.mappingForKind(kind)
 	if err != nil {
-		w.releaseCluster(kc.ID)
+		w.releaseCluster(kc.ID, cl)
 		return "", err
 	}
 
@@ -202,7 +207,7 @@ func (w *Watcher) SubscribeFor(kc Context, kind string, namespaces []string, sel
 	// resource) and they do not have to be rendered the same way.
 	cols, err := cl.client.columnsFor(kind, namespaced)
 	if err != nil {
-		w.releaseCluster(kc.ID)
+		w.releaseCluster(kc.ID, cl)
 		return "", err
 	}
 
@@ -216,6 +221,7 @@ func (w *Watcher) SubscribeFor(kc Context, kind string, namespaces []string, sel
 		selector:   chosen,
 		columns:    cols,
 		live:       live,
+		cluster:    cl,
 		dirty:      make(chan struct{}, 1),
 		done:       make(chan struct{}),
 	}
@@ -248,17 +254,46 @@ func (w *Watcher) Unsubscribe(id string) {
 	live.refs--
 	stopInformer := live.refs == 0
 	if stopInformer {
-		if cl, ok := w.clusters[sub.contextID]; ok {
-			delete(cl.informers, live.key)
-		}
+		delete(sub.cluster.informers, live.key)
 	}
 	w.mu.Unlock()
 
 	close(sub.done)
 	if stopInformer {
 		close(live.stop)
-		w.releaseCluster(sub.contextID)
+		w.releaseCluster(sub.contextID, sub.cluster)
 	}
+}
+
+// Disconnect lets go of a context at once: every subscription to it is
+// closed, its watches stop, and its client is forgotten rather than left to
+// idle -- so the next call builds a new one, with whatever the kubeconfig
+// holds by then. A call still in flight keeps the client it borrowed until it
+// returns; it is not interrupted. It reports how many subscriptions it closed.
+func (w *Watcher) Disconnect(contextID string) int {
+	w.mu.Lock()
+	var ids []string
+	for id, sub := range w.subs {
+		if sub.contextID == contextID {
+			ids = append(ids, id)
+		}
+	}
+	w.mu.Unlock()
+
+	for _, id := range ids {
+		w.Unsubscribe(id)
+	}
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if cl, ok := w.clusters[contextID]; ok {
+		if cl.evict != nil {
+			cl.evict.Stop()
+			cl.evict = nil
+		}
+		delete(w.clusters, contextID)
+	}
+	return len(ids)
 }
 
 // SetNamespaces re-points an existing subscription at other namespaces. The
@@ -331,7 +366,7 @@ func (w *Watcher) clusterFor(kc Context) (*cluster, error) {
 	<-cl.ready
 
 	if cl.err != nil {
-		w.releaseCluster(kc.ID)
+		w.releaseCluster(kc.ID, cl)
 		return nil, cl.err
 	}
 	return cl, nil
@@ -344,15 +379,15 @@ func (w *Watcher) clusterFor(kc Context) (*cluster, error) {
 //
 // A client that could not be built is the exception and goes at once: the next
 // caller should try again, with whatever has been fixed in the meantime.
-func (w *Watcher) releaseCluster(contextID string) {
+//
+// It is handed the cluster the reference was taken on. One that Disconnect
+// has already forgotten only loses the reference: it is gone, and whatever
+// the map holds under its context now is another connection's.
+func (w *Watcher) releaseCluster(contextID string, cl *cluster) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	cl, ok := w.clusters[contextID]
-	if !ok {
-		return
-	}
 	cl.refs--
-	if cl.refs > 0 {
+	if w.clusters[contextID] != cl || cl.refs > 0 {
 		return
 	}
 	if cl.err != nil {

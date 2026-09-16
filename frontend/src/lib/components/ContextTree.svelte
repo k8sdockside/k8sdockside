@@ -336,6 +336,21 @@
             </button>
         {/if}
 
+        <!-- Let go of the cluster without removing the context: its tabs close
+             and nothing talks to it until it is opened again. Only for a
+             context that is connected -- there is nothing to let go of
+             otherwise, and opening one is what connects it. -->
+        {#if workspace.isConnected(context.id)}
+            <button
+                class="remove disconnect"
+                onclick={() => void workspace.disconnect(context.id)}
+                title="Disconnect: close this context's tabs and stop talking to the cluster. Open it again to reconnect."
+                aria-label="Disconnect {workspace.displayName(context)}"
+            >
+                <Icon name="power" size={12} />
+            </button>
+        {/if}
+
         <!-- Remove this one context. On the row itself rather than on the file
              heading, which is not shown by default and would remove the whole
              file anyway. Only the app's list changes; the kubeconfig does
@@ -769,6 +784,10 @@
     .head:hover .remove,
     .remove:focus-visible {
         opacity: 1;
+    }
+
+    .remove.disconnect:hover {
+        color: var(--warn);
     }
 
     .remove:hover {

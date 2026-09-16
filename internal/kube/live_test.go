@@ -78,6 +78,53 @@ func TestLiveSubscribeDeliversASnapshot(t *testing.T) {
 	}
 }
 
+// Disconnect closes every subscription to the context and its watches, and
+// the context can be opened again straight after.
+func TestLiveDisconnectClosesTheContext(t *testing.T) {
+	ctx := liveContext(t)
+
+	snapshots := make(chan Snapshot, 16)
+	w := NewWatcher(func(s Snapshot) { snapshots <- s })
+	defer w.Close()
+
+	for _, kind := range []string{KindPods, KindPods, KindNamespaces} {
+		if _, err := w.Subscribe(ctx, kind, nil, NoSelector); err != nil {
+			t.Fatalf("Subscribe(%s): %v", kind, err)
+		}
+	}
+	select {
+	case <-snapshots:
+	case <-time.After(60 * time.Second):
+		t.Fatal("no snapshot within 60s")
+	}
+
+	if closed := w.Disconnect(ctx.ID); closed != 3 {
+		t.Errorf("Disconnect closed %d subscriptions, want 3", closed)
+	}
+	w.mu.Lock()
+	subs, held := len(w.subs), len(w.clusters)
+	w.mu.Unlock()
+	if subs != 0 || held != 0 {
+		t.Fatalf("after Disconnect: %d subscriptions and %d clients left, want none", subs, held)
+	}
+
+	id, err := w.Subscribe(ctx, KindPods, nil, NoSelector)
+	if err != nil {
+		t.Fatalf("Subscribe after Disconnect: %v", err)
+	}
+	deadline := time.After(60 * time.Second)
+	for {
+		select {
+		case snap := <-snapshots:
+			if snap.SubscriptionID == id {
+				return
+			}
+		case <-deadline:
+			t.Fatal("no snapshot for the new subscription within 60s")
+		}
+	}
+}
+
 func TestLiveGatewayAPIAndCustomResources(t *testing.T) {
 	ctx := liveContext(t)
 

@@ -293,7 +293,7 @@ func (w *Watcher) SubscribeHelmFor(kc Context, namespaces []string, claim func(i
 	// whole reason this path exists.
 	mapping, err := cl.client.mappingForKind(KindSecrets)
 	if err != nil {
-		w.releaseCluster(kc.ID)
+		w.releaseCluster(kc.ID, cl)
 		return "", err
 	}
 
@@ -307,6 +307,7 @@ func (w *Watcher) SubscribeHelmFor(kc Context, namespaces []string, claim func(i
 		reread:     true,
 		namespaces: namespaceFilter(namespaces),
 		live:       live,
+		cluster:    cl,
 		dirty:      make(chan struct{}, 1),
 		done:       make(chan struct{}),
 	}
