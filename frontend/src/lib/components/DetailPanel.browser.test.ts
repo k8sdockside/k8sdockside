@@ -376,3 +376,20 @@ test('the query is dropped when the panel moves to another object', async () => 
         () => (document.querySelector('.find input') as HTMLInputElement | null)?.value,
     ).toBe('');
 });
+
+// Selecting copies a part; the button copies all of it, which is what goes
+// into a ticket or a chat.
+test('the whole report can be copied', async () => {
+    const write = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+    render(DetailPanel);
+    await detail.open(WEB);
+    await settle();
+    // A search only marks the report; what is copied is still all of it.
+    await page.getByRole('textbox', { name: 'Find in this report' }).fill('status');
+
+    await page.getByRole('button', { name: 'Copy the report' }).click();
+
+    expect(write).toHaveBeenCalledWith('Name: web\nStatus: Running');
+    await expect.element(page.getByText('Copied')).toBeInTheDocument();
+    write.mockRestore();
+});

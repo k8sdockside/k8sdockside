@@ -67,6 +67,10 @@
         'chevron-down': ['M6 9.5l6 6 6-6'],
         // Two offset frames: a set of identical copies of one pod.
         copies: ['M9 4h11v11', 'M4 9h11v11H4z'],
+        // Two sheets, the front one whole: copy to the clipboard.
+        copy: ['M9 9h11v11H9z', 'M5 15H4V4h11v1'],
+        // A bare tick: done, as in copied.
+        tick: ['M5 12.5l4.5 4.5L19 7.5'],
         // Growing and shrinking along one axis, which is what an HPA does.
         scale: ['M12 4v16', 'M8 8l4-4 4 4', 'M8 16l4 4 4-4'],
         // A dial: how much of an allowance is spent.

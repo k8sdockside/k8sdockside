@@ -23,6 +23,8 @@
     import ObjectActions from './ObjectActions.svelte';
     import PluginFrame from './PluginFrame.svelte';
     import { detail } from '../state/detail.svelte';
+    import { notices } from '../state/notices.svelte';
+    import { copyText } from '../clipboard';
 
     let target = $derived(detail.target);
     /**
@@ -138,6 +140,33 @@
     });
 
     let hits = $derived(parts.filter((p) => p.hit).length);
+
+    /**
+     * Whether the report was just copied, which the button says for a moment:
+     * a copy leaves nothing else on screen to show it happened.
+     */
+    let copied = $state(false);
+    let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+
+    /**
+     * Copies the whole report as it is shown -- a Secret's values decoded
+     * only if they are decoded on screen. A part of it is copied the usual
+     * way, by selecting it.
+     */
+    async function copyReport(): Promise<void> {
+        if (!(await copyText(detail.text))) {
+            notices.inform('Could not copy the report to the clipboard');
+            return;
+        }
+        copied = true;
+        clearTimeout(copiedTimer);
+        copiedTimer = setTimeout(() => (copied = false), 1500);
+    }
+
+    $effect(() => {
+        target?.name;
+        copied = false;
+    });
 
 </script>
 
@@ -260,6 +289,17 @@
                             {hits === 0 ? 'No matches' : `${hits} match${hits === 1 ? '' : 'es'}`}
                         </span>
                     {/if}
+
+                    <button
+                        class="toggle"
+                        class:done={copied}
+                        title="Copy the whole report{isSecret && !detail.revealed ? ', values still encoded' : ''}"
+                        aria-label="Copy the report"
+                        onclick={() => void copyReport()}
+                    >
+                        <Icon name={copied ? 'tick' : 'copy'} size={13} />
+                        <span aria-live="polite">{copied ? 'Copied' : 'Copy'}</span>
+                    </button>
 
                     {#if isSecret}
                         <button
@@ -452,6 +492,10 @@
     .toggle:hover {
         color: var(--text);
         background: var(--bg-hover);
+    }
+
+    .toggle.done {
+        color: var(--ok);
     }
 
     /* Revealed reads as on rather than as ordinary: values in plain text on
