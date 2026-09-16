@@ -10,11 +10,14 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/rogerwesterbo/k8sdockside/internal/appconfig"
 	"github.com/rogerwesterbo/k8sdockside/internal/kube"
 	"github.com/rogerwesterbo/k8sdockside/internal/plugins"
+	"github.com/rogerwesterbo/k8sdockside/internal/registry"
 	"github.com/rogerwesterbo/k8sdockside/internal/session"
+	"github.com/rogerwesterbo/k8sdockside/internal/updates"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -41,14 +44,26 @@ type PluginService struct {
 	// server is set in the web version, which has no file manager to open.
 	server bool
 
+	// registries answers the views that ask what tags an image has.
+	registries *registry.Client
+
 	mu     sync.RWMutex
 	cached *plugins.Catalogue
+	// running is, per context, which images its pods run -- the only images a
+	// view may ask a registry about.
+	running map[string]runningImages
 }
 
 // NewPluginService wires the service to the settings store, and to the cluster
 // connections the overview's counts come from.
 func NewPluginService(store *appconfig.Store, configs *KubeconfigService, watcher *kube.Watcher) *PluginService {
-	return &PluginService{store: store, configs: configs, watcher: watcher}
+	return &PluginService{
+		store:      store,
+		configs:    configs,
+		watcher:    watcher,
+		registries: registry.New("k8sdockside/" + DisplayVersion() + " (+https://github.com/" + updates.Repo + ")"),
+		running:    map[string]runningImages{},
+	}
 }
 
 // List returns every plugin available right now, with anything that failed to
@@ -199,6 +214,108 @@ func (s *PluginService) forView(contextID, pluginID, kind string, write bool) (p
 		return plugin, kube.Context{}, fmt.Errorf("unknown context %q -- it may have been removed from the kubeconfig", contextID)
 	}
 	return plugin, ctx, nil
+}
+
+// RegistryLookup asks an image's registry which tags it has, and what the
+// image's tag points at now, for a plugin's own view.
+//
+// The view names the image, so the image must be one a pod in the cluster
+// runs: otherwise a plugin could have the app -- in the web version, the pod
+// -- make requests to any host it liked. A registry that fails is reported in
+// the answer, not as an error.
+func (s *PluginService) RegistryLookup(ctx context.Context, contextID, pluginID, image string, refresh bool) (registry.Report, error) {
+	plugin, ok := s.catalogue().Find(pluginID)
+	if !ok {
+		return registry.Report{}, fmt.Errorf("no plugin called %q is installed", pluginID)
+	}
+	if plugin.Disabled {
+		return registry.Report{}, fmt.Errorf("the %s plugin is switched off in Settings", plugin.Name)
+	}
+	if !plugin.CanAskRegistries() {
+		return registry.Report{}, fmt.Errorf("the %s plugin does not declare \"ui\": {\"registries\": true}, so its views cannot ask registries", plugin.Name)
+	}
+	kc, ok := s.configs.lookup(contextID)
+	if !ok {
+		return registry.Report{}, fmt.Errorf("unknown context %q -- it may have been removed from the kubeconfig", contextID)
+	}
+	ref, err := registry.Parse(image)
+	if err != nil {
+		return registry.Report{}, fmt.Errorf("%q is not an image reference: %w", image, err)
+	}
+	runs, err := s.runs(kc, ref)
+	if err != nil {
+		return registry.Report{}, err
+	}
+	if !runs {
+		return registry.Report{}, fmt.Errorf("no pod in %s runs %s, so its registry is not asked", kc.Name, image)
+	}
+	return s.registries.Lookup(ctx, image, refresh)
+}
+
+// runningImages is what a context's pods ran when last listed: each image as
+// registry/repository:tag, and as registry/repository for a reference with
+// only a digest.
+type runningImages struct {
+	images map[string]bool
+	at     time.Time
+}
+
+const (
+	// runningTTL is how long a list of what runs is used. A page asks about
+	// every image at once, and one list of the pods answers all of it.
+	runningTTL = time.Minute
+	// runningRecheck is how old a list must be before an image missing from
+	// it is looked for again -- in a pod started since.
+	runningRecheck = 5 * time.Second
+)
+
+// runs reports whether a pod in the context runs the image.
+func (s *PluginService) runs(kc kube.Context, ref registry.Ref) (bool, error) {
+	key := ref.Key()
+	if ref.Tag != "" {
+		key = ref.Tagged()
+	}
+	s.mu.RLock()
+	kept, ok := s.running[kc.ID]
+	s.mu.RUnlock()
+	age := time.Since(kept.at)
+	if ok && age < runningTTL && (kept.images[key] || age < runningRecheck) {
+		return kept.images[key], nil
+	}
+
+	pods, err := s.watcher.Objects(kc, "pods", kube.AllNamespaces, "")
+	if err != nil {
+		return false, fmt.Errorf("could not list the pods to check the image runs: %w", err)
+	}
+	kept = runningImages{images: imagesIn(pods), at: time.Now()}
+	s.mu.Lock()
+	s.running[kc.ID] = kept
+	s.mu.Unlock()
+	return kept.images[key], nil
+}
+
+// imagesIn is every image the pods' containers name -- init and ephemeral
+// ones included -- keyed as runs looks them up.
+func imagesIn(pods []map[string]any) map[string]bool {
+	out := map[string]bool{}
+	for _, pod := range pods {
+		for _, field := range []string{"containers", "initContainers", "ephemeralContainers"} {
+			containers, _, _ := unstructured.NestedSlice(pod, "spec", field)
+			for _, c := range containers {
+				container, _ := c.(map[string]any)
+				image, _ := container["image"].(string)
+				ref, err := registry.Parse(image)
+				if err != nil {
+					continue
+				}
+				out[ref.Key()] = true
+				if ref.Tag != "" {
+					out[ref.Tagged()] = true
+				}
+			}
+		}
+	}
+	return out
 }
 
 // assetMiddleware serves plugins' own views to the webview, and keeps them

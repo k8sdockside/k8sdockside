@@ -46,6 +46,8 @@ export interface PluginUI {
     readable: string[];
     /** Whether the views may ask to patch those kinds. Each patch is confirmed by the user. */
     write: boolean;
+    /** Whether the views may ask registries about the images the cluster runs. */
+    registries: boolean;
 }
 
 /**

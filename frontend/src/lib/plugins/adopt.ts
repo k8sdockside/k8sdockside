@@ -41,7 +41,11 @@ export function adoptPlugin(plugin: bindings.Plugin): Plugin {
             focus: view.focus ? { kind: view.focus.kind, hash: view.focus.hash ?? '' } : null,
         })),
         ui: plugin.ui
-            ? { readable: [...(plugin.ui.readable ?? [])], write: plugin.ui.write ?? false }
+            ? {
+                  readable: [...(plugin.ui.readable ?? [])],
+                  write: plugin.ui.write ?? false,
+                  registries: plugin.ui.registries ?? false,
+              }
             : null,
         actions: (plugin.actions ?? []).map((a) => ({ id: a.id, label: a.label, kind: a.kind })),
         sections: (plugin.sections ?? []).map((s) => ({

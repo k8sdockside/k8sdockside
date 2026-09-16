@@ -236,6 +236,7 @@
                     contextName,
                     readable: [...(p.ui?.readable ?? [])],
                     write: p.ui?.write ?? false,
+                    registries: p.ui?.registries ?? false,
                     actions: (p.actions ?? []).map((a) => ({ id: a.id, label: a.label, kind: a.kind })),
                     // What the plugin says about itself, so a page that is its
                     // own overview can link to what it is about the way the
@@ -323,6 +324,18 @@
                 return adoptPanel(
                     await MetricsService.Charts(contextId, pluginKindFor(p.id, PLUGIN_OVERVIEW), '', '', minutes),
                 );
+            }
+            case 'registry.lookup': {
+                // Asked by the app, since the page has no network; Go checks
+                // the declaration again, and that a pod runs the image.
+                if (!p.ui?.registries) throw new Error(`${p.name} does not declare "ui": { "registries": true }`);
+                const found = await PluginService.RegistryLookup(
+                    contextId,
+                    p.id,
+                    text(params.image),
+                    params.refresh === true,
+                );
+                return { ...found, tags: found?.tags ?? [] };
             }
             case 'patch': {
                 const target = targetOf(params);

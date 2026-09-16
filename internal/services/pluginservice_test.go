@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/rogerwesterbo/k8sdockside/internal/plugins"
+	"github.com/rogerwesterbo/k8sdockside/internal/registry"
 )
 
 // After a clone, "installed" followed by nothing appearing is the outcome that
@@ -39,5 +40,41 @@ func TestInstalledSaysWhatBecameOfAClone(t *testing.T) {
 
 	if err := installed(plugins.Catalogue{}, dest); err == nil || !strings.Contains(err.Error(), "no plugin.json") {
 		t.Errorf("a clone with nothing in it reported %v", err)
+	}
+}
+
+// A view may ask a registry only about what the pods run, so what they run is
+// read from every kind of container, and a reference is found however it is
+// spelled.
+func TestImagesInPods(t *testing.T) {
+	pod := func(field string, images ...string) map[string]any {
+		containers := []any{}
+		for _, image := range images {
+			containers = append(containers, map[string]any{"name": "c", "image": image})
+		}
+		return map[string]any{"spec": map[string]any{field: containers}}
+	}
+	got := imagesIn([]map[string]any{
+		pod("containers", "nginx:1.27", "not an image"),
+		pod("initContainers", "ghcr.io/org/init@sha256:"+strings.Repeat("a", 64)),
+		pod("ephemeralContainers", "busybox"),
+		{"spec": map[string]any{}},
+	})
+
+	for _, image := range []string{"docker.io/library/nginx:1.27", "docker.io/library/nginx", "ghcr.io/org/init", "docker.io/library/busybox:latest"} {
+		if !got[image] {
+			t.Errorf("%s is not among %v", image, got)
+		}
+	}
+	for _, image := range []string{"docker.io/library/nginx:1.28", "ghcr.io/org/init:latest"} {
+		if got[image] {
+			t.Errorf("%s is among what runs", image)
+		}
+	}
+	for _, image := range []string{"nginx:1.27", "index.docker.io/library/nginx:1.27", "busybox"} {
+		ref, err := registry.Parse(image)
+		if err != nil || !got[ref.Tagged()] {
+			t.Errorf("%s was not found as %s (%v)", image, ref.Tagged(), err)
+		}
 	}
 }

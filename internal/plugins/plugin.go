@@ -269,6 +269,10 @@ type UI struct {
 	// Write lets the views ask to merge-patch objects of those kinds. Every
 	// patch is shown to the user and applied only when they say yes.
 	Write bool `json:"write,omitzero"`
+	// Registries lets the views ask the registries of images the cluster runs
+	// which tags they have -- anonymously, through the app, since the views
+	// themselves cannot reach the network. See registry.Client.
+	Registries bool `json:"registries,omitzero"`
 	// Readable is every kind the views may read, worked out by the loader --
 	// Kinds plus everything else the plugin names -- and ignored on the way
 	// in. Both sides check against this one list.
@@ -1058,6 +1062,12 @@ func (p Plugin) CanRead(kind string) bool {
 // CanWrite reports whether the plugin's own views may ask to patch a kind.
 func (p Plugin) CanWrite(kind string) bool {
 	return p.CanRead(kind) && p.UI.Write
+}
+
+// CanAskRegistries reports whether the plugin's own views may ask image
+// registries about the images a cluster runs.
+func (p Plugin) CanAskRegistries() bool {
+	return p.UI != nil && p.UI.Registries
 }
 
 // UIRoot is the folder on disk the plugin's own views are served from. Only a

@@ -1,8 +1,9 @@
 // Package updates asks GitHub whether a newer release of this app has been
 // published.
 //
-// It is the one place the app reaches out to anything but the user's own
-// clusters, so it is kept small and plain: a single GET of the public releases
+// Beside package registry, which asks image registries for plugins that
+// declare it, it is the one place the app reaches out to anything but the
+// user's own clusters, so it is kept small and plain: a single GET of the public releases
 // endpoint, unauthenticated, carrying nothing but the request itself and a
 // User-Agent naming the app and its version. The answer is which release is
 // newest; deciding what to do about that is the service's job.

@@ -165,6 +165,7 @@ through `window.k8sdockside`. Each call is a promise; a failure rejects with an
 | Changing | `patch({ kind, namespace, name, patch })`, `create({ kind, namespace, object })`, `run(actionId, ref)` — the user sees each one and confirms it |
 | Moving around the app | `open(ref)`, `openView(id)`, `edit(ref)`, `logs(ref)`, `openUrl(url)` |
 | Staying in step | `on('theme', fn)`, `resize(height)` in a panel |
+| Registries | `registry.lookup({ image })` — the tags an image's registry lists and what its tag points at now, asked by the app for an image the cluster runs (0.0.25 and newer; needs `"ui": { "registries": true }`) |
 | Remembering | `storage.get(key)`, `storage.set(key, value)`, `storage.remove(key)`, `storage.keys()` — kept by the app per plugin and per cluster, across restarts (0.0.19 and newer; check it exists) |
 
 Every call, with what it takes and returns, is in
@@ -208,10 +209,13 @@ Content-Security-Policy that repeats it. It:
 - changes nothing without the user seeing the change and pressing **Apply**,
   and only when the manifest says `"ui": { "write": true }`;
 - sees **only the cluster of its tab**;
-- has **no network**: `fetch`, XHR and websockets are refused.
+- has **no network**: `fetch`, XHR and websockets are refused. With
+  `"ui": { "registries": true }` the app asks image registries on its behalf
+  — anonymously, and only about images the tab's cluster runs.
 
-The plugin's card in Settings says how many kinds its pages read and whether
-they may ask to change them, before anyone opens one. Keep `ui.kinds` to what
+The plugin's card in Settings says how many kinds its pages read, whether
+they may ask to change them, and whether they ask registries, before anyone
+opens one. Keep `ui.kinds` to what
 you use: it is the first thing a careful user reads.
 
 ## Credit

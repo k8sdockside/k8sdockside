@@ -562,6 +562,10 @@
                 "write": {
                     "type": "boolean",
                     "description": "Lets the pages ask to merge-patch those kinds. Every patch is confirmed by the user."
+                },
+                "registries": {
+                    "type": "boolean",
+                    "description": "Lets the pages ask the registries of images the cluster runs which tags they have (k8sdockside.registry.lookup). The app asks, anonymously and over https; the pages still have no network access. Needs K8s Dockside 0.0.25 or newer."
                 }
             }
         },

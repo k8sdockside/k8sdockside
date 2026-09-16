@@ -118,7 +118,7 @@
         /**
          * Resolves once the app has answered, with what this page is looking at:
          * { pluginId, viewId, sectionId, object, contextId, contextName,
-         *   readable, write, actions, plugin, theme }.
+         *   readable, write, registries, actions, plugin, theme }.
          *
          * `object` is { kind, namespace, name } for a section in an object's
          * detail view, and null for a view that is a tab of its own.
@@ -313,6 +313,23 @@
             /** Every key kept, sorted. */
             keys: function () {
                 return call('storage.keys');
+            },
+        },
+
+        /**
+         * Image registries, asked by the app: the page itself has no network.
+         * Needs "ui": { "registries": true }.
+         */
+        registry: {
+            /**
+             * What the image's registry says about it: { image, refresh? } ->
+             * { image, registry, repository, tag, tags, truncated, digest,
+             *   checkedAt, status, error }. `status` is ok, auth, missing,
+             * limited, unreachable or error; only a request the app refuses
+             * -- an image no pod in the cluster runs, say -- rejects.
+             */
+            lookup: function (query) {
+                return call('registry.lookup', query || {});
             },
         },
 

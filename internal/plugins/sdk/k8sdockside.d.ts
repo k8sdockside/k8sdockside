@@ -199,6 +199,12 @@ declare namespace K8sDockside {
         readable: Kind[];
         /** Whether the manifest says `"ui": { "write": true }` -- whether `patch` can be asked for at all. */
         write: boolean;
+        /**
+         * Whether the manifest says `"ui": { "registries": true }` -- whether
+         * `registry.lookup` can be asked at all. Absent on an app older than
+         * 0.0.25.
+         */
+        registries?: boolean;
         /** Every action the plugin declares, whether or not it is offered on anything right now. */
         actions: DeclaredAction[];
         /**
@@ -361,6 +367,70 @@ declare namespace K8sDockside {
         charts: Chart[];
         /** The window actually used, in minutes. */
         range: number;
+    }
+
+    // ----- registries -----------------------------------------------------------
+
+    /** What `registry.lookup` is asked. */
+    interface RegistryLookupQuery {
+        /** An image reference as a pod spec writes it: `nginx:1.27`, `ghcr.io/org/app:v1@sha256:…`. A pod in the cluster must run it. */
+        image: string;
+        /**
+         * Ask the registry again rather than use the app's recent answer,
+         * which it keeps for half an hour. An answer under a minute old is
+         * used anyway.
+         */
+        refresh?: boolean;
+    }
+
+    /**
+     * How the registry answered:
+     *
+     * - `ok`          -- it listed the tags
+     * - `auth`        -- it wants credentials: the app asks anonymously, so a private image cannot be checked
+     * - `missing`     -- it does not know the repository
+     * - `limited`     -- it is rate-limiting this address; try again later
+     * - `unreachable` -- it could not be reached: DNS, TLS, a timeout, or a registry that only speaks plain http
+     * - `error`       -- anything else; `error` says what
+     */
+    type RegistryStatus = 'ok' | 'auth' | 'missing' | 'limited' | 'unreachable' | 'error';
+
+    /** What `registry.lookup` resolves with. */
+    interface RegistryLookup {
+        /** The reference as asked. */
+        image: string;
+        /** The registry host, with Docker Hub's aliases folded into `docker.io`. */
+        registry: string;
+        /** The path in the registry, `library/` included for Docker Hub's official images. */
+        repository: string;
+        /** The tag the reference names: `latest` when none is written, `''` when only a digest is. */
+        tag: string;
+        /** Every tag the registry lists, in its order -- not sorted by version. */
+        tags: string[];
+        /** The registry had more than the 10000 tags the app reads. */
+        truncated: boolean;
+        /**
+         * What `tag` points at in the registry now: for a multi-platform image
+         * the index, which is also what a pod's `imageID` records when it was
+         * pulled by tag. `''` when unknown.
+         */
+        digest: string;
+        /** When the registry was asked, RFC 3339. */
+        checkedAt: string;
+        status: RegistryStatus;
+        /** What went wrong, in words; `''` when `status` is `ok`. */
+        error: string;
+    }
+
+    interface Registry {
+        /**
+         * Asks the image's registry which tags it has, and what the image's
+         * tag points at now. Needs `"ui": { "registries": true }`. Rejects
+         * when the plugin does not declare that, when the reference is not
+         * one, or when no pod in this cluster runs the image; a registry that
+         * fails resolves with a `status` other than `ok` instead.
+         */
+        lookup(query: RegistryLookupQuery): Promise<RegistryLookup>;
     }
 
     // ----- writing --------------------------------------------------------------
@@ -550,6 +620,12 @@ declare namespace K8sDockside {
          * optional: check for it, and fall back to the URL hash without it.
          */
         storage?: PluginStorage;
+
+        /**
+         * Image registries, asked by the app on the page's behalf. Absent on
+         * an app older than 0.0.25: check for it.
+         */
+        registry?: Registry;
     }
 }
 

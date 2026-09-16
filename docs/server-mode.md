@@ -422,6 +422,12 @@ running it some other way.
 - **The admin role is the server's, not the cluster's.** Admins manage users,
   sign-in providers, clusters and plugins; a plugin an admin installs is there
   for every user.
+- **Plugins can make the pod ask image registries.** A plugin that declares
+  `"ui": { "registries": true }` (Image inventory's Updates page does) has the
+  pod ask the registries of the images the cluster runs which tags they have:
+  anonymous https requests, only to hosts a pod already pulls from, answers
+  kept for half an hour. Without egress to those registries the page says it
+  could not reach them.
 - **Plugin views' files are served without a sign-in.** Everything under
   `/plugin-ui/` — the HTML, scripts, styles and images of enabled plugins'
   own views — can be read (`GET`/`HEAD` only) by anyone who can reach the

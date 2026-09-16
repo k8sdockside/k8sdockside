@@ -74,6 +74,30 @@ func TestACustomViewLoadsWithItsDefaults(t *testing.T) {
 	}
 }
 
+func TestOnlyADeclaredViewMayAskRegistries(t *testing.T) {
+	cat, _ := installCustom(t)
+	if p, _ := cat.Find("acme"); p.CanAskRegistries() {
+		t.Error("a plugin that does not declare registries may ask them")
+	}
+
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, "images"), "plugin.json", `{
+    "id": "images",
+    "name": "Images",
+    "requires": [{ "kind": "pods" }],
+    "ui": { "registries": true },
+    "views": [{ "id": "updates", "label": "Updates", "type": "custom" }]
+}`)
+	write(t, filepath.Join(dir, "images", "ui"), "index.html", "<p>updates</p>")
+	cat = Load(dir, nil, nil)
+	if len(cat.Problems) > 0 {
+		t.Fatalf("problems loading: %v", cat.Problems)
+	}
+	if p, _ := cat.Find("images"); !p.CanAskRegistries() || p.CanWrite("pods") {
+		t.Errorf("registries %v, write %v; want registries and no write", p.CanAskRegistries(), p.CanWrite("pods"))
+	}
+}
+
 func TestACustomViewWithoutAUIBlockGetsOne(t *testing.T) {
 	p, err := validate(Plugin{ID: "x", Views: []View{{ID: "v", Type: ViewCustom}}})
 	if err != nil {

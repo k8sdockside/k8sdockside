@@ -422,6 +422,7 @@ my-plugin/
 | `ui.dir` | optional | The folder, relative to the plugin's file. Defaults to `ui`. It may not leave the file's folder. |
 | `ui.kinds` | optional | Kinds the views may read, beyond those the plugin already names in `requires`, `views` and `cards`. |
 | `ui.write` | optional | Lets the views *ask* to merge-patch and create objects of those kinds. |
+| `ui.registries` | optional | Lets the views ask the registries of images the cluster runs which tags they have, with `registry.lookup`. The app asks, not the page. K8s Dockside 0.0.25 and newer. |
 
 A plugin with a custom view and no `ui` block gets the defaults: a `ui/` folder,
 read-only. A built-in's pages are embedded in the app from
@@ -435,7 +436,7 @@ The page includes the bridge, which the app serves, and uses it:
 <script src="/plugin-ui/_sdk/k8sdockside.js"></script>
 <script>
     k8sdockside.ready().then(async (ctx) => {
-        // ctx: { pluginId, viewId, contextId, contextName, readable, write, plugin, theme }
+        // ctx: { pluginId, viewId, contextId, contextName, readable, write, registries, plugin, theme }
         const meshes = await k8sdockside.list({ kind: 'crd:meshes.acme.io', namespace: '' });
         // ...draw them
     });
@@ -457,6 +458,7 @@ The page includes the bridge, which the app serves, and uses it:
 | `openView(viewId)` | Another of this plugin's views, or `overview`. |
 | `edit(ref)`, `logs(ref)` | The YAML editor or the log view, in the app. |
 | `openUrl(url)` | An `http(s)` address in the user's browser. |
+| `registry.lookup({ image, refresh? })` | What the registry of an image the cluster runs says about it: `{ image, registry, repository, tag, tags, truncated, digest, checkedAt, status, error }` — every tag it lists (up to 10000, in its own order), and the digest the image's tag points at now, comparable with a pod's `imageID`. The app asks, anonymously and over https, and keeps the answer for half an hour; `refresh` asks again if the answer is over a minute old. `status` is `ok`, `auth` (a private image: not checked), `missing`, `limited` (rate-limited), `unreachable` or `error`, with `error` in words; it rejects only when the plugin does not declare `ui.registries`, the reference is not one, or no pod in the tab's cluster runs the image. K8s Dockside 0.0.25 and newer: check `k8sdockside.registry` exists. |
 | `on('theme', fn)` | Called when the user changes theme. |
 | `storage.get(key)`, `storage.set(key, value)`, `storage.remove(key)`, `storage.keys()` | What the page keeps between sessions — a folded section, a filter — for this plugin on this tab's cluster. Values are anything JSON can hold, at most 16 KiB each and 64 keys per plugin and cluster. The app keeps them in its settings file, never in the cluster. K8s Dockside 0.0.19 and newer: check `k8sdockside.storage` exists, and keep state in the URL hash without it. |
 

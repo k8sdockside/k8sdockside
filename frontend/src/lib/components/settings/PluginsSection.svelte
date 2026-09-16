@@ -398,6 +398,7 @@
             <p class="counts" title={plugin.ui.readable.join(', ')}>
                 Own views · reads {plugin.ui.readable.length} kind{plugin.ui.readable.length === 1 ? '' : 's'}
                 {#if plugin.ui.write}· may ask to change them{/if}
+                {#if plugin.ui.registries}· asks registries about the images it sees{/if}
             </p>
         {/if}
         {#if objectExtras(plugin)}
