@@ -84,7 +84,7 @@ body{color:var(--text);margin:0;width:280px}
 button{font:inherit;color:inherit;background:none;border:none;padding:0;cursor:pointer}`;
 
 // Help has to be findable from where a new user is looking, which is the
-// sidebar. The other routes in are the View menu and F1, tested with them.
+// sidebar. The other routes in are the Help menu and F1, tested with them.
 
 beforeEach(() => {
     document.body.innerHTML = '';

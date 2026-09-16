@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import TopBar from './TopBar.svelte';
 
@@ -10,8 +10,8 @@ vi.mock('../state/subscriptions', () => ({
     subscribe: vi.fn(() => ({ setNamespaces: vi.fn(), close: vi.fn() })),
 }));
 
-// The View menu, which is the visible way back from a hidden panel. A
-// keyboard shortcut is no answer to "it has disappeared": if the cluster
+// The menu bar. Its View menu is the visible way back from a hidden panel: a
+// keyboard shortcut is no answer to "it has disappeared", so if the cluster
 // tree can be hidden, something on screen has to be able to bring it back.
 //
 // The real backend answers every settings write with the whole settings file,
@@ -57,6 +57,8 @@ vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/service
     ResourceService: {
         Describe: vi.fn().mockResolvedValue(''),
         Namespaces: vi.fn().mockResolvedValue(['default']),
+        Ping: vi.fn().mockResolvedValue(undefined),
+        Disconnect: vi.fn().mockResolvedValue(undefined),
         ResourceYAML: vi.fn().mockResolvedValue('kind: Pod\n'),
         ApplyYAML: vi.fn().mockResolvedValue('kind: Pod\n'),
         CheckYAML: vi.fn().mockResolvedValue({ valid: true, message: '', line: 0 }),
@@ -120,6 +122,9 @@ vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/service
 }));
 
 const { workspace, CLUSTERS_TAB_ID, clustersTab } = await import('../state/workspace.svelte');
+const { clusters } = await import('../state/health.svelte');
+const { search } = await import('../state/search.svelte');
+const { ResourceService } = await import('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services');
 
 const { SETTINGS, HELP, KUBERNETES } = await import('../catalogue');
 
@@ -133,9 +138,9 @@ const PROD = '/home/u/.kube/prod::admin@prod';
 const item = (name: string | RegExp) =>
     page.getByRole('menuitemcheckbox', { name }).or(page.getByRole('menuitem', { name }));
 
-async function openMenu(): Promise<void> {
-    await page.getByRole('button', { name: 'View' }).click();
-    await expect.element(page.getByRole('menu', { name: 'View' })).toBeVisible();
+async function openMenu(name = 'View'): Promise<void> {
+    await page.getByRole('button', { name, exact: true }).click();
+    await expect.element(page.getByRole('menu', { name })).toBeVisible();
 }
 
 beforeEach(() => {
@@ -224,18 +229,15 @@ test('settings can be opened even with the tree hidden', async () => {
     render(TopBar);
     workspace.toggleClusters();
 
-    await openMenu();
-    await item('Settings').click();
+    await openMenu('File');
+    await item(/Settings/).click();
 
     expect(workspace.allTabs.some((t) => t.kind === SETTINGS)).toBe(true);
 });
 
-// The trigger sits at the right end of the title bar, because the left of that
-// bar belongs to the macOS traffic lights and the middle to the title. A menu
-// that grows rightwards from a button in that position grows off the edge of
-// the window, and half of every label goes with it. A menu whose whole purpose
-// is to be found cannot be the thing that is half off screen.
-test('the menu opens inside the window, though its button is at the right edge', async () => {
+// A menu whose whole purpose is to be found cannot be the thing that is half
+// off screen.
+test('the menu opens inside the window', async () => {
     render(TopBar);
 
     await openMenu();
@@ -247,16 +249,67 @@ test('the menu opens inside the window, though its button is at the right edge',
     expect(box.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
 });
 
-// The two documentation pages sit in the menu above Settings, since a menu
-// whose purpose is to be found is where help belongs too.
+// The two documentation pages have a menu of their own.
 test('help and the Kubernetes primer can be opened from it', async () => {
     render(TopBar);
 
-    await openMenu();
+    await openMenu('Help');
     await item('Help').click();
     expect(workspace.allTabs.some((t) => t.kind === HELP)).toBe(true);
 
-    await openMenu();
+    await openMenu('Help');
     await item('Kubernetes primer').click();
     expect(workspace.allTabs.some((t) => t.kind === KUBERNETES)).toBe(true);
+});
+
+// Left, where desktop apps keep their menus, and away from the right-hand end
+// where Windows and most Linux desktops draw the window's own buttons.
+test('the menus are at the left of the bar, in order', async () => {
+    render(TopBar);
+
+    const bar = page.getByRole('menubar');
+    await expect.element(bar).toBeVisible();
+    const names = [...document.querySelectorAll('[role="menubar"] button[aria-haspopup="menu"]')].map((b) => b.textContent?.trim());
+    expect(names).toEqual(['File', 'Clusters', 'View', 'Help']);
+
+    const box = (document.querySelector('[role="menubar"]') as HTMLElement).getBoundingClientRect();
+    expect(box.right).toBeLessThan(document.documentElement.clientWidth / 2);
+});
+
+test('the arrow keys move between menus, and Escape closes them', async () => {
+    render(TopBar);
+
+    await openMenu('File');
+    await userEvent.keyboard('{ArrowRight}');
+    await expect.element(page.getByRole('menu', { name: 'Clusters' })).toBeVisible();
+    await userEvent.keyboard('{ArrowLeft}{ArrowLeft}');
+    await expect.element(page.getByRole('menu', { name: 'Help' })).toBeVisible();
+
+    await userEvent.keyboard('{Escape}');
+    await expect.element(page.getByRole('menu')).not.toBeInTheDocument();
+});
+
+test('a connected context can be disconnected from the Clusters menu, and then there is nothing to disconnect', async () => {
+    render(TopBar);
+    await clusters.probe(PROD);
+
+    await openMenu('Clusters');
+    await item('Disconnect admin@prod').click();
+
+    await vi.waitFor(() => expect(ResourceService.Disconnect).toHaveBeenCalledWith(PROD));
+    expect(clusters.of(PROD).status).toBe('unknown');
+
+    await openMenu('Clusters');
+    await expect.element(item('Disconnect all')).toBeDisabled();
+    await expect.element(item('Disconnect admin@prod')).not.toBeInTheDocument();
+});
+
+test('search every cluster puts the cursor in the search box', async () => {
+    render(TopBar);
+
+    await openMenu('Clusters');
+    await item(/Search every cluster/).click();
+
+    expect(search.open).toBe(true);
+    expect(document.activeElement?.tagName).toBe('INPUT');
 });

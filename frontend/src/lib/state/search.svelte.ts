@@ -51,6 +51,11 @@ class Search {
     scope = $state<Scope>('connected');
     /** Whether the panel under the box is showing. */
     open = $state(false);
+    /**
+     * Counts requests to put the cursor in the box, which the box watches:
+     * the menu bar asks for it, and only the box can take the focus.
+     */
+    focusRequests = $state(0);
 
     /** The search on screen, running or finished; null before the first. */
     current = $state<string | null>(null);
@@ -66,6 +71,11 @@ class Search {
     error = $state('');
 
     private count = 0;
+
+    /** Asks the search box to take the focus and show its panel, as ⌘K does. */
+    requestFocus(): void {
+        this.focusRequests++;
+    }
 
     /** Starts a search of these contexts, calling off whatever was running. */
     async start(query: string, contextIds: string[]): Promise<void> {

@@ -245,6 +245,14 @@
         }
     }
 
+    // A request from elsewhere -- the menu bar -- to do what ⌘K does.
+    $effect(() => {
+        if (search.focusRequests === 0) return;
+        search.open = true;
+        input?.focus();
+        input?.select();
+    });
+
     function clearQuery(): void {
         search.query = '';
         input?.focus();

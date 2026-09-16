@@ -5,7 +5,7 @@
   the old picker's "All namespaces" did: a filter that showed nothing until
   something was ticked would read as an empty cluster.
 
-  Built the way the View menu is: a trigger, a panel under it that closes on a
+  Built the way the title bar's menus are: a trigger, a panel under it that closes on a
   click anywhere else or on Escape, and arrow keys between the rows. Unlike a
   menu it stays open while rows are ticked, since ticking three is the point.
 -->

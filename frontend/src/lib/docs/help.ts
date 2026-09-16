@@ -174,7 +174,7 @@ export const HELP: Page = {
                     items: [
                         'A new tab opens beside the one you were looking at, in its context’s colour. Opening a view that is already open focuses it instead.',
                         '**Drag a tab** to reorder it, or into another panel to keep two views side by side.',
-                        'There are three panels: the main one, the one on the left holding the cluster tree, and the dock along the bottom. The **View** menu in the title bar shows and hides them, and can move the tree elsewhere.',
+                        'There are three panels: the main one, the one on the left holding the cluster tree, and the dock along the bottom. The **View** menu in the title bar shows and hides them, puts the layout back and sets the zoom. Beside it, **File** adds kubeconfigs and opens Settings, **Clusters** searches, rescans and disconnects, and **Help** opens this page.',
                         'The **details panel** opens where you last put it. Its tabs — Describe, YAML, Events and so on — are the same for every kind.',
                         'A tab with unsaved changes wears a dot instead of its close button.',
                         'Open tabs, the dock and the layout are restored next launch. Logs and shells are not, since they are connections rather than state.',

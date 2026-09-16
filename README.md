@@ -276,7 +276,7 @@ setup, persistence and the security model; the chart's options are in
 
 In the app: **Help** (F1, or the question mark in the sidebar) is the guide to
 the app itself, including how to write and install themes and plugins, and
-**Kubernetes primer** under the View menu explains the cluster and its terms
+**Kubernetes primer** under the Help menu explains the cluster and its terms
 for anyone new to it.
 
 - [Architecture](docs/architecture.md) — how the cluster data gets here, and the

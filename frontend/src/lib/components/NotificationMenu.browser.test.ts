@@ -19,7 +19,7 @@ const service = vi.hoisted(() => ({
 }));
 const { Status, Check, MarkRead, OpenRelease, OpenDownload } = service;
 
-// The rest of the backend is stubbed whole, the way the View menu's test does
+// The rest of the backend is stubbed whole, the way the menu bar's test does
 // it: the bell reports through the workspace, which names every service as it
 // loads, and a mocked module has to provide each name it is asked for.
 const settingsFile = vi.hoisted(() => {

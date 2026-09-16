@@ -11,7 +11,7 @@
   something. They are pages of the same site, meant to replace this one in the
   same tab the way any site's account menu does, and a link is the one thing a
   browser already knows how to do that with: middle-click, copy the address,
-  open in a new tab. Drawn like the View menu beside it -- see ViewMenu.svelte.
+  open in a new tab. Drawn like the menus in the bar -- see MenuBar.svelte.
 -->
 <script lang="ts">
     import { session } from '../state/session.svelte';
@@ -143,8 +143,8 @@
     .menu {
         position: absolute;
         top: calc(100% + 4px);
-        /* Anchored to the trigger's right edge for the reason the View menu
-           is: this sits at the right end of the title bar. */
+        /* Anchored to the trigger's right edge: this sits at the right end of
+           the title bar, and a panel growing rightwards would leave the window. */
         right: 0;
         min-width: 200px;
         padding: 4px;

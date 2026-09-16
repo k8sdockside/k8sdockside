@@ -10,10 +10,10 @@
   The title is centred on the window rather than in the space left over, so it
   does not drift as the panels are resized: the bar is three columns, and the
   two either side of the title are the same width whatever they hold. The left
-  one belongs to the traffic lights. The right one holds the search box, just
-  after the title, and the bell and the View menu at the far end, which is the
-  one part of the window that is there whatever else has been hidden -- see
-  SearchBar.svelte, NotificationMenu.svelte and ViewMenu.svelte.
+  one holds the menus -- after the traffic lights, on macOS -- which are the
+  one part of the window that is there whatever else has been hidden. The right
+  one holds the search box, just after the title, and the bell at the far end
+  -- see MenuBar.svelte, SearchBar.svelte and NotificationMenu.svelte.
 
   The web version adds who is signed in at the very end, where every site keeps
   it -- see AccountMenu.svelte. The desktop app has nobody to sign in, so its
@@ -23,12 +23,20 @@
     import { session } from '../state/session.svelte';
     import AccountMenu from './AccountMenu.svelte';
     import NotificationMenu from './NotificationMenu.svelte';
+    import MenuBar from './MenuBar.svelte';
     import SearchBar from './SearchBar.svelte';
-    import ViewMenu from './ViewMenu.svelte';
+
+    /**
+     * Whether the macOS traffic lights are drawn over the left of the bar:
+     * in the desktop app on a Mac, and not in a browser on one.
+     */
+    let trafficLights = $derived(navigator.platform.startsWith('Mac') && !session.server);
 </script>
 
 <header class="topbar">
-    <div class="lead"></div>
+    <div class="lead" class:traffic-lights={trafficLights}>
+        <MenuBar />
+    </div>
 
     <div class="title">
         <img src="/icon-ship.svg" alt="" width="18" height="18" />
@@ -39,7 +47,6 @@
         <SearchBar />
         <div class="menus">
             <NotificationMenu />
-            <ViewMenu />
             {#if session.server}
                 <AccountMenu />
             {/if}
@@ -68,6 +75,20 @@
         /* Dragging the bar moves the window, as a title bar should. Wails reads
            this property off the element under the pointer. */
         --wails-draggable: drag;
+    }
+
+    .lead {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        padding-left: 8px;
+    }
+
+    /* The traffic lights sit at the left of this bar, at their real size
+       whatever the zoom: 12px buttons from about 20px in, 20px apart. The
+       menus start clear of them. */
+    .lead.traffic-lights {
+        padding-left: calc(84px / var(--app-zoom, 1));
     }
 
     .title {

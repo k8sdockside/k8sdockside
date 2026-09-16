@@ -8,7 +8,7 @@
   for that release, and it stays away across restarts until a newer one is out.
 
   The only news it carries today is a new release. Drawn by the app rather than
-  the platform for the reason the View menu is -- see ViewMenu.svelte.
+  the platform for the reason the menus are -- see MenuBar.svelte.
 
   The web version keeps the bell, as the fixed place news would arrive, but has
   no release news to put in it: the server is upgraded by whoever runs it, not
@@ -234,8 +234,8 @@
         position: absolute;
         outline: none;
         top: calc(100% + 4px);
-        /* Anchored to the trigger's right edge for the reason the View menu
-           is: this sits at the right end of the title bar. */
+        /* Anchored to the trigger's right edge: this sits at the right end of
+           the title bar, and a panel growing rightwards would leave the window. */
         right: 0;
         width: 320px;
         padding: 6px;
