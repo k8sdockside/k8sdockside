@@ -109,11 +109,20 @@ func details(p plugins.Plugin) []string {
 	out = append(out, strings.Join(parts, ", "))
 
 	if p.UI != nil {
-		line := fmt.Sprintf("its pages read %s", strings.Join(p.UI.Readable, ", "))
+		line := "its pages read no kinds"
+		if len(p.UI.Readable) > 0 {
+			line = fmt.Sprintf("its pages read %s", strings.Join(p.UI.Readable, ", "))
+		}
 		if p.UI.Write {
 			line += ", and may ask to change them"
 		}
 		out = append(out, line)
+		if p.UI.Registries {
+			out = append(out, "its pages ask registries about the images the cluster runs")
+		}
+		for _, svc := range p.UI.Services {
+			out = append(out, fmt.Sprintf("its pages call %s (%s) at %s", svc.Label, svc.Describe(), strings.Join(svc.Paths, ", ")))
+		}
 	}
 	if p.MinAppVersion != "" {
 		out = append(out, "needs K8s Dockside "+strings.TrimPrefix(p.MinAppVersion, "v")+" or newer")

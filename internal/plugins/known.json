@@ -32,6 +32,38 @@
         "official": true
     },
     {
+        "id": "cilium",
+        "name": "Cilium",
+        "tagline": "eBPF networking, identities and the policies between them",
+        "icon": "shield",
+        "description": "Every endpoint as a hexagon coloured by whether policy protects it, every network policy drawn as a flow from who may connect to where it may go, the datapath read from cilium-config, and nodes, LB IPAM pools, L2 announcements and BGP sessions with what is wrong with them.",
+        "repo": "https://github.com/rogerwesterbo/k8sdockside-cilium.git",
+        "author": "Roger Westerbo",
+        "authorUrl": "https://github.com/rogerwesterbo",
+        "detect": ["crd:ciliumnetworkpolicies.cilium.io"],
+        "links": [
+            { "label": "cilium.io", "url": "https://cilium.io" },
+            { "label": "GitHub", "url": "https://github.com/cilium/cilium" }
+        ],
+        "official": true
+    },
+    {
+        "id": "calico",
+        "name": "Calico",
+        "tagline": "pod networking, IPAM and tiered network policy",
+        "icon": "policy",
+        "description": "Policy tiers as lanes in the order Calico evaluates them, a trace of one pod's traffic tier by tier, every IP pool as a map of its blocks and addresses, the BGP mesh and peers with their session states, and Whisker's flow logs: who talks to whom and what is denied, by which policy.",
+        "repo": "https://github.com/rogerwesterbo/k8sdockside-calico.git",
+        "author": "Roger Westerbo",
+        "authorUrl": "https://github.com/rogerwesterbo",
+        "detect": ["crd:ippools.crd.projectcalico.org"],
+        "links": [
+            { "label": "projectcalico.org", "url": "https://www.projectcalico.org" },
+            { "label": "GitHub", "url": "https://github.com/projectcalico/calico" }
+        ],
+        "official": true
+    },
+    {
         "id": "kubevirt",
         "name": "KubeVirt",
         "tagline": "virtual machines as Kubernetes objects",

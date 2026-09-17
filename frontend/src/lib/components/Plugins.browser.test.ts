@@ -75,6 +75,7 @@ vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/service
         List: vi.fn().mockResolvedValue({ plugins: [], dir: '', folders: [], problems: [] }),
         Reload: vi.fn().mockResolvedValue({ plugins: [], dir: '', folders: [], problems: [] }),
         Summary,
+        ServiceGet: vi.fn().mockResolvedValue({ service: 'calico-system/whisker:8081', status: 200, contentType: 'application/json', body: '{}' }),
     },
     TerminalService: {
         Containers: vi.fn().mockResolvedValue([]),
@@ -311,7 +312,7 @@ test('a plugin with an overview of its own opens that page in its frame', async 
                 id: 'acme',
                 name: 'Acme',
                 origin: '/plugins/acme/plugin.json',
-                ui: { readable: [], write: false, registries: false },
+                ui: { readable: [], write: false, registries: false, services: [] },
                 overview: { entry: 'home.html' },
             },
         ],
@@ -327,6 +328,54 @@ test('a plugin with an overview of its own opens that page in its frame', async 
     expect(frame?.getAttribute('src')).toBe('/plugin-ui/acme/home.html?scheme=dark');
     expect(frame?.getAttribute('sandbox')).toBe('allow-scripts');
     expect(frame?.getAttribute('title')).toBe('Acme: Acme');
+});
+
+// A page may call only the services its plugin declares, and the query it
+// sends reaches Go as lists of strings whatever shape the page gave it.
+test('a page calls the services its plugin declares, and no others', async () => {
+    const { PluginService } = await import('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services');
+    const ServiceGet = vi.mocked(PluginService.ServiceGet);
+    ServiceGet.mockClear();
+    const PluginFrame = (await import('./PluginFrame.svelte')).default;
+    workspace.pluginCatalogue = {
+        plugins: [
+            {
+                ...structuredClone(ARGO),
+                id: 'flows',
+                name: 'Flows',
+                origin: '/plugins/flows/plugin.json',
+                ui: {
+                    readable: [],
+                    write: false,
+                    registries: false,
+                    services: [{ id: 'whisker', label: 'Whisker', where: 'the service labelled k8s-app=whisker:8081', paths: ['/whisker-backend/'] }],
+                },
+                overview: { entry: 'index.html' },
+            },
+        ],
+        dir: '',
+        folders: [],
+        problems: [],
+    };
+    render(PluginFrame, { contextId: PROD, kind: 'plugin:flows/overview' });
+    const frame = document.querySelector('iframe')!;
+
+    const ask = (id: number, params: Record<string, unknown>) =>
+        window.dispatchEvent(
+            new MessageEvent('message', {
+                data: { protocol: 'k8sdockside/plugin@1', id, method: 'services.get', params },
+                source: frame.contentWindow,
+            }),
+        );
+    ask(1, { service: 'whisker', path: '/whisker-backend/flows', query: { limit: 50, filter: ['a', 'b'], watch: false, skip: null } });
+    ask(2, { service: 'prometheus', path: '/api/v1/query' });
+
+    await vi.waitFor(() => expect(ServiceGet).toHaveBeenCalledTimes(1));
+    expect(ServiceGet).toHaveBeenCalledWith(PROD, 'flows', 'whisker', '/whisker-backend/flows', {
+        limit: ['50'],
+        filter: ['a', 'b'],
+        watch: ['false'],
+    });
 });
 
 // The links say what a plugin is about; the generated overview carries them
@@ -430,7 +479,7 @@ test("a plugin's frame follows the app's zoom by scaling, not by zooming", async
                 id: 'acme',
                 name: 'Acme',
                 origin: '/plugins/acme/plugin.json',
-                ui: { readable: [], write: false, registries: false },
+                ui: { readable: [], write: false, registries: false, services: [] },
                 overview: { entry: 'home.html' },
             },
         ],

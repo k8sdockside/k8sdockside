@@ -3,6 +3,7 @@ package kube
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"sync"
 	"time"
 
@@ -66,6 +67,12 @@ type clusterClient struct {
 	// through and dropped with it. See cpudelay.go.
 	delayMu      sync.Mutex
 	delaySamples map[string]nodeSample
+
+	// proxyHTTP is the client plugin views' service calls go through, built
+	// from cfg on first use. See serviceproxy.go.
+	proxyOnce sync.Once
+	proxyHTTP *http.Client
+	proxyErr  error
 }
 
 // resetEvery bounds how often a miss in the mapper may throw the discovery

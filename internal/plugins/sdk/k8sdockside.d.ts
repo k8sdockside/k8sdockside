@@ -205,6 +205,11 @@ declare namespace K8sDockside {
          * 0.0.25.
          */
         registries?: boolean;
+        /**
+         * The in-cluster services the manifest lets the page call with
+         * `services.get`. Absent on an app older than 0.0.27.
+         */
+        services?: DeclaredService[];
         /** Every action the plugin declares, whether or not it is offered on anything right now. */
         actions: DeclaredAction[];
         /**
@@ -433,6 +438,59 @@ declare namespace K8sDockside {
         lookup(query: RegistryLookupQuery): Promise<RegistryLookup>;
     }
 
+    // ----- services in the cluster ---------------------------------------------
+
+    /** One of the services the manifest declares in `"ui": { "services": [...] }`. */
+    interface DeclaredService {
+        id: string;
+        label: string;
+        /** The path prefixes the page may request. */
+        paths: string[];
+    }
+
+    /** A query parameter's value; a list sends the parameter once per item. */
+    type QueryValue = string | number | boolean | Array<string | number | boolean>;
+
+    /** What `services.get` and `services.json` are asked. */
+    interface ServiceRequest {
+        /** The id of a service the manifest declares. */
+        service: string;
+        /**
+         * The path to request, under one of the service's declared prefixes:
+         * absolute and already clean -- no `..`, `//`, `%`, `?` or `#`. Put
+         * values in `query`, where they are encoded for you.
+         */
+        path: string;
+        query?: Record<string, QueryValue>;
+    }
+
+    /** What the service answered, as it answered it. */
+    interface ServiceAnswer {
+        /** The Service that answered, as `namespace/name:port`. */
+        service: string;
+        /** The service's own HTTP status: a 404 here is the service's, not the app's. */
+        status: number;
+        contentType: string;
+        /** The answer as text, at most 8 MiB. */
+        body: string;
+    }
+
+    interface Services {
+        /**
+         * Makes a GET request to one of the plugin's declared services,
+         * through the API server's service proxy, and resolves with whatever
+         * it answered. Rejects when the service or path is not declared, when
+         * the Service cannot be found or reached, when the proxy is not
+         * allowed (it needs `services/proxy`), and after 15 seconds.
+         */
+        get(request: ServiceRequest): Promise<ServiceAnswer>;
+        /**
+         * `get`, then the body parsed as JSON. Rejects on a status outside
+         * 200-299, with the service's own words when it gave any.
+         */
+        json<T = unknown>(request: ServiceRequest): Promise<T>;
+    }
+
     // ----- writing --------------------------------------------------------------
 
     interface PatchRequest {
@@ -626,6 +684,12 @@ declare namespace K8sDockside {
          * an app older than 0.0.25: check for it.
          */
         registry?: Registry;
+
+        /**
+         * The in-cluster services the manifest declares, called by the app on
+         * the page's behalf. Absent on an app older than 0.0.27: check for it.
+         */
+        services?: Services;
     }
 }
 

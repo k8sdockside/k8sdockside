@@ -400,6 +400,14 @@
                 {#if plugin.ui.write}· may ask to change them{/if}
                 {#if plugin.ui.registries}· asks registries about the images it sees{/if}
             </p>
+            {#if plugin.ui.services.length}
+                <p
+                    class="counts"
+                    title={plugin.ui.services.map((s) => `${s.label}: ${s.where}, ${s.paths.join(' ')}`).join('\n')}
+                >
+                    Calls {plugin.ui.services.map((s) => s.label).join(', ')} in the cluster · GET only
+                </p>
+            {/if}
         {/if}
         {#if objectExtras(plugin)}
             <p class="counts" title={(plugin.actions ?? []).map((a) => `${a.label} on ${a.kind}`).join('\n')}>

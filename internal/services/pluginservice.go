@@ -5,6 +5,7 @@ import (
 	json "encoding/json/v2"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -52,6 +53,9 @@ type PluginService struct {
 	// running is, per context, which images its pods run -- the only images a
 	// view may ask a registry about.
 	running map[string]runningImages
+	// found is where the services plugins find by selector were last found,
+	// per context and plugin. See serviceTarget.
+	found map[string]foundService
 }
 
 // NewPluginService wires the service to the settings store, and to the cluster
@@ -63,6 +67,7 @@ func NewPluginService(store *appconfig.Store, configs *KubeconfigService, watche
 		watcher:    watcher,
 		registries: registry.New("k8sdockside/" + DisplayVersion() + " (+https://github.com/" + updates.Repo + ")"),
 		running:    map[string]runningImages{},
+		found:      map[string]foundService{},
 	}
 }
 
@@ -316,6 +321,129 @@ func imagesIn(pods []map[string]any) map[string]bool {
 		}
 	}
 	return out
+}
+
+// ServiceGet makes a GET request, for a plugin's own view, to one of the
+// in-cluster Services the plugin declares -- through the API server's service
+// proxy -- and returns what the Service answered.
+//
+// The view names only the declared service and a path; where the request goes
+// is the manifest's, and the path must sit under one of the prefixes it
+// declares. A Service found by a selector is looked for again after a short
+// while, so a reinstall in another namespace is followed.
+func (s *PluginService) ServiceGet(ctx context.Context, contextID, pluginID, serviceID, path string, query map[string][]string) (kube.ServiceAnswer, error) {
+	plugin, ok := s.catalogue().Find(pluginID)
+	if !ok {
+		return kube.ServiceAnswer{}, fmt.Errorf("no plugin called %q is installed", pluginID)
+	}
+	if plugin.Disabled {
+		return kube.ServiceAnswer{}, fmt.Errorf("the %s plugin is switched off in Settings", plugin.Name)
+	}
+	svc, ok := plugin.Service(serviceID)
+	if !ok {
+		return kube.ServiceAnswer{}, fmt.Errorf("the %s plugin does not declare a service %q in \"ui\": {\"services\": [...]}, so its views cannot call it", plugin.Name, serviceID)
+	}
+	if !svc.Allows(path) {
+		return kube.ServiceAnswer{}, fmt.Errorf("the %s plugin may not request %q from %s -- it declares %s", plugin.Name, path, svc.Label, strings.Join(svc.Paths, ", "))
+	}
+	params, err := serviceQuery(query)
+	if err != nil {
+		return kube.ServiceAnswer{}, err
+	}
+	kc, ok := s.configs.lookup(contextID)
+	if !ok {
+		return kube.ServiceAnswer{}, fmt.Errorf("unknown context %q -- it may have been removed from the kubeconfig", contextID)
+	}
+	target, err := s.serviceTarget(kc, pluginID, svc)
+	if err != nil {
+		return kube.ServiceAnswer{}, err
+	}
+	return s.watcher.ServiceGet(ctx, kc, target, path, params)
+}
+
+// foundService is where a service found by a selector was, and when.
+type foundService struct {
+	target kube.ServiceTarget
+	at     time.Time
+}
+
+// foundTTL is how long a Service found by a selector is used before it is
+// looked for again. A page polls; one lookup answers a burst of its calls.
+const foundTTL = 30 * time.Second
+
+// serviceTarget works out which Service port a declared service is.
+func (s *PluginService) serviceTarget(kc kube.Context, pluginID string, svc plugins.UIService) (kube.ServiceTarget, error) {
+	if svc.Name != "" {
+		return kube.ServiceTarget{Namespace: svc.Namespace, Name: svc.Name, Port: string(svc.Port), Scheme: svc.Scheme}, nil
+	}
+
+	key := kc.ID + "\x00" + pluginID + "\x00" + svc.ID
+	s.mu.RLock()
+	kept, ok := s.found[key]
+	s.mu.RUnlock()
+	if ok && time.Since(kept.at) < foundTTL {
+		return kept.target, nil
+	}
+
+	candidates, err := s.watcher.FindServices(kc, svc.Namespace, svc.Selector)
+	if err != nil {
+		return kube.ServiceTarget{}, fmt.Errorf("could not look for %s: %w", svc.Label, err)
+	}
+	target, ok := pickService(candidates, svc)
+	if !ok {
+		where := "any namespace"
+		if svc.Namespace != "" {
+			where = svc.Namespace
+		}
+		return kube.ServiceTarget{}, fmt.Errorf("no service labelled %s with a port %s in %s -- is %s installed?", svc.Selector, svc.Port, where, svc.Label)
+	}
+	s.mu.Lock()
+	s.found[key] = foundService{target: target, at: time.Now()}
+	s.mu.Unlock()
+	return target, nil
+}
+
+// pickService is the first candidate that has the declared port, by name or
+// by number.
+func pickService(candidates []kube.ServiceFound, svc plugins.UIService) (kube.ServiceTarget, bool) {
+	number, byNumber := svc.Port.Number()
+	for _, c := range candidates {
+		for _, port := range c.Ports {
+			if port.Name == string(svc.Port) || (byNumber && int(port.Number) == number) {
+				return kube.ServiceTarget{Namespace: c.Namespace, Name: c.Name, Port: string(svc.Port), Scheme: svc.Scheme}, true
+			}
+		}
+	}
+	return kube.ServiceTarget{}, false
+}
+
+// Limits on the query a view sends with a service call.
+const (
+	maxQueryKeys  = 64
+	maxQueryBytes = 16 << 10
+)
+
+// serviceQuery checks the query parameters a view asked for and encodes them.
+func serviceQuery(query map[string][]string) (url.Values, error) {
+	if len(query) > maxQueryKeys {
+		return nil, fmt.Errorf("a service call may carry at most %d query parameters", maxQueryKeys)
+	}
+	out := url.Values{}
+	size := 0
+	for key, values := range query {
+		if key == "" {
+			return nil, errors.New("a query parameter has no name")
+		}
+		size += len(key)
+		for _, value := range values {
+			size += len(value)
+		}
+		out[key] = slices.Clone(values)
+	}
+	if size > maxQueryBytes {
+		return nil, fmt.Errorf("the query is %d bytes; a service call may carry at most %d KiB", size, maxQueryBytes>>10)
+	}
+	return out, nil
 }
 
 // assetMiddleware serves plugins' own views to the webview, and keeps them

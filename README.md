@@ -215,6 +215,8 @@ See [docs/development.md](docs/development.md).
 - More a button away in *Settings → Plugins*:
   [cert-manager](https://github.com/rogerwesterbo/k8sdockside-certmanager),
   [MetalLB](https://github.com/rogerwesterbo/k8sdockside-metallb),
+  [Cilium](https://github.com/rogerwesterbo/k8sdockside-cilium),
+  [Calico](https://github.com/rogerwesterbo/k8sdockside-calico),
   [KubeVirt](https://github.com/rogerwesterbo/k8sdockside-kubevirt),
   [Vitistack](https://github.com/rogerwesterbo/k8sdockside-vitistack) and an
   [image inventory](https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript),

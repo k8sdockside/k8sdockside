@@ -576,6 +576,71 @@
                 "registries": {
                     "type": "boolean",
                     "description": "Lets the pages ask the registries of images the cluster runs which tags they have (k8sdockside.registry.lookup). The app asks, anonymously and over https; the pages still have no network access. Needs K8s Dockside 0.0.25 or newer."
+                },
+                "services": {
+                    "type": "array",
+                    "maxItems": 8,
+                    "items": {
+                        "$ref": "#/definitions/uiService"
+                    },
+                    "description": "In-cluster Services the pages may make GET requests to (k8sdockside.services.get), through the API server's service proxy. The pages pick one of these and a path under its prefixes; nothing else. Needs K8s Dockside 0.0.27 or newer."
+                }
+            }
+        },
+        "uiService": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "port",
+                "paths"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$",
+                    "description": "What the pages name the service by."
+                },
+                "label": {
+                    "type": "string",
+                    "maxLength": 60,
+                    "description": "How the app names it on the plugin's card. Defaults to the service name."
+                },
+                "namespace": {
+                    "type": "string",
+                    "description": "Where the Service is. Required with name; with selector it narrows the search."
+                },
+                "name": {
+                    "type": "string",
+                    "description": "The Service's name. Give name or selector, not both."
+                },
+                "selector": {
+                    "type": "string",
+                    "description": "A label selector that finds the Service wherever it is installed. The first match with the port is used."
+                },
+                "port": {
+                    "type": [
+                        "string",
+                        "integer"
+                    ],
+                    "description": "The Service port, by name or number."
+                },
+                "scheme": {
+                    "type": "string",
+                    "enum": [
+                        "http",
+                        "https"
+                    ],
+                    "description": "How the API server reaches the Service. Defaults to http."
+                },
+                "paths": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string",
+                        "pattern": "^/"
+                    },
+                    "description": "Path prefixes the pages may request, each a whole number of segments: \"/api\" allows /api/flows, not /apikeys."
                 }
             }
         },

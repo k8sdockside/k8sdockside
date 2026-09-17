@@ -133,6 +133,9 @@ func expected(t reflect.Type) string {
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
+	if t == reflect.TypeFor[ServicePort]() {
+		return "a port name or number"
+	}
 	switch t.Kind() {
 	case reflect.String:
 		return "a string"

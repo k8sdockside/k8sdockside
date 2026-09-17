@@ -10,6 +10,13 @@ function adoptLinks(links: bindings.Link[] | null | undefined): PluginLink[] {
     return (links ?? []).map((l) => ({ label: l.label || l.url, url: l.url }));
 }
 
+/** Where a declared service is, worded as UIService.Describe words it in Go. */
+function describeService(svc: bindings.UIService): string {
+    let where = svc.name || `the service labelled ${svc.selector ?? ''}`;
+    if (svc.namespace) where = `${svc.namespace}/${where}`;
+    return `${where}:${svc.port}`;
+}
+
 export function adoptPlugin(plugin: bindings.Plugin): Plugin {
     return {
         id: plugin.id,
@@ -45,6 +52,12 @@ export function adoptPlugin(plugin: bindings.Plugin): Plugin {
                   readable: [...(plugin.ui.readable ?? [])],
                   write: plugin.ui.write ?? false,
                   registries: plugin.ui.registries ?? false,
+                  services: (plugin.ui.services ?? []).map((svc) => ({
+                      id: svc.id,
+                      label: svc.label || svc.name || svc.id,
+                      where: describeService(svc),
+                      paths: [...(svc.paths ?? [])],
+                  })),
               }
             : null,
         actions: (plugin.actions ?? []).map((a) => ({ id: a.id, label: a.label, kind: a.kind })),

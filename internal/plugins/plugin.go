@@ -273,6 +273,9 @@ type UI struct {
 	// which tags they have -- anonymously, through the app, since the views
 	// themselves cannot reach the network. See registry.Client.
 	Registries bool `json:"registries,omitzero"`
+	// Services are the in-cluster Services the views may make GET requests
+	// to, through the API server. See UIService.
+	Services []UIService `json:"services,omitzero"`
 	// Readable is every kind the views may read, worked out by the loader --
 	// Kinds plus everything else the plugin names -- and ignored on the way
 	// in. Both sides check against this one list.
@@ -1007,6 +1010,12 @@ func validateUI(p *Plugin) error {
 		}
 		ui.Kinds[i] = kind
 	}
+
+	services, err := validateServices(p.ID, slices.Clone(ui.Services))
+	if err != nil {
+		return err
+	}
+	ui.Services = services
 
 	ui.Readable = readableKinds(*p, ui.Kinds)
 	p.UI = &ui

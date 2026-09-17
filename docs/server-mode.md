@@ -428,6 +428,12 @@ running it some other way.
   anonymous https requests, only to hosts a pod already pulls from, answers
   kept for half an hour. Without egress to those registries the page says it
   could not reach them.
+- **Plugins can make the pod call services in the cluster.** A plugin that
+  declares `"ui": { "services": [...] }` has the pod make GET requests,
+  through the API server's service proxy and as the pod's own identity, to
+  the Services and paths its manifest names — for every user who opens its
+  pages. It needs `services/proxy` on those Services; without it the page
+  says it was not allowed.
 - **Plugin views' files are served without a sign-in.** Everything under
   `/plugin-ui/` — the HTML, scripts, styles and images of enabled plugins'
   own views — can be read (`GET`/`HEAD` only) by anyone who can reach the

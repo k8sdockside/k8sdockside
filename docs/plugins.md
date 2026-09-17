@@ -7,7 +7,8 @@ names like `kustomize.toolkit.fluxcd.io`.
 
 Three ship with the app: Argo CD, Flux and Prometheus. Others live in
 repositories of their own and are a button away in **Settings → Plugins →
-Available**: cert-manager, MetalLB, KubeVirt, Vitistack and an image inventory. The
+Available**: cert-manager, MetalLB, Cilium, Calico, KubeVirt, Vitistack, an
+optimization advisor and an image inventory. The
 sidebar suggests one for any cluster running what it is about. Anything else is
 a JSON file you drop in a folder, or a repository you give the address of.
 
@@ -78,6 +79,8 @@ definitions.
 | --- | --- | --- | --- |
 | cert-manager | Roger Westerbo | [rogerwesterbo/k8sdockside-certmanager](https://github.com/rogerwesterbo/k8sdockside-certmanager) | `crd:certificates.cert-manager.io` |
 | MetalLB | Roger Westerbo | [rogerwesterbo/k8sdockside-metallb](https://github.com/rogerwesterbo/k8sdockside-metallb) | `crd:ipaddresspools.metallb.io` |
+| Cilium | Roger Westerbo | [rogerwesterbo/k8sdockside-cilium](https://github.com/rogerwesterbo/k8sdockside-cilium) | `crd:ciliumnetworkpolicies.cilium.io` |
+| Calico | Roger Westerbo | [rogerwesterbo/k8sdockside-calico](https://github.com/rogerwesterbo/k8sdockside-calico) | `crd:ippools.crd.projectcalico.org` |
 | KubeVirt | Roger Westerbo | [rogerwesterbo/k8sdockside-kubevirt](https://github.com/rogerwesterbo/k8sdockside-kubevirt) | `crd:virtualmachines.kubevirt.io` |
 | Vitistack | Roger Westerbo | [rogerwesterbo/k8sdockside-vitistack](https://github.com/rogerwesterbo/k8sdockside-vitistack) | `crd:kubernetesclusters.vitistack.io` |
 | Image inventory | Roger Westerbo | [rogerwesterbo/k8sdockside-example-plugin-typescript](https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript) | — works on any cluster |
@@ -424,6 +427,7 @@ my-plugin/
 | `ui.kinds` | optional | Kinds the views may read, beyond those the plugin already names in `requires`, `views` and `cards`. |
 | `ui.write` | optional | Lets the views *ask* to merge-patch and create objects of those kinds. |
 | `ui.registries` | optional | Lets the views ask the registries of images the cluster runs which tags they have, with `registry.lookup`. The app asks, not the page. K8s Dockside 0.0.25 and newer. |
+| `ui.services` | optional | In-cluster Services the views may make GET requests to, with `services.get`. See [Calling a service in the cluster](#calling-a-service-in-the-cluster). K8s Dockside 0.0.27 and newer. |
 
 A plugin with a custom view and no `ui` block gets the defaults: a `ui/` folder,
 read-only. A built-in's pages are embedded in the app from
@@ -460,6 +464,7 @@ The page includes the bridge, which the app serves, and uses it:
 | `edit(ref)`, `logs(ref)` | The YAML editor or the log view, in the app. |
 | `openUrl(url)` | An `http(s)` address in the user's browser. |
 | `registry.lookup({ image, refresh? })` | What the registry of an image the cluster runs says about it: `{ image, registry, repository, tag, tags, truncated, digest, checkedAt, status, error }` — every tag it lists (up to 10000, in its own order), and the digest the image's tag points at now, comparable with a pod's `imageID`. The app asks, anonymously and over https, and keeps the answer for half an hour; `refresh` asks again if the answer is over a minute old. `status` is `ok`, `auth` (a private image: not checked), `missing`, `limited` (rate-limited), `unreachable` or `error`, with `error` in words; it rejects only when the plugin does not declare `ui.registries`, the reference is not one, or no pod in the tab's cluster runs the image. K8s Dockside 0.0.25 and newer: check `k8sdockside.registry` exists. |
+| `services.get({ service, path, query? })` | A GET request to one of the Services the manifest declares, made by the app through the API server's service proxy: `{ service, status, contentType, body }`, the status and body being the Service's own. `services.json(...)` does the same and parses the body, rejecting on a status outside 200–299. Rejects when the service or path is not declared, the Service cannot be found or reached, or the proxy is not allowed. K8s Dockside 0.0.27 and newer: check `k8sdockside.services` exists. |
 | `on('theme', fn)` | Called when the user changes theme. |
 | `storage.get(key)`, `storage.set(key, value)`, `storage.remove(key)`, `storage.keys()` | What the page keeps between sessions — a folded section, a filter — for this plugin on this tab's cluster. Values are anything JSON can hold, at most 16 KiB each and 64 keys per plugin and cluster. The app keeps them in its settings file, never in the cluster. K8s Dockside 0.0.19 and newer: check `k8sdockside.storage` exists, and keep state in the URL hash without it. |
 
@@ -472,6 +477,60 @@ and [k8sdockside-certmanager](https://github.com/rogerwesterbo/k8sdockside-certm
 in plain script — views, panels and an overview of their own — and the built-in
 Argo CD plugin's pages, in `internal/plugins/builtin/ui/argocd/`, which are the
 same thing shipped with the app.
+
+### Calling a service in the cluster
+
+Some of what a product knows is not in the Kubernetes API: flow logs, a query
+API, a status page, served by the product's own Service. A plugin can name
+those Services, and its views ask the app to make GET requests to them:
+
+```json
+"ui": {
+    "services": [
+        {
+            "id": "flows",
+            "label": "Flow logs",
+            "selector": "k8s-app=flow-api",
+            "port": "http",
+            "paths": ["/api/v1/flows"]
+        }
+    ]
+}
+```
+
+```js
+const flows = await k8sdockside.services.json({
+    service: 'flows',
+    path: '/api/v1/flows',
+    query: { limit: 100, namespace: ['shop', 'data'] },
+});
+```
+
+| Field | | |
+| --- | --- | --- |
+| `id` | required | What the views name the service by. |
+| `label` | optional | How the plugin's card names it. Defaults to the service name. |
+| `name`, `namespace` | | The Service by name, with its namespace. |
+| `selector`, `namespace` | | Or by a label selector, for a product whose namespace or release name varies; `namespace` is then optional. The first Service found with the port is used, in namespace and name order. Give `name` or `selector`, not both. |
+| `port` | required | The Service port, by name or number. |
+| `scheme` | optional | `http`, the default, or `https`. The API server makes the connection. |
+| `paths` | required | The path prefixes the views may request, each a whole number of segments: `/api` allows `/api/flows`, not `/apikeys`. |
+
+The request goes through the API server's service proxy, with the
+credentials the app already has — the same route the charts take to a
+Prometheus — so it needs the `services/proxy` permission, which the built-in
+`edit` and `admin` roles have and `view` does not. The connection to the
+Service's pods is made by the API server, so a network policy covering them
+has to let it in; one that does not makes the call time out. The view chooses
+only which declared service and which path under its prefixes; a path is
+taken only as it is, so `..`, `//`, `%`, `?` and `#` are refused, and
+parameters go in `query`. Requests are GET only, answered within 15 seconds
+and at most 8 MiB, and the body arrives as text. What the Service answers,
+a 404 included, is returned as it is; what the API server refuses — the
+permission, a missing Service, one with no ready pod — rejects with that said.
+
+A plugin can declare at most eight services, and its card in **Settings →
+Plugins** names them before any of its views is opened.
 
 ### Writing the pages in TypeScript, or with a framework
 
@@ -497,7 +556,8 @@ Lit, plain DOM. Three things differ from building for a normal web page:
    pages builds each on its own.
 3. **No network.** `fetch`, XHR and websockets are refused by the page's
    Content-Security-Policy; everything about the cluster comes through
-   `window.k8sdockside`. Bundle fonts and images, or inline them.
+   `window.k8sdockside` — a service in the cluster through `services.get`.
+   Bundle fonts and images, or inline them.
 
 Commit what the build produces. Installing from a repository clones it and
 reads `plugin.json` and the ui folder as they are; nothing is built on the
@@ -518,8 +578,11 @@ sandboxed frame. What the page learns about the cluster, it asks the app for.
   dialog the page cannot reach, with the object and cluster it is for, and
   applied only on **Apply change** or **Create**.
 - It sees only the cluster of the tab it is in.
+- It reaches **only the services the plugin declares**, with GET requests the
+  app makes, and only under the paths declared.
 - **Settings → Plugins** lists, on the plugin's card, how many kinds its views
-  read (hover for which) and whether they may ask to change them.
+  read (hover for which), whether they may ask to change them, and which
+  services they call.
 
 What it *can* do is read the kinds it declares and, if it navigates its frame
 somewhere else, send what it read there. That is the honest limit of running

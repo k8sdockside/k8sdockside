@@ -118,7 +118,7 @@
         /**
          * Resolves once the app has answered, with what this page is looking at:
          * { pluginId, viewId, sectionId, object, contextId, contextName,
-         *   readable, write, registries, actions, plugin, theme }.
+         *   readable, write, registries, services, actions, plugin, theme }.
          *
          * `object` is { kind, namespace, name } for a section in an object's
          * detail view, and null for a view that is a tab of its own.
@@ -330,6 +330,36 @@
              */
             lookup: function (query) {
                 return call('registry.lookup', query || {});
+            },
+        },
+
+        /**
+         * Services in the cluster, called by the app through the API server's
+         * service proxy. Needs "ui": { "services": [...] } declaring each one
+         * and the paths the page may request. GET only.
+         */
+        services: {
+            /**
+             * { service, path, query? } -> { service, status, contentType, body }.
+             * `service` is a declared id; `path` sits under one of its
+             * prefixes. The status is the service's own.
+             */
+            get: function (request) {
+                return call('services.get', request || {});
+            },
+            /** get, then the body as JSON; rejects on a status outside 200-299. */
+            json: function (request) {
+                return call('services.get', request || {}).then(function (answer) {
+                    if (answer.status < 200 || answer.status > 299) {
+                        var said = String(answer.body || '').trim().slice(0, 300);
+                        throw new Error(answer.service + ' answered ' + answer.status + (said ? ': ' + said : ''));
+                    }
+                    try {
+                        return JSON.parse(answer.body);
+                    } catch (err) {
+                        throw new Error(answer.service + ' did not answer with JSON (' + (answer.contentType || 'no content type') + ')');
+                    }
+                });
             },
         },
 

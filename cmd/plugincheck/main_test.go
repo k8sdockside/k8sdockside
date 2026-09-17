@@ -30,6 +30,30 @@ func TestASoundPluginPasses(t *testing.T) {
 	}
 }
 
+// What a plugin's pages can reach beyond the cluster's objects is said, so a
+// reviewer reads it before anyone installs the plugin.
+func TestWhatThePagesReachIsSaid(t *testing.T) {
+	dir := writePlugin(t, `{"id": "flows", "minAppVersion": "0.0.27",
+		"ui": {"registries": true, "services": [{"id": "whisker", "label": "Whisker", "namespace": "calico-system", "name": "whisker", "port": 8081, "paths": ["/whisker-backend/flows"]}]},
+		"views": [{"id": "pods", "kind": "pods"}]}`)
+	if err := os.Mkdir(filepath.Join(dir, "ui"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if code := run([]string{dir}, &out, &out); code != 0 {
+		t.Fatalf("exit %d:\n%s", code, out.String())
+	}
+	for _, want := range []string{
+		"its pages read pods",
+		"its pages ask registries",
+		"its pages call Whisker (calico-system/whisker:8081) at /whisker-backend/flows",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output lacks %q:\n%s", want, out.String())
+		}
+	}
+}
+
 func TestABrokenPluginFailsWithEveryReason(t *testing.T) {
 	dir := writePlugin(t, `{"id": "acme", "icon": "rocketship", "views": [{"id": "pods", "kind": "widgets"}]}`)
 	var out bytes.Buffer

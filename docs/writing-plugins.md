@@ -166,6 +166,7 @@ through `window.k8sdockside`. Each call is a promise; a failure rejects with an
 | Moving around the app | `open(ref)`, `openView(id)`, `edit(ref)`, `logs(ref)`, `openUrl(url)` |
 | Staying in step | `on('theme', fn)`, `resize(height)` in a panel |
 | Registries | `registry.lookup({ image })` — the tags an image's registry lists and what its tag points at now, asked by the app for an image the cluster runs (0.0.25 and newer; needs `"ui": { "registries": true }`) |
+| Services in the cluster | `services.get({ service, path, query })`, `services.json(...)` — a GET to a Service the manifest declares, made by the app through the API server (0.0.27 and newer; needs `"ui": { "services": [...] }`) |
 | Remembering | `storage.get(key)`, `storage.set(key, value)`, `storage.remove(key)`, `storage.keys()` — kept by the app per plugin and per cluster, across restarts (0.0.19 and newer; check it exists) |
 
 Every call, with what it takes and returns, is in
@@ -211,11 +212,13 @@ Content-Security-Policy that repeats it. It:
 - sees **only the cluster of its tab**;
 - has **no network**: `fetch`, XHR and websockets are refused. With
   `"ui": { "registries": true }` the app asks image registries on its behalf
-  — anonymously, and only about images the tab's cluster runs.
+  — anonymously, and only about images the tab's cluster runs. With
+  `"ui": { "services": [...] }` the app makes GET requests for it to the
+  Services declared there, under the paths declared there, and nowhere else.
 
 The plugin's card in Settings says how many kinds its pages read, whether
-they may ask to change them, and whether they ask registries, before anyone
-opens one. Keep `ui.kinds` to what
+they may ask to change them, whether they ask registries, and which services
+they call, before anyone opens one. Keep `ui.kinds` to what
 you use: it is the first thing a careful user reads.
 
 ## Credit

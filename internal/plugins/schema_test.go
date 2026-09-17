@@ -54,6 +54,7 @@ func TestTheSchemaDescribesEveryManifestField(t *testing.T) {
 		"usage":       reflect.TypeFor[UsageQueries](),
 		"usagePair":   reflect.TypeFor[UsagePair](),
 		"ui":          reflect.TypeFor[UI](),
+		"uiService":   reflect.TypeFor[UIService](),
 		"action":      reflect.TypeFor[Action](),
 		"condition":   reflect.TypeFor[Condition](),
 		"request":     reflect.TypeFor[Request](),

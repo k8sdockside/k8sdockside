@@ -48,6 +48,20 @@ export interface PluginUI {
     write: boolean;
     /** Whether the views may ask registries about the images the cluster runs. */
     registries: boolean;
+    /** The in-cluster Services the views may make GET requests to. */
+    services: PluginServiceAccess[];
+}
+
+/**
+ * One Service a plugin's views may call, as the settings card and the frame
+ * need it. Where requests go and which paths are allowed are checked in Go.
+ */
+export interface PluginServiceAccess {
+    id: string;
+    label: string;
+    /** Where it is, as `namespace/name:port` or by its selector. */
+    where: string;
+    paths: string[];
 }
 
 /**

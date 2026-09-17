@@ -186,6 +186,22 @@
         return wanted;
     }
 
+    /**
+     * A service call's query as the Go side takes it: each parameter a list of
+     * strings. A page may give a single value, a number or a boolean.
+     */
+    function queryOf(value: unknown): Record<string, string[]> {
+        const out: Record<string, string[]> = {};
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) return out;
+        const scalar = (v: unknown): string | null =>
+            typeof v === 'string' ? v : typeof v === 'number' || typeof v === 'boolean' ? String(v) : null;
+        for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+            const values = (Array.isArray(raw) ? raw : [raw]).map(scalar).filter((v): v is string => v !== null);
+            if (values.length) out[key] = values;
+        }
+        return out;
+    }
+
     function targetOf(params: Record<string, unknown>): DetailTarget {
         return {
             contextId,
@@ -237,6 +253,7 @@
                     readable: [...(p.ui?.readable ?? [])],
                     write: p.ui?.write ?? false,
                     registries: p.ui?.registries ?? false,
+                    services: (p.ui?.services ?? []).map((svc) => ({ id: svc.id, label: svc.label, paths: [...svc.paths] })),
                     actions: (p.actions ?? []).map((a) => ({ id: a.id, label: a.label, kind: a.kind })),
                     // What the plugin says about itself, so a page that is its
                     // own overview can link to what it is about the way the
@@ -336,6 +353,15 @@
                     params.refresh === true,
                 );
                 return { ...found, tags: found?.tags ?? [] };
+            }
+            case 'services.get': {
+                // A GET to one of the plugin's declared in-cluster services,
+                // made by the app through the API server. Go checks the
+                // declaration again, and that the path is under its prefixes.
+                const id = text(params.service);
+                const svc = (p.ui?.services ?? []).find((s) => s.id === id);
+                if (!svc) throw new Error(`${p.name} does not declare a service "${id}" in "ui": { "services": [...] }`);
+                return PluginService.ServiceGet(contextId, p.id, svc.id, text(params.path), queryOf(params.query));
             }
             case 'patch': {
                 const target = targetOf(params);
