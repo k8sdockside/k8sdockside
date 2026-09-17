@@ -132,7 +132,73 @@ func (s *ActionService) Restart(contextID, kind, namespace, name string) error {
 	return s.watcher.Restart(kc, kind, namespace, name)
 }
 
-// Cordon closes a node to new work, or reopens it.
+// Suspend stops a Job or CronJob, or lets it carry on.
+func (s *ActionService) Suspend(contextID, kind, namespace, name string, on bool) error {
+	kc, err := s.resolve(contextID)
+	if err != nil {
+		return err
+	}
+	return s.watcher.Suspend(kc, kind, namespace, name, on)
+}
+
+// PauseRollout holds a Deployment's rollout, or lets it go on: `kubectl
+// rollout pause` and `resume`.
+func (s *ActionService) PauseRollout(contextID, namespace, name string, on bool) error {
+	kc, err := s.resolve(contextID)
+	if err != nil {
+		return err
+	}
+	return s.watcher.PauseRollout(kc, namespace, name, on)
+}
+
+// TriggerCronJob runs a CronJob now and returns the name of the Job it made.
+func (s *ActionService) TriggerCronJob(contextID, namespace, name string) (string, error) {
+	kc, err := s.resolve(contextID)
+	if err != nil {
+		return "", err
+	}
+	return s.watcher.TriggerCronJob(kc, namespace, name)
+}
+
+// Evict moves one pod through the eviction API, which a disruption budget can
+// refuse.
+func (s *ActionService) Evict(contextID, namespace, name string) error {
+	kc, err := s.resolve(contextID)
+	if err != nil {
+		return err
+	}
+	return s.watcher.Evict(kc, namespace, name)
+}
+
+// AnswerCSR approves or denies a certificate signing request.
+func (s *ActionService) AnswerCSR(contextID, name string, approve bool) error {
+	kc, err := s.resolve(contextID)
+	if err != nil {
+		return err
+	}
+	return s.watcher.AnswerCSR(kc, name, approve)
+}
+
+// RolloutHistory reads a Deployment's, StatefulSet's or DaemonSet's
+// revisions, newest first.
+func (s *ActionService) RolloutHistory(contextID, kind, namespace, name string) ([]kube.RolloutRevision, error) {
+	kc, err := s.resolve(contextID)
+	if err != nil {
+		return []kube.RolloutRevision{}, err
+	}
+	return s.watcher.RolloutHistory(kc, kind, namespace, name)
+}
+
+// RollbackWorkload puts a workload back to an earlier revision: `kubectl
+// rollout undo --to-revision`.
+func (s *ActionService) RollbackWorkload(contextID, kind, namespace, name string, revision int64) error {
+	kc, err := s.resolve(contextID)
+	if err != nil {
+		return err
+	}
+	return s.watcher.Rollback(kc, kind, namespace, name, revision)
+}
+
 // VMOperation runs one virtual machine lifecycle operation: start, stop,
 // restart, pause, unpause, softreboot or migrate. The virtctl set, minus the
 // two that are a terminal rather than a command -- see kube/kubevirtops.go for
@@ -155,6 +221,7 @@ func (s *ActionService) VMState(contextID, kind, namespace, name string) (kube.V
 	return s.watcher.VMState(kc, kind, namespace, name)
 }
 
+// Cordon closes a node to new work, or reopens it.
 func (s *ActionService) Cordon(contextID, name string, on bool) error {
 	kc, err := s.resolve(contextID)
 	if err != nil {

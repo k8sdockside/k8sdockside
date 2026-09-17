@@ -238,6 +238,20 @@ func (s *ResourceService) Describe(contextID, kind, namespace, name string, reve
 	return s.watcher.Describe(ctx, kind, namespace, name, reveal)
 }
 
+// ObjectLinks reads what the detail panel lays out above the report: the
+// object's conditions, the objects it names, and the pods it selects.
+//
+// A call of its own rather than part of Describe, so the report is on screen
+// as soon as it is read, and a cluster that refuses the pod listing costs the
+// panel one section rather than the report.
+func (s *ResourceService) ObjectLinks(contextID, kind, namespace, name string) (kube.ObjectLinks, error) {
+	kc, err := s.resolve(contextID)
+	if err != nil {
+		return kube.ObjectLinks{Conditions: []kube.Condition{}, References: []kube.Reference{}}, err
+	}
+	return s.watcher.ObjectLinks(kc, kind, namespace, name)
+}
+
 // ResourceYAML returns one object as the YAML the editor opens with. It is a
 // live read rather than the informer's copy: the cache drops managed fields and
 // redacts secret values, and an editor must open on the object rather than on

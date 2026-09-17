@@ -97,7 +97,7 @@ func discoveryFixture() []*metav1.APIResourceList {
 			{Name: "pods/log", Kind: "Pod", Namespaced: true, Verbs: []string{"get"}},
 			{Name: "services", SingularName: "service", Kind: "Service", Namespaced: true, ShortNames: []string{"svc"}, Verbs: list},
 			{Name: "events", SingularName: "event", Kind: "Event", Namespaced: true, ShortNames: []string{"ev"}, Verbs: list},
-			{Name: "podtemplates", SingularName: "podtemplate", Kind: "PodTemplate", Namespaced: true, Verbs: list},
+			{Name: "componentstatuses", SingularName: "componentstatus", Kind: "ComponentStatus", ShortNames: []string{"cs"}, Verbs: []string{"get", "list"}},
 			{Name: "bindings", Kind: "Binding", Namespaced: true, Verbs: []string{"create"}},
 		}},
 		{GroupVersion: "argoproj.io/v1alpha1", APIResources: []metav1.APIResource{

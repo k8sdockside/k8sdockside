@@ -371,12 +371,13 @@ wants a proxy in front of it, or the service form.
 
 ### Icons
 
-Any of: `alert`, `bell`, `book`, `box`, `check`, `chevron-down`, `chevron-left`,
-`chevron-right`, `chevron-up`, `chip`, `clock`, `close`, `collapse-all`,
-`columns`, `copies`, `copy`, `dashboard`, `database`, `display`, `dock-bottom`,
-`dock-left`, `dock-right`, `dot`, `download`, `drive`, `edit`, `expand-all`,
-`file`, `folder`, `folder-plus`, `forward`, `gateway`, `gauge`, `globe`,
-`grant`, `graph`, `helm`, `help`, `info`, `layers`, `link`, `lock`, `minus`,
+Any of: `alert`, `bell`, `book`, `box`, `certificate`, `check`, `chevron-down`,
+`chevron-left`, `chevron-right`, `chevron-up`, `chip`, `clock`, `close`,
+`collapse-all`, `columns`, `copies`, `copy`, `dashboard`, `database`, `display`,
+`dock-bottom`, `dock-left`, `dock-right`, `dot`, `download`, `drive`, `edit`,
+`exit`, `expand-all`, `file`, `folder`, `folder-plus`, `forward`, `gateway`,
+`gauge`, `globe`, `grant`, `graph`, `helm`, `help`, `history`, `info`,
+`layers`, `link`, `lock`, `minus`,
 `monitor`, `moon`, `pause`, `pin`, `play`, `plus`, `policy`, `power`,
 `priority`, `puzzle`, `refresh`, `repeat`, `restore`, `rocket`, `route`,
 `rows`, `save`, `scale`, `search`, `server`, `settings`, `share`, `shield`,

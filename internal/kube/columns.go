@@ -607,6 +607,43 @@ var builtinColumns = map[string][]column{
 	KindClusterRoles:        roleColumns,
 	KindRoleBindings:        bindingColumns,
 	KindClusterRoleBindings: bindingColumns,
+
+	// ---- The rest of what Kubernetes serves: see kindcolumns.go ------------
+	KindControllerRevisions: controllerRevisionColumns,
+	KindPodTemplates:        podTemplateColumns,
+	KindLeaseCandidates:     leaseCandidateColumns,
+
+	KindServiceCIDRs: serviceCIDRColumns,
+	KindIPAddresses:  ipAddressColumns,
+
+	KindVolumeAttachments:       volumeAttachmentColumns,
+	KindVolumeAttributesClasses: volumeAttributesClassColumns,
+	KindCSIDrivers:              csiDriverColumns,
+	KindCSINodes:                csiNodeColumns,
+	KindCSIStorageCapacities:    csiStorageCapacityColumns,
+
+	KindCSRs:                   csrColumns,
+	KindClusterTrustBundles:    clusterTrustBundleColumns,
+	KindPodCertificateRequests: podCertificateRequestColumns,
+
+	KindWorkloads:          workloadAPIColumns,
+	KindPodGroups:          podGroupColumns,
+	KindCompositePodGroups: compositePodGroupColumns,
+	KindEvictionRequests:   evictionRequestColumns,
+	KindEvictions:          evictionColumns,
+
+	KindDeviceClasses:              deviceClassColumns,
+	KindResourceClaims:             resourceClaimColumns,
+	KindResourceClaimTemplates:     resourceClaimTemplateColumns,
+	KindResourceSlices:             resourceSliceColumns,
+	KindDeviceTaintRules:           deviceTaintRuleColumns,
+	KindResourcePoolStatusRequests: resourcePoolStatusRequestColumns,
+
+	KindAPIServices:                 apiServiceColumns,
+	KindFlowSchemas:                 flowSchemaColumns,
+	KindPriorityLevelConfigurations: priorityLevelColumns,
+	KindStorageVersions:             storageVersionColumns,
+	KindStorageVersionMigrations:    storageVersionMigrationColumns,
 }
 
 // roleColumns is shared by Roles and ClusterRoles, which differ only in scope.

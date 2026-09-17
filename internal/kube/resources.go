@@ -164,6 +164,57 @@ const (
 	KindClusterRoles        = "clusterroles"
 	KindClusterRoleBindings = "clusterrolebindings"
 
+	// Workload bookkeeping: the revisions a StatefulSet or DaemonSet rolls
+	// back to, and the pod templates a few controllers keep as objects.
+	KindControllerRevisions = "controllerrevisions"
+	KindPodTemplates        = "podtemplates"
+
+	// The candidates for a lease, which is how the control plane picks a
+	// leader among components of different versions during an upgrade.
+	KindLeaseCandidates = "leasecandidates"
+
+	// The ranges Services take their cluster IPs from, and each IP taken.
+	KindServiceCIDRs = "servicecidrs"
+	KindIPAddresses  = "ipaddresses"
+
+	// How a volume reaches a node: the CSI drivers, what each node runs, the
+	// attachments between them, and what a class of volume may be changed to.
+	KindVolumeAttachments       = "volumeattachments"
+	KindVolumeAttributesClasses = "volumeattributesclasses"
+	KindCSIDrivers              = "csidrivers"
+	KindCSINodes                = "csinodes"
+	KindCSIStorageCapacities    = "csistoragecapacities"
+
+	// Certificates the cluster is asked to sign, and the roots it publishes.
+	KindCSRs                   = "certificatesigningrequests"
+	KindClusterTrustBundles    = "clustertrustbundles"
+	KindPodCertificateRequests = "podcertificaterequests"
+
+	// Gang scheduling, and the eviction API that asks a pod's responders
+	// before it evicts. All of these are new and may be switched off.
+	KindWorkloads          = "workloads"
+	KindPodGroups          = "podgroups"
+	KindCompositePodGroups = "compositepodgroups"
+	KindEvictionRequests   = "evictionrequests"
+	KindEvictions          = "evictions"
+
+	// Dynamic resource allocation: GPUs and other devices, claimed the way a
+	// volume is.
+	KindDeviceClasses              = "deviceclasses"
+	KindResourceClaims             = "resourceclaims"
+	KindResourceClaimTemplates     = "resourceclaimtemplates"
+	KindResourceSlices             = "resourceslices"
+	KindDeviceTaintRules           = "devicetaintrules"
+	KindResourcePoolStatusRequests = "resourcepoolstatusrequests"
+
+	// The API server's own configuration: what it aggregates, how it shares
+	// its capacity out, and the versions it stores objects at.
+	KindAPIServices                 = "apiservices"
+	KindFlowSchemas                 = "flowschemas"
+	KindPriorityLevelConfigurations = "prioritylevelconfigurations"
+	KindStorageVersions             = "storageversions"
+	KindStorageVersionMigrations    = "storageversionmigrations"
+
 	// Not a Kubernetes kind: Helm keeps its releases in Secrets, and this one is
 	// served by decoding them rather than by watching a resource. See helm.go.
 	KindHelmReleases = "helmreleases"

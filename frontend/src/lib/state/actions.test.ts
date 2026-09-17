@@ -10,6 +10,13 @@ const Restart = vi.fn();
 const Cordon = vi.fn();
 const Drain = vi.fn();
 const CancelDrain = vi.fn();
+const Suspend = vi.fn();
+const PauseRollout = vi.fn();
+const TriggerCronJob = vi.fn();
+const Evict = vi.fn();
+const AnswerCSR = vi.fn();
+const RolloutHistory = vi.fn();
+const RollbackWorkload = vi.fn();
 
 // The drain event handler is captured as it registers, so a test can deliver a
 // report exactly as Wails would.
@@ -41,7 +48,25 @@ vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/service
         Open: vi.fn().mockResolvedValue('logs-1'),
         Close: vi.fn(),
     },
-    ActionService: { ObjectState, Delete, DeleteMany, PatchMany, PreviewPatch, Scale, Restart, Cordon, Drain, CancelDrain },
+    ActionService: {
+        ObjectState,
+        Delete,
+        DeleteMany,
+        PatchMany,
+        PreviewPatch,
+        Scale,
+        Restart,
+        Cordon,
+        Drain,
+        CancelDrain,
+        Suspend,
+        PauseRollout,
+        TriggerCronJob,
+        Evict,
+        AnswerCSR,
+        RolloutHistory,
+        RollbackWorkload,
+    },
 }));
 
 const { actions, DRAIN_DEFAULTS } = await import('./actions.svelte');
@@ -53,7 +78,16 @@ const DEPLOYMENT = { contextId: 'cfg::prod', kind: 'deployments', namespace: 'de
 // `vm` is false for every kind that is not a KubeVirt machine, which is what
 // keeps a Deployment from growing Start and Stop buttons.
 const NOT_A_MACHINE = { isMachine: false, running: false, paused: false, migratable: false, status: '' };
-const IDLE = { scalable: false, replicas: 0, cordoned: false, containers: [], vm: NOT_A_MACHINE };
+const IDLE = {
+    scalable: false,
+    replicas: 0,
+    cordoned: false,
+    containers: [],
+    suspended: false,
+    paused: false,
+    pending: false,
+    vm: NOT_A_MACHINE,
+};
 
 /** One drain report, as the backend sends it. */
 function report(over: Record<string, unknown> = {}) {
@@ -154,6 +188,76 @@ describe('the one-shot actions', () => {
 
         expect(Delete).toHaveBeenCalledWith('cfg::prod', 'deployments', 'default', 'web');
         expect(changes.revision(DEPLOYMENT)).toBe(before);
+    });
+});
+
+describe('the kind-specific actions', () => {
+    const CRONJOB = { contextId: 'cfg::prod', kind: 'cronjobs', namespace: 'ops', name: 'backup' };
+    const POD = { contextId: 'cfg::prod', kind: 'pods', namespace: 'default', name: 'web-1' };
+
+    beforeEach(() => {
+        for (const mock of [Suspend, PauseRollout, Evict, AnswerCSR, RollbackWorkload]) {
+            mock.mockReset().mockResolvedValue(undefined);
+        }
+        TriggerCronJob.mockReset().mockResolvedValue('backup-manual-1');
+        RolloutHistory.mockReset().mockResolvedValue([]);
+        ObjectState.mockResolvedValue({ scalable: false, replicas: 0, cordoned: false, containers: [] });
+    });
+
+    test('suspend and pause send the flag they are given, and say the object changed', async () => {
+        const before = changes.revision(CRONJOB);
+
+        await actions.suspend(CRONJOB, true);
+        await actions.pause(DEPLOYMENT, false);
+
+        expect(Suspend).toHaveBeenCalledWith('cfg::prod', 'cronjobs', 'ops', 'backup', true);
+        expect(PauseRollout).toHaveBeenCalledWith('cfg::prod', 'default', 'web', false);
+        expect(changes.revision(CRONJOB)).toBe(before + 1);
+    });
+
+    test('run now answers with the job it started', async () => {
+        await expect(actions.trigger(CRONJOB)).resolves.toBe('backup-manual-1');
+        expect(TriggerCronJob).toHaveBeenCalledWith('cfg::prod', 'ops', 'backup');
+    });
+
+    // Like a delete: the pod is on its way out.
+    test('an eviction does not ask anything to re-read the pod', async () => {
+        const before = changes.revision(POD);
+
+        await actions.evict(POD);
+
+        expect(Evict).toHaveBeenCalledWith('cfg::prod', 'default', 'web-1');
+        expect(changes.revision(POD)).toBe(before);
+    });
+
+    test('a refused eviction carries the reason', async () => {
+        Evict.mockRejectedValue(new Error('Cannot evict pod as it would violate the pod’s disruption budget.'));
+
+        await expect(actions.evict(POD)).rejects.toThrow('disruption budget');
+    });
+
+    // Go sends null for a revision with no images, and for no revisions.
+    test('a history with nothing in it reads as empty lists', async () => {
+        RolloutHistory.mockResolvedValueOnce(null);
+        await expect(actions.history(DEPLOYMENT)).resolves.toEqual([]);
+
+        RolloutHistory.mockResolvedValueOnce([{ revision: 2, images: null, changeCause: '', age: '1h', current: true }]);
+        const got = await actions.history(DEPLOYMENT);
+        expect(got[0].images).toEqual([]);
+    });
+
+    test('rollback sends the revision chosen', async () => {
+        await actions.undo(DEPLOYMENT, 4);
+
+        expect(RollbackWorkload).toHaveBeenCalledWith('cfg::prod', 'deployments', 'default', 'web', 4);
+    });
+
+    test('an answer to a signing request says which', async () => {
+        const csr = { contextId: 'cfg::prod', kind: 'certificatesigningrequests', namespace: '', name: 'csr-1' };
+
+        await actions.answer(csr, false);
+
+        expect(AnswerCSR).toHaveBeenCalledWith('cfg::prod', 'csr-1', false);
     });
 });
 

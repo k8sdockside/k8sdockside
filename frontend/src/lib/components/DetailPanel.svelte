@@ -21,6 +21,7 @@
     import HelmRelease from './HelmRelease.svelte';
     import Icon from './Icon.svelte';
     import ObjectActions from './ObjectActions.svelte';
+    import ObjectLinks from './ObjectLinks.svelte';
     import PluginFrame from './PluginFrame.svelte';
     import { detail } from '../state/detail.svelte';
     import { notices } from '../state/notices.svelte';
@@ -242,6 +243,12 @@
                     namespace={target.namespace}
                     name={target.name}
                 />
+            {/if}
+
+            {#if !isRelease}
+                <!-- What the object's status says, what it names, and the
+                     pods it selects: each a link to open in this panel. -->
+                <ObjectLinks object={target} revision={detail.revision} conditions={!isMachine} />
             {/if}
 
             <!-- Panels plugins bring for this kind: a page of the plugin's own

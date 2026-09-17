@@ -22,6 +22,12 @@ export interface ObjectState {
     cordoned: boolean;
     /** A pod's containers, as the same squares the table draws. */
     containers: kube.Pill[];
+    /** A Job's or CronJob's spec.suspend. */
+    suspended: boolean;
+    /** A Deployment's spec.paused. */
+    paused: boolean;
+    /** A certificate signing request nobody has answered yet. */
+    pending: boolean;
     /**
      * A virtual machine's lifecycle state, for the bar that offers Start or
      * Stop but never both. `isMachine` is false for every other kind, which is
@@ -79,6 +85,15 @@ export interface DrainState {
     done: boolean;
 }
 
+/** One entry in a workload's rollout history. */
+export interface RolloutRevision {
+    revision: number;
+    images: string[];
+    changeCause: string;
+    age: string;
+    current: boolean;
+}
+
 /** One object of a kind, as a table row names it. */
 export interface RowRef {
     namespace: string;
@@ -103,7 +118,16 @@ export interface BulkReport {
 }
 
 const NOT_A_MACHINE = { isMachine: false, running: false, paused: false, migratable: false, status: '' };
-const UNKNOWN: ObjectState = { scalable: false, replicas: 0, cordoned: false, containers: [], vm: NOT_A_MACHINE };
+const UNKNOWN: ObjectState = {
+    scalable: false,
+    replicas: 0,
+    cordoned: false,
+    containers: [],
+    suspended: false,
+    paused: false,
+    pending: false,
+    vm: NOT_A_MACHINE,
+};
 
 function key(ref: ObjectRef): string {
     return `${ref.contextId}#${ref.kind}#${ref.namespace}#${ref.name}`;
@@ -168,6 +192,9 @@ class Actions {
                 cordoned: state.cordoned,
                 // Null rather than empty is what Go sends for a kind with none.
                 containers: state.containers ?? [],
+                suspended: state.suspended ?? false,
+                paused: state.paused ?? false,
+                pending: state.pending ?? false,
                 // Only asked for the two KubeVirt kinds, and only after the
                 // first call has answered: every other object pays nothing for
                 // a question that is not about it.
@@ -292,6 +319,63 @@ class Actions {
 
     async restart(ref: ObjectRef): Promise<void> {
         await this.run(ref, () => ActionService.Restart(ref.contextId, ref.kind, ref.namespace, ref.name));
+    }
+
+    /** Suspends a Job or CronJob, or lets it carry on. */
+    async suspend(ref: ObjectRef, on: boolean): Promise<void> {
+        await this.run(ref, () => ActionService.Suspend(ref.contextId, ref.kind, ref.namespace, ref.name, on));
+    }
+
+    /** Holds a Deployment's rollout, or lets it go on. */
+    async pause(ref: ObjectRef, on: boolean): Promise<void> {
+        await this.run(ref, () => ActionService.PauseRollout(ref.contextId, ref.namespace, ref.name, on));
+    }
+
+    /**
+     * Runs a CronJob now. Resolves with the name of the Job it started, which
+     * is the one thing worth telling whoever pressed the button.
+     */
+    async trigger(ref: ObjectRef): Promise<string> {
+        let created = '';
+        await this.run(ref, async () => {
+            created = await ActionService.TriggerCronJob(ref.contextId, ref.namespace, ref.name);
+        });
+        return created;
+    }
+
+    /**
+     * Evicts a pod. Like `remove`, nothing is signalled as changed: the pod is
+     * on its way out, and a panel re-reading it would soon be reading nothing.
+     */
+    async evict(ref: ObjectRef): Promise<void> {
+        try {
+            await ActionService.Evict(ref.contextId, ref.namespace, ref.name);
+        } catch (err) {
+            throw message(err);
+        }
+    }
+
+    /** Approves or denies a certificate signing request. */
+    async answer(ref: ObjectRef, approve: boolean): Promise<void> {
+        await this.run(ref, () => ActionService.AnswerCSR(ref.contextId, ref.name, approve));
+    }
+
+    /** A workload's revisions, newest first. */
+    async history(ref: ObjectRef): Promise<RolloutRevision[]> {
+        try {
+            const got = await ActionService.RolloutHistory(ref.contextId, ref.kind, ref.namespace, ref.name);
+            // Null rather than empty is what Go sends for none.
+            return (got ?? []).map((r) => ({ ...r, images: r.images ?? [] }));
+        } catch (err) {
+            throw message(err);
+        }
+    }
+
+    /** Puts a workload back to an earlier revision. */
+    async undo(ref: ObjectRef, revision: number): Promise<void> {
+        await this.run(ref, () =>
+            ActionService.RollbackWorkload(ref.contextId, ref.kind, ref.namespace, ref.name, revision),
+        );
     }
 
     async cordon(ref: ObjectRef, on: boolean): Promise<void> {

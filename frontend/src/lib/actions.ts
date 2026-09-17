@@ -14,6 +14,13 @@ export type ActionId =
     | 'forward'
     | 'scale'
     | 'restart'
+    | 'undo'
+    | 'pause'
+    | 'suspend'
+    | 'trigger'
+    | 'evict'
+    | 'approve'
+    | 'deny'
     | 'nodepods'
     | 'vmstart'
     | 'vmstop'
@@ -33,9 +40,10 @@ export type ActionId =
  * How choosing an action behaves.
  *
  * `immediate` runs at once, `confirm` replaces the bar with a question naming
- * the object, and `number` asks for a replica count first.
+ * the object, and `number` asks for a replica count first. `revision` picks one
+ * of a Helm release's revisions, and `history` one of a workload's.
  */
-export type ActionForm = 'immediate' | 'confirm' | 'number' | 'ports' | 'revision';
+export type ActionForm = 'immediate' | 'confirm' | 'number' | 'ports' | 'revision' | 'history';
 
 export interface Action {
     id: ActionId;
@@ -71,6 +79,42 @@ const SHELL: Action = { id: 'shell', label: 'Shell', icon: 'terminal', form: 'im
 const FORWARD: Action = { id: 'forward', label: 'Forward', icon: 'forward', form: 'ports' };
 const SCALE: Action = { id: 'scale', label: 'Scale', icon: 'scale', form: 'number' };
 const RESTART: Action = { id: 'restart', label: 'Restart', icon: 'repeat', form: 'immediate' };
+/**
+ * Back to an earlier revision of a workload: `kubectl rollout undo`. It asks
+ * which one, from the history the cluster keeps -- a Deployment's ReplicaSets,
+ * a StatefulSet's or DaemonSet's ControllerRevisions -- and the controller
+ * then rolls to it like any other change.
+ *
+ * Not Helm's Rollback, which is a different operation on a different thing and
+ * so a different id, even though both say the same word on the button.
+ */
+const UNDO: Action = { id: 'undo', label: 'Rollback', icon: 'history', form: 'history' };
+/**
+ * Holding a Deployment's rollout, or letting it go on. Its label follows the
+ * Deployment, as Cordon's follows the node: a paused one offers to resume.
+ */
+const PAUSE: Action = { id: 'pause', label: 'Pause rollout', icon: 'pause', form: 'immediate' };
+/**
+ * Stopping a CronJob from starting Jobs, or a Job from running pods. Its label
+ * follows the object too. Immediate, because it is undone by the button that
+ * replaces it.
+ */
+const SUSPEND: Action = { id: 'suspend', label: 'Suspend', icon: 'pause', form: 'immediate' };
+/** A CronJob's job, now, outside its schedule: `kubectl create job --from`. */
+const TRIGGER: Action = { id: 'trigger', label: 'Run now', icon: 'play', form: 'immediate' };
+/**
+ * Moving a pod the polite way: through the eviction API, which a disruption
+ * budget can refuse. Asks first, since the pod's containers are stopped either
+ * way, and it is not danger-toned, since whatever manages the pod replaces it.
+ */
+const EVICT: Action = { id: 'evict', label: 'Evict', icon: 'exit', form: 'confirm' };
+/**
+ * Answering a certificate signing request. Both ask first: approving one hands
+ * out a certificate the cluster will trust, and neither answer can be taken
+ * back. Only offered while the request is unanswered -- see ANSWERS.
+ */
+const APPROVE: Action = { id: 'approve', label: 'Approve', icon: 'check', form: 'confirm' };
+const DENY: Action = { id: 'deny', label: 'Deny', icon: 'close', form: 'confirm' };
 /**
  * What can be done to a virtual machine: the lifecycle half of virtctl.
  *
@@ -231,6 +275,18 @@ const FORWARDABLE = [
     'replicationcontrollers',
 ];
 
+/** The kinds that keep a rollout history to go back to. */
+const UNDOABLE = ['deployments', 'statefulsets', 'daemonsets'];
+
+/** The kinds with a spec.suspend. */
+const SUSPENDABLE = ['cronjobs', 'jobs'];
+
+/** The certificate signing requests, which are the kind with answers to give. */
+export const CSRS = 'certificatesigningrequests';
+
+/** The actions that only mean something while a request is unanswered. */
+export const ANSWERS: ActionId[] = ['approve', 'deny'];
+
 /** The kinds that carry a replica count, which is what Scale sets. */
 const SCALABLE = ['deployments', 'statefulsets', 'replicasets', 'replicationcontrollers'];
 
@@ -266,6 +322,12 @@ export function actionsFor(kind: string): Action[] {
     if (FORWARDABLE.includes(kind)) out.push(FORWARD);
     if (SCALABLE.includes(kind)) out.push(SCALE);
     if (ROLLABLE.includes(kind)) out.push(RESTART);
+    if (UNDOABLE.includes(kind)) out.push(UNDO);
+    if (kind === 'deployments') out.push(PAUSE);
+    if (kind === 'cronjobs') out.push(TRIGGER);
+    if (SUSPENDABLE.includes(kind)) out.push(SUSPEND);
+    if (kind === 'pods') out.push(EVICT);
+    if (kind === CSRS) out.push(APPROVE, DENY);
     if (kind === 'nodes') out.push(NODE_PODS, CORDON, DRAIN);
     out.push(DELETE);
     return out;

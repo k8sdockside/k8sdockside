@@ -84,6 +84,12 @@
         webhook: ['M8 3v8a4 4 0 0 0 8 0V3', 'M12 15v6', 'M9 21h6'],
         // A rule sheet that has been checked.
         policy: ['M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9l-6-6z', 'M13 3v6h6', 'M8.5 15l2.5 2.5 4.5-4.5'],
+        // A clock with the hand wound back: a history of revisions to return to.
+        history: ['M4.5 12a7.5 7.5 0 1 0 2.2-5.3', 'M4 4v4h4', 'M12 8v4l3 2'],
+        // A sheet with a rosette: a certificate, signed or asked to be.
+        certificate: ['M4 4h16v11H4z', 'M7 8h6', 'M7 11h3', 'M16.5 13.5a2 2 0 1 0 0 .01', 'M15.5 15.5 15 20l1.5-1 1.5 1-.5-4.5'],
+        // Leaving a box: a pod asked to go elsewhere.
+        exit: ['M10 4H5v16h5', 'M15 8l4 4-4 4', 'M19 12H9'],
         // A chain link: a binding tying a policy to what it applies to.
         link: ['M10.5 13.5a4 4 0 0 0 5.7 0l2.3-2.3a4 4 0 0 0-5.7-5.7l-1.2 1.2', 'M13.5 10.5a4 4 0 0 0-5.7 0l-2.3 2.3a4 4 0 0 0 5.7 5.7l1.2-1.2'],
         // Three nodes and the lines between them: the access map, which draws

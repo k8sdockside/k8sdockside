@@ -40,6 +40,7 @@ vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/service
         Describe: vi.fn().mockResolvedValue('Name: web'),
         ResourceYAML: vi.fn().mockResolvedValue('kind: Pod\n'),
         CheckYAML: vi.fn().mockResolvedValue({ valid: true, message: '', line: 0 }),
+        ObjectLinks: vi.fn().mockResolvedValue({ conditions: [], references: [], pods: null, podsTotal: 0, selector: '' }),
     },
     ActionService: {
         ObjectState: vi.fn().mockResolvedValue({ scalable: false, replicas: 0, cordoned: false, containers: [] }),
@@ -159,6 +160,9 @@ beforeEach(() => {
     workspace.closeAllDockTabs();
     detail.close();
     vi.mocked(ResourceService.Describe).mockReset().mockResolvedValue('Name: web\nStatus: Running');
+    vi.mocked(ResourceService.ObjectLinks)
+        .mockReset()
+        .mockResolvedValue({ conditions: [], references: [], pods: null, podsTotal: 0, selector: '' });
     vi.mocked(HelmService.Detail)
         .mockReset()
         .mockResolvedValue(releaseDetail('ingress-nginx', 'ingress-nginx-4.11.3', 'replicaCount: 2\n'));
@@ -392,4 +396,101 @@ test('the whole report can be copied', async () => {
     expect(write).toHaveBeenCalledWith('Name: web\nStatus: Running');
     await expect.element(page.getByText('Copied')).toBeInTheDocument();
     write.mockRestore();
+});
+
+// ----- the summary above the report -----------------------------------------
+
+const DEPLOYMENT = { contextId: PROD, kind: 'deployments', namespace: 'default', name: 'web' };
+
+test('the panel lays out conditions, related objects and pods above the report', async () => {
+    vi.mocked(ResourceService.ObjectLinks).mockResolvedValue({
+        conditions: [
+            { type: 'Available', status: 'True', reason: 'MinimumReplicasAvailable', message: '', age: '3d', tone: 'ok' },
+            { type: 'Progressing', status: 'False', reason: 'ProgressDeadlineExceeded', message: 'took too long', age: '1m', tone: 'warn' },
+        ],
+        references: [{ role: 'Config map', kind: 'configmaps', apiKind: 'ConfigMap', namespace: 'default', name: 'web-config' }],
+        pods: [
+            {
+                namespace: 'default',
+                name: 'web-7d9f-abcde',
+                status: { text: 'Running', tone: 'ok', pills: [], sort: '' },
+                ready: { text: '1/1', tone: 'ok', pills: [], sort: '' },
+                restarts: { text: '0', tone: '', pills: [], sort: '' },
+                node: 'wrkr01',
+                age: '3d',
+                containers: [],
+            },
+        ],
+        podsTotal: 1,
+        selector: 'app=web',
+    });
+    render(DetailPanel);
+    await detail.open(DEPLOYMENT);
+
+    await expect.element(page.getByText('ProgressDeadlineExceeded')).toBeVisible();
+    await expect.element(page.getByText('took too long')).toBeVisible();
+    await expect.element(page.getByText('app=web')).toBeVisible();
+    await expect.element(page.getByRole('button', { name: 'web-config' })).toBeVisible();
+
+    // A pod in the list opens in the same panel.
+    await page.getByRole('button', { name: 'web-7d9f-abcde' }).click();
+    await expect.poll(() => detail.target).toEqual({
+        contextId: PROD,
+        kind: 'pods',
+        namespace: 'default',
+        name: 'web-7d9f-abcde',
+    });
+});
+
+test('a related object opens in the same panel', async () => {
+    vi.mocked(ResourceService.ObjectLinks).mockResolvedValue({
+        conditions: [],
+        references: [{ role: 'Node', kind: 'nodes', apiKind: 'Node', namespace: '', name: 'wrkr01' }],
+        pods: null,
+        podsTotal: 0,
+        selector: '',
+    });
+    render(DetailPanel);
+    await detail.open(WEB);
+
+    await page.getByRole('button', { name: 'wrkr01' }).click();
+
+    await expect.poll(() => detail.target?.kind).toBe('nodes');
+    expect(detail.target?.name).toBe('wrkr01');
+});
+
+// A kind that could select pods and selects none says so: an empty Service is
+// exactly what someone opening it wants to find out.
+test('a selector that matches nothing says so', async () => {
+    vi.mocked(ResourceService.ObjectLinks).mockResolvedValue({
+        conditions: [],
+        references: [],
+        pods: [],
+        podsTotal: 0,
+        selector: 'app=nothing',
+    });
+    render(DetailPanel);
+    await detail.open({ contextId: PROD, kind: 'services', namespace: 'default', name: 'api' });
+
+    await expect.element(page.getByText('No pods match this selector.')).toBeVisible();
+});
+
+// A Helm release has no object to read links from.
+test('a Helm release asks for no links', async () => {
+    render(DetailPanel);
+    await detail.open({ contextId: PROD, kind: 'helmreleases', namespace: 'default', name: 'ingress-nginx' });
+    await settle();
+
+    expect(ResourceService.ObjectLinks).not.toHaveBeenCalled();
+});
+
+// The summary follows the object as the report does: a write reads it again.
+test('the summary is read again when the object changes', async () => {
+    render(DetailPanel);
+    await detail.open(WEB);
+    await vi.waitFor(() => expect(ResourceService.ObjectLinks).toHaveBeenCalledTimes(1));
+
+    changes.changed(WEB);
+
+    await vi.waitFor(() => expect(ResourceService.ObjectLinks).toHaveBeenCalledTimes(2));
 });

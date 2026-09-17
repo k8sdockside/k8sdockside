@@ -328,7 +328,7 @@ var builtinByGroupKind = func() map[schema.GroupKind]string {
 //
 // A core-group resource the app has no name for is left out, because a hit on
 // one could be neither described nor opened -- "crd:" needs a group. That is
-// the handful nobody searches for: bindings, component statuses, pod templates.
+// the handful nobody searches for: bindings and component statuses.
 func searchablesIn(lists []*metav1.APIResourceList) []searchable {
 	seen := map[string]bool{}
 	var out []searchable

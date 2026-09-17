@@ -224,6 +224,32 @@
         barEl.querySelector<HTMLButtonElement>('[role="menu"] button:not(:disabled)')?.focus();
     });
 
+    /** How close a menu may come to the window's right edge. */
+    const EDGE = 8;
+
+    /**
+     * Moves an opened menu left by as much as it would otherwise run past the
+     * window's right edge, and no further than the window's left edge.
+     *
+     * A menu grows rightwards from its button, and in a narrow window -- or on
+     * macOS, where the traffic lights push every button along -- the last ones
+     * run out of room. It is moved, measured and moved again rather than moved
+     * once, because the app is zoomed with CSS zoom, and whether a measured
+     * pixel is a zoomed one differs between the engines this runs in; the
+     * second measurement says what a pixel of offset actually came to.
+     */
+    function keepInside(node: HTMLElement): void {
+        const box = node.getBoundingClientRect();
+        const over = Math.min(box.right - (document.documentElement.clientWidth - EDGE), box.left - EDGE);
+        if (over <= 0) return;
+
+        node.style.left = `${-over}px`;
+        const moved = box.left - node.getBoundingClientRect().left;
+        if (moved > 0 && Math.abs(moved - over) > 0.5) {
+            node.style.left = `${-over * (over / moved)}px`;
+        }
+    }
+
     /** Separators only between items: none first, last or twice in a row. */
     function tidy(entries: Entry[]): Entry[] {
         const out: Entry[] = [];
@@ -263,7 +289,7 @@
             </button>
 
             {#if openLabel === menu.label}
-                <div class="menu" role="menu" aria-label={menu.label}>
+                <div class="menu" role="menu" aria-label={menu.label} use:keepInside>
                     {#each tidy(menu.entries) as entry, i (i)}
                         {#if entry === 'separator'}
                             <hr />
@@ -329,7 +355,8 @@
         position: absolute;
         top: calc(100% + 4px);
         /* Growing rightwards from its button: the bar is at the left of the
-           window, so there is room that way and none the other. */
+           window, so there is room that way and none the other -- until the
+           window is narrow, when keepInside moves it back. */
         left: 0;
         min-width: 240px;
         max-width: min(360px, 90vw);

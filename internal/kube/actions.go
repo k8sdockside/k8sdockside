@@ -49,6 +49,14 @@ type ObjectState struct {
 	// The panel shows the row again and uses it as the log view's picker, so
 	// the call it already makes carries them rather than making a second.
 	Containers []Pill `json:"containers"`
+	// Suspended is a Job's or CronJob's spec.suspend, which decides whether
+	// its button offers to suspend or to resume.
+	Suspended bool `json:"suspended"`
+	// Paused is a Deployment's spec.paused: whether its rollout is on hold.
+	Paused bool `json:"paused"`
+	// Pending reports a certificate signing request nobody has approved or
+	// denied yet, which is the only time the panel offers either.
+	Pending bool `json:"pending"`
 }
 
 // stateOf reads an object for the few facts the action bar needs.
@@ -69,6 +77,11 @@ func stateOf(u *unstructured.Unstructured) ObjectState {
 	// Empty for everything that is not a pod: a Deployment's containers live
 	// under spec.template, which this deliberately does not reach into.
 	out.Containers = podContainers(u).Pills
+	out.Suspended, _, _ = unstructured.NestedBool(u.Object, "spec", "suspend")
+	out.Paused, _, _ = unstructured.NestedBool(u.Object, "spec", "paused")
+	if u.GetKind() == "CertificateSigningRequest" {
+		out.Pending = csrPending(u)
+	}
 	return out
 }
 

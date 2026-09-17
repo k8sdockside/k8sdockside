@@ -164,6 +164,10 @@ See [docs/development.md](docs/development.md).
 - One watch per kind per context, shared by every tab using it
 - Namespace filtering, any number of namespaces at once, applied to the cache
   so it repaints instantly
+- Every kind Kubernetes 1.37 serves, from pods to dynamic resource allocation,
+  gang scheduling, certificates, CSI and the API server's own APIService and
+  flow-control objects — a kind the cluster has switched off says so rather
+  than failing
 - CRDs, the Gateway API and built-in kinds on one dynamic-client code path
 - Columns read from the CRD's `additionalPrinterColumns`, so tables match
   `kubectl get`
@@ -179,10 +183,15 @@ See [docs/development.md](docs/development.md).
 
 **Working with objects**
 - A describe panel you can dock right, bottom or left, and resize
+- Above the report: the object's conditions, the objects it names — owner,
+  node, claims, config maps, secrets, a binding's role, a route's backends —
+  and the pods it selects, each opening in the same panel
 - YAML editing in the dock: live document, syntax checking, `⌘S` to save
 - Conflict-safe writes — a save against a moved object is refused, not forced,
   and the API server's own words come back
-- Object actions: scale, restart, cordon, drain, delete
+- Object actions: scale, restart, roll back to an earlier revision, pause a
+  rollout, run a CronJob now, suspend a Job or CronJob, evict a pod, approve or
+  deny a certificate signing request, cordon, drain, delete
 - Bulk delete: tick rows, or everything a filter matches, and delete them
   together — refusals come back by name, in the API server's words
 - Bulk patch: set or remove a label, an annotation or a field by path on every

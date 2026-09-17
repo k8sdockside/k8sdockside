@@ -22,6 +22,18 @@ const AdmissionGroup = "admissionregistration.k8s.io"
 // RBACGroup holds the roles and the bindings that grant them.
 const RBACGroup = "rbac.authorization.k8s.io"
 
+// The built-in groups that hold several of the kinds below. Unlike the Gateway
+// API these ship with Kubernetes itself, but the newer kinds in them are alpha
+// or beta and a cluster serves them only when they are switched on.
+const (
+	CertificatesGroup = "certificates.k8s.io"
+	DRAGroup          = "resource.k8s.io"
+	FlowControlGroup  = "flowcontrol.apiserver.k8s.io"
+	LifecycleGroup    = "lifecycle.k8s.io"
+	SchedulingGroup   = "scheduling.k8s.io"
+	StorageGroup      = "storage.k8s.io"
+)
+
 // Gateway API and CRD kinds, continuing the contract in resources.go: these
 // strings are what the frontend catalogue sends to BuildTable and Subscribe.
 const (
@@ -139,6 +151,48 @@ var builtinKinds = map[string]schema.GroupKind{
 	KindReferenceGrants:    {Group: GatewayGroup, Kind: "ReferenceGrant"},
 
 	KindCRDs: {Group: "apiextensions.k8s.io", Kind: "CustomResourceDefinition"},
+
+	KindControllerRevisions: {Group: "apps", Kind: "ControllerRevision"},
+	KindPodTemplates:        {Kind: "PodTemplate"},
+	KindLeaseCandidates:     {Group: "coordination.k8s.io", Kind: "LeaseCandidate"},
+
+	KindServiceCIDRs: {Group: "networking.k8s.io", Kind: "ServiceCIDR"},
+	KindIPAddresses:  {Group: "networking.k8s.io", Kind: "IPAddress"},
+
+	KindVolumeAttachments:       {Group: StorageGroup, Kind: "VolumeAttachment"},
+	KindVolumeAttributesClasses: {Group: StorageGroup, Kind: "VolumeAttributesClass"},
+	KindCSIDrivers:              {Group: StorageGroup, Kind: "CSIDriver"},
+	KindCSINodes:                {Group: StorageGroup, Kind: "CSINode"},
+	KindCSIStorageCapacities:    {Group: StorageGroup, Kind: "CSIStorageCapacity"},
+
+	KindCSRs:                   {Group: CertificatesGroup, Kind: "CertificateSigningRequest"},
+	KindClusterTrustBundles:    {Group: CertificatesGroup, Kind: "ClusterTrustBundle"},
+	KindPodCertificateRequests: {Group: CertificatesGroup, Kind: "PodCertificateRequest"},
+
+	KindWorkloads:          {Group: SchedulingGroup, Kind: "Workload"},
+	KindPodGroups:          {Group: SchedulingGroup, Kind: "PodGroup"},
+	KindCompositePodGroups: {Group: SchedulingGroup, Kind: "CompositePodGroup"},
+	// Not policy/v1's Eviction, which is a pod subresource and cannot be
+	// listed: this is the object the eviction-request controller keeps per
+	// target, in a group of its own.
+	KindEvictionRequests: {Group: LifecycleGroup, Kind: "EvictionRequest"},
+	KindEvictions:        {Group: LifecycleGroup, Kind: "Eviction"},
+
+	KindDeviceClasses:              {Group: DRAGroup, Kind: "DeviceClass"},
+	KindResourceClaims:             {Group: DRAGroup, Kind: "ResourceClaim"},
+	KindResourceClaimTemplates:     {Group: DRAGroup, Kind: "ResourceClaimTemplate"},
+	KindResourceSlices:             {Group: DRAGroup, Kind: "ResourceSlice"},
+	KindDeviceTaintRules:           {Group: DRAGroup, Kind: "DeviceTaintRule"},
+	KindResourcePoolStatusRequests: {Group: DRAGroup, Kind: "ResourcePoolStatusRequest"},
+
+	// APIService is served by the aggregator inside every API server, though
+	// its types live outside k8s.io/api -- which is no matter here, since
+	// everything travels unstructured.
+	KindAPIServices:                 {Group: "apiregistration.k8s.io", Kind: "APIService"},
+	KindFlowSchemas:                 {Group: FlowControlGroup, Kind: "FlowSchema"},
+	KindPriorityLevelConfigurations: {Group: FlowControlGroup, Kind: "PriorityLevelConfiguration"},
+	KindStorageVersions:             {Group: "internal.apiserver.k8s.io", Kind: "StorageVersion"},
+	KindStorageVersionMigrations:    {Group: "storagemigration.k8s.io", Kind: "StorageVersionMigration"},
 }
 
 // mappingForKind resolves a kind named by the UI to the resource to watch.

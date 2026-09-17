@@ -65,7 +65,7 @@ vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/service
         CheckYAML: vi.fn().mockResolvedValue({ valid: true, message: '', line: 0 }),
     },
     ActionService: {
-        ObjectState: vi.fn().mockResolvedValue({ scalable: false, replicas: 0, cordoned: false, containers: [] }),
+        ObjectState: vi.fn().mockResolvedValue({ scalable: false, replicas: 0, cordoned: false, containers: [], suspended: false, paused: false, pending: false }),
         Delete: vi.fn().mockResolvedValue(undefined),
         Scale: vi.fn().mockResolvedValue(undefined),
         Restart: vi.fn().mockResolvedValue(undefined),
@@ -74,6 +74,13 @@ vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/service
         CancelDrain: vi.fn(),
         VMState: vi.fn().mockResolvedValue({ isMachine: false, running: false, paused: false, migratable: false, status: '' }),
         VMOperation: vi.fn().mockResolvedValue(undefined),
+        Suspend: vi.fn().mockResolvedValue(undefined),
+        PauseRollout: vi.fn().mockResolvedValue(undefined),
+        TriggerCronJob: vi.fn().mockResolvedValue('backup-manual-1'),
+        Evict: vi.fn().mockResolvedValue(undefined),
+        AnswerCSR: vi.fn().mockResolvedValue(undefined),
+        RolloutHistory: vi.fn().mockResolvedValue([]),
+        RollbackWorkload: vi.fn().mockResolvedValue(undefined),
     },
     LogService: {
         Containers: vi.fn().mockResolvedValue([]),
@@ -142,13 +149,15 @@ const NODE = { contextId: PROD, kind: 'nodes', namespace: '', name: 'wrkr01' };
 const DEPLOYMENT = { contextId: PROD, kind: 'deployments', namespace: 'default', name: 'web' };
 const SERVICE = { contextId: PROD, kind: 'services', namespace: 'web', name: 'api' };
 const RELEASE = { contextId: PROD, kind: 'helmreleases', namespace: 'default', name: 'ingress-nginx' };
+const CRONJOB = { contextId: PROD, kind: 'cronjobs', namespace: 'ops', name: 'backup' };
+const CSR = { contextId: PROD, kind: 'certificatesigningrequests', namespace: '', name: 'csr-1' };
 
 const settle = () => new Promise((r) => setTimeout(r, 60));
 
 beforeEach(async () => {
     // VM included: its state says isMachine, and a stale one would give the
     // next object's bar a set of buttons that are not about it.
-    for (const ref of [POD, NODE, DEPLOYMENT, SERVICE, RELEASE, VM]) actions.forget(ref);
+    for (const ref of [POD, NODE, DEPLOYMENT, SERVICE, RELEASE, VM, CRONJOB, CSR]) actions.forget(ref);
     detail.close();
     // A test that opened something in the dock has to have it taken away again,
     // and the write that goes with it has to land before the next test starts.
@@ -172,7 +181,7 @@ beforeEach(async () => {
     });
     vi.mocked(HelmService.Uninstall).mockReset().mockResolvedValue('');
     vi.mocked(HelmService.Rollback).mockReset().mockResolvedValue('');
-    vi.mocked(ActionService.ObjectState).mockReset().mockResolvedValue({ scalable: false, replicas: 0, cordoned: false, containers: [] });
+    vi.mocked(ActionService.ObjectState).mockReset().mockResolvedValue({ scalable: false, replicas: 0, cordoned: false, containers: [], suspended: false, paused: false, pending: false });
     vi.mocked(ActionService.Delete).mockReset().mockResolvedValue(undefined);
     vi.mocked(ActionService.Scale).mockReset().mockResolvedValue(undefined);
     vi.mocked(ActionService.Cordon).mockReset().mockResolvedValue(undefined);
@@ -338,7 +347,7 @@ test('nothing else offers it: a pod is not a place other pods are placed', async
 // The one button whose label is the cluster's answer rather than ours: offering
 // to cordon a node that is already cordoned is a button that does nothing.
 test('a cordoned node offers to be uncordoned instead', async () => {
-    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: false, replicas: 0, cordoned: true, containers: [] });
+    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: false, replicas: 0, cordoned: true, containers: [], suspended: false, paused: false, pending: false });
 
     render(ObjectActions, { object: NODE });
 
@@ -423,7 +432,7 @@ test('a refused delete says why and leaves the object alone', async () => {
 });
 
 test('scale opens a field holding the count the workload is at', async () => {
-    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: true, replicas: 3, cordoned: false, containers: [] });
+    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: true, replicas: 3, cordoned: false, containers: [], suspended: false, paused: false, pending: false });
     render(ObjectActions, { object: DEPLOYMENT });
     await expect.element(page.getByRole('button', { name: 'Scale' })).toBeVisible();
 
@@ -433,7 +442,7 @@ test('scale opens a field holding the count the workload is at', async () => {
 });
 
 test('scaling sends the number that was typed', async () => {
-    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: true, replicas: 3, cordoned: false, containers: [] });
+    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: true, replicas: 3, cordoned: false, containers: [], suspended: false, paused: false, pending: false });
     render(ObjectActions, { object: DEPLOYMENT });
     await page.getByRole('button', { name: 'Scale' }).click();
 
@@ -447,7 +456,7 @@ test('scaling sends the number that was typed', async () => {
 
 /** Opens the scale form on a deployment running three. */
 async function openScale(): Promise<HTMLInputElement> {
-    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: true, replicas: 3, cordoned: false, containers: [] });
+    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: true, replicas: 3, cordoned: false, containers: [], suspended: false, paused: false, pending: false });
     render(ObjectActions, { object: DEPLOYMENT });
     await page.getByRole('button', { name: 'Scale' }).click();
     await expect.element(page.getByRole('slider', { name: 'Replica count' })).toBeVisible();
@@ -844,4 +853,120 @@ test('an object whose ports could not be read says so rather than offering none'
     await page.getByRole('button', { name: 'Forward' }).click();
 
     await expect.element(page.getByText(/selects no pods/)).toBeVisible();
+});
+
+// ----- the kind-specific buttons beyond scale and restart --------------------
+
+/** Answers ObjectState with the given facts on top of an ordinary object. */
+function facts(over: Record<string, unknown> = {}) {
+    vi.mocked(ActionService.ObjectState).mockResolvedValue({
+        scalable: false,
+        replicas: 0,
+        cordoned: false,
+        containers: [],
+        suspended: false,
+        paused: false,
+        pending: false,
+        ...over,
+    });
+}
+
+// Like Cordon, the label is the object's answer: a suspended cron job offers
+// to resume, and pressing it sends the opposite of what it is.
+test('a suspended cron job offers to resume, and resuming sends false', async () => {
+    facts({ suspended: true });
+    render(ObjectActions, { object: CRONJOB });
+
+    await page.getByRole('button', { name: 'Resume' }).click();
+
+    await vi.waitFor(() => expect(ActionService.Suspend).toHaveBeenCalledWith(PROD, 'cronjobs', 'ops', 'backup', false));
+});
+
+test('run now starts a job and says which', async () => {
+    facts();
+    render(ObjectActions, { object: CRONJOB });
+
+    await page.getByRole('button', { name: 'Run now' }).click();
+
+    await vi.waitFor(() => expect(ActionService.TriggerCronJob).toHaveBeenCalledWith(PROD, 'ops', 'backup'));
+    await vi.waitFor(() => expect(notices.current?.text).toContain('backup-manual-1'));
+});
+
+test('a paused deployment offers to resume its rollout', async () => {
+    facts({ paused: true, scalable: true, replicas: 2 });
+    render(ObjectActions, { object: DEPLOYMENT });
+
+    await page.getByRole('button', { name: 'Resume rollout' }).click();
+
+    await vi.waitFor(() => expect(ActionService.PauseRollout).toHaveBeenCalledWith(PROD, 'default', 'web', false));
+});
+
+// Rollback reads the history when pressed and picks the revision before the
+// current one, which is what `kubectl rollout undo` does with no flags.
+test('rollback offers the earlier revisions and sends the one chosen', async () => {
+    facts({ scalable: true, replicas: 2 });
+    vi.mocked(ActionService.RolloutHistory).mockResolvedValue([
+        { revision: 3, images: ['web:3'], changeCause: '', age: '1h', current: true },
+        { revision: 2, images: ['web:2'], changeCause: 'bump', age: '2d', current: false },
+        { revision: 1, images: ['web:1'], changeCause: '', age: '9d', current: false },
+    ]);
+    render(ObjectActions, { object: DEPLOYMENT });
+
+    await page.getByRole('button', { name: 'Rollback' }).click();
+
+    const picker = page.getByRole('combobox', { name: /Roll back to/ });
+    await expect.element(picker).toHaveValue('2');
+    expect(page.getByRole('option', { name: /Revision 3/ }).elements()).toHaveLength(0);
+
+    await picker.selectOptions('1');
+    await page.getByRole('button', { name: 'Rollback' }).click();
+
+    await vi.waitFor(() =>
+        expect(ActionService.RollbackWorkload).toHaveBeenCalledWith(PROD, 'deployments', 'default', 'web', 1),
+    );
+});
+
+test('rollback says so when there is nothing to go back to', async () => {
+    facts({ scalable: true, replicas: 2 });
+    vi.mocked(ActionService.RolloutHistory).mockResolvedValue([
+        { revision: 1, images: ['web:1'], changeCause: '', age: '1h', current: true },
+    ]);
+    render(ObjectActions, { object: DEPLOYMENT });
+
+    await page.getByRole('button', { name: 'Rollback' }).click();
+
+    await expect.element(page.getByText(/nothing behind it to go back to/)).toBeVisible();
+});
+
+test('evicting a pod asks first, then evicts it', async () => {
+    facts();
+    render(ObjectActions, { object: POD });
+
+    await page.getByRole('button', { name: 'Evict' }).click();
+    await expect.element(page.getByText(/disruption budget/)).toBeVisible();
+    expect(ActionService.Evict).not.toHaveBeenCalled();
+
+    await page.getByRole('button', { name: 'Evict' }).click();
+
+    await vi.waitFor(() => expect(ActionService.Evict).toHaveBeenCalledWith(PROD, 'default', 'web'));
+});
+
+// A request that has been answered cannot be answered again, so the buttons
+// go with the answer.
+test('a signing request offers approve and deny only while it is pending', async () => {
+    facts({ pending: false });
+    const answered = await render(ObjectActions, { object: CSR });
+    await expect.element(page.getByRole('button', { name: 'Delete' })).toBeVisible();
+    expect(page.getByRole('button', { name: 'Approve' }).elements()).toHaveLength(0);
+    await answered.unmount();
+
+    actions.forget(CSR);
+    facts({ pending: true });
+    render(ObjectActions, { object: CSR });
+
+    await page.getByRole('button', { name: 'Approve' }).click();
+    await expect.element(page.getByText(/cannot be taken back/)).toBeVisible();
+    await page.getByRole('button', { name: 'Approve' }).click();
+
+    await vi.waitFor(() => expect(ActionService.AnswerCSR).toHaveBeenCalledWith(PROD, 'csr-1', true));
 });

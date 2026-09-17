@@ -127,6 +127,9 @@ export const NAV_GROUPS: NavGroup[] = [
             { kind: 'namespaces', label: 'Namespaces', icon: 'layers' },
             { kind: 'events', label: 'Events', icon: 'bell' },
             { kind: 'leases', label: 'Leases', icon: 'clock' },
+            // Who is standing for a lease, which is how the control plane
+            // picks a leader among components of different versions.
+            { kind: 'leasecandidates', label: 'Lease Candidates', icon: 'clock' },
         ],
     },
     {
@@ -138,7 +141,10 @@ export const NAV_GROUPS: NavGroup[] = [
             { kind: 'replicasets', label: 'Replica Sets', icon: 'copies' },
             { kind: 'statefulsets', label: 'Stateful Sets', icon: 'database' },
             { kind: 'daemonsets', label: 'Daemon Sets', icon: 'repeat' },
+            // The rollout history of the two above.
+            { kind: 'controllerrevisions', label: 'Controller Revisions', icon: 'history' },
             { kind: 'replicationcontrollers', label: 'Replication Controllers', icon: 'copies' },
+            { kind: 'podtemplates', label: 'Pod Templates', icon: 'file' },
             { kind: 'jobs', label: 'Jobs', icon: 'check' },
             { kind: 'cronjobs', label: 'Cron Jobs', icon: 'clock' },
             { kind: 'horizontalpodautoscalers', label: 'Horizontal Pod Autoscalers', icon: 'scale' },
@@ -152,6 +158,9 @@ export const NAV_GROUPS: NavGroup[] = [
             // Deprecated in Kubernetes 1.33 in favour of Endpoint Slices, but
             // still what many clusters and controllers carry.
             { kind: 'endpoints', label: 'Endpoints', icon: 'share' },
+            // Where Services take their cluster IPs from, and each one taken.
+            { kind: 'servicecidrs', label: 'Service CIDRs', icon: 'layers' },
+            { kind: 'ipaddresses', label: 'IP Addresses', icon: 'share' },
             { kind: 'ingresses', label: 'Ingresses', icon: 'globe' },
             { kind: 'ingressclasses', label: 'Ingress Classes', icon: 'globe' },
             { kind: 'networkpolicies', label: 'Network Policies', icon: 'shield' },
@@ -191,6 +200,13 @@ export const NAV_GROUPS: NavGroup[] = [
             { kind: 'persistentvolumeclaims', label: 'Persistent Volume Claims', icon: 'drive' },
             { kind: 'persistentvolumes', label: 'Persistent Volumes', icon: 'drive' },
             { kind: 'storageclasses', label: 'Storage Classes', icon: 'database' },
+            { kind: 'volumeattributesclasses', label: 'Volume Attributes Classes', icon: 'sliders' },
+            // How a volume reaches a node, which is where a stuck mount is
+            // usually explained.
+            { kind: 'volumeattachments', label: 'Volume Attachments', icon: 'link' },
+            { kind: 'csidrivers', label: 'CSI Drivers', icon: 'chip' },
+            { kind: 'csinodes', label: 'CSI Nodes', icon: 'server' },
+            { kind: 'csistoragecapacities', label: 'CSI Storage Capacities', icon: 'gauge' },
         ],
     },
     {
@@ -205,6 +221,11 @@ export const NAV_GROUPS: NavGroup[] = [
             { kind: 'rolebindings', label: 'Role Bindings', icon: 'link' },
             { kind: 'clusterroles', label: 'Cluster Roles', icon: 'policy' },
             { kind: 'clusterrolebindings', label: 'Cluster Role Bindings', icon: 'link' },
+            // Identity by certificate rather than by binding: what the cluster
+            // is asked to sign, and the roots it publishes.
+            { kind: 'certificatesigningrequests', label: 'Certificate Signing Requests', icon: 'certificate' },
+            { kind: 'podcertificaterequests', label: 'Pod Certificate Requests', icon: 'certificate' },
+            { kind: 'clustertrustbundles', label: 'Cluster Trust Bundles', icon: 'certificate' },
         ],
     },
     {
@@ -220,6 +241,28 @@ export const NAV_GROUPS: NavGroup[] = [
             { kind: 'poddisruptionbudgets', label: 'Pod Disruption Budgets', icon: 'shield' },
             { kind: 'priorityclasses', label: 'Priority Classes', icon: 'priority' },
             { kind: 'runtimeclasses', label: 'Runtime Classes', icon: 'chip' },
+            // Gang scheduling: a set of pods placed together or not at all.
+            // Named apart from the Workloads section, which is another thing.
+            { kind: 'workloads', label: 'Scheduling Workloads', icon: 'layers' },
+            { kind: 'podgroups', label: 'Pod Groups', icon: 'copies' },
+            { kind: 'compositepodgroups', label: 'Composite Pod Groups', icon: 'copies' },
+            // The eviction API that asks a pod's responders before it evicts.
+            { kind: 'evictionrequests', label: 'Eviction Requests', icon: 'exit' },
+            { kind: 'evictions', label: 'Evictions', icon: 'exit' },
+        ],
+    },
+    {
+        // Dynamic resource allocation: GPUs and other devices, claimed by a
+        // pod the way a volume is. Much of it is new, so a tab here may say
+        // the cluster does not serve it.
+        label: 'Dynamic Resources',
+        items: [
+            { kind: 'deviceclasses', label: 'Device Classes', icon: 'chip' },
+            { kind: 'resourceclaims', label: 'Resource Claims', icon: 'grant' },
+            { kind: 'resourceclaimtemplates', label: 'Resource Claim Templates', icon: 'file' },
+            { kind: 'resourceslices', label: 'Resource Slices', icon: 'layers' },
+            { kind: 'devicetaintrules', label: 'Device Taint Rules', icon: 'alert' },
+            { kind: 'resourcepoolstatusrequests', label: 'Pool Status Requests', icon: 'gauge' },
         ],
     },
     {
@@ -235,6 +278,19 @@ export const NAV_GROUPS: NavGroup[] = [
             { kind: 'mutatingadmissionpolicybindings', label: 'Mutating Policy Bindings', icon: 'link' },
             { kind: 'validatingadmissionpolicies', label: 'Validating Admission Policies', icon: 'policy' },
             { kind: 'validatingadmissionpolicybindings', label: 'Validating Policy Bindings', icon: 'link' },
+        ],
+    },
+    {
+        // The API server's own configuration: the APIs it aggregates -- an
+        // unavailable one breaks discovery for every client -- how it shares
+        // its capacity out, and the versions it stores objects at.
+        label: 'API Server',
+        items: [
+            { kind: 'apiservices', label: 'API Services', icon: 'server' },
+            { kind: 'flowschemas', label: 'Flow Schemas', icon: 'route' },
+            { kind: 'prioritylevelconfigurations', label: 'Priority Levels', icon: 'priority' },
+            { kind: 'storageversions', label: 'Storage Versions', icon: 'database' },
+            { kind: 'storageversionmigrations', label: 'Storage Version Migrations', icon: 'repeat' },
         ],
     },
     {

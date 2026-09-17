@@ -37,8 +37,29 @@
         },
     };
 
+    /**
+     * The groups that ship with Kubernetes itself but whose newer kinds are
+     * alpha or beta, and served only where the API server has them switched
+     * on. "Not installed" is the wrong word for those: there is nothing to
+     * install, and the fix is a flag on the control plane.
+     */
+    const BUILT_IN = new Set([
+        'admissionregistration.k8s.io',
+        'certificates.k8s.io',
+        'coordination.k8s.io',
+        'internal.apiserver.k8s.io',
+        'lifecycle.k8s.io',
+        'networking.k8s.io',
+        'resource.k8s.io',
+        'scheduling.k8s.io',
+        'storage.k8s.io',
+        'storagemigration.k8s.io',
+    ]);
+    const ENABLING = 'https://kubernetes.io/docs/tasks/administer-cluster/enable-disable-api/';
+
     let group = $derived(notServedGroup(message));
     let known = $derived(KNOWN[group] ?? null);
+    let builtIn = $derived(BUILT_IN.has(group));
     let cluster = $derived(context?.name ?? 'This cluster');
 </script>
 
@@ -53,6 +74,16 @@
         </p>
         <a class="docs" href={known.href} target="_blank" rel="noreferrer" onclick={onExternalClick(known.href)}>
             How to install it
+        </a>
+    {:else if builtIn}
+        <h2>{labelFor(kind)} are switched off on this cluster</h2>
+        <p class="hint">
+            They are part of Kubernetes, but in the {group} API at a version {cluster} does not serve — too new
+            for its Kubernetes, or alpha or beta and not enabled on its API server. Nothing is wrong with the
+            connection.
+        </p>
+        <a class="docs" href={ENABLING} target="_blank" rel="noreferrer" onclick={onExternalClick(ENABLING)}>
+            How API versions are enabled
         </a>
     {:else}
         <h2>This cluster does not serve {labelFor(kind)}</h2>

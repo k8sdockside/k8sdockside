@@ -249,6 +249,42 @@ test('the menu opens inside the window', async () => {
     expect(box.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
 });
 
+// The menus grow rightwards from their buttons, which runs out of room in a
+// narrow window -- and on macOS the traffic lights push every button further
+// right. The last menu is the one with the least room.
+test('the last menu stays inside a narrow window', async () => {
+    await page.viewport(300, 600);
+    try {
+        render(TopBar);
+
+        await openMenu('Help');
+
+        const box = (document.querySelector('[role="menu"]') as HTMLElement).getBoundingClientRect();
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
+    } finally {
+        await page.viewport(414, 896);
+    }
+});
+
+// The app is zoomed with CSS zoom on its own element, which changes what a
+// pixel of offset comes to on screen.
+test('the last menu stays inside a narrow window when the app is zoomed in', async () => {
+    await page.viewport(360, 600);
+    const screen = await render(TopBar);
+    screen.container.style.zoom = '1.4';
+    try {
+        await openMenu('Help');
+
+        const box = (document.querySelector('[role="menu"]') as HTMLElement).getBoundingClientRect();
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(document.documentElement.clientWidth);
+    } finally {
+        screen.container.style.zoom = '';
+        await page.viewport(414, 896);
+    }
+});
+
 // The two documentation pages have a menu of their own.
 test('help and the Kubernetes primer can be opened from it', async () => {
     render(TopBar);

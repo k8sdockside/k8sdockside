@@ -101,6 +101,59 @@ describe('the kinds added beyond the original set', () => {
     });
 });
 
+// Everything else Kubernetes serves, so that no built-in kind needs a CRD-style
+// detour through the definitions tree to be looked at. The list is the Go
+// side's too -- see TestEveryKindKubernetesServesIsOffered.
+describe('the rest of what Kubernetes serves', () => {
+    const REST: [string, string, string][] = [
+        ['leasecandidates', 'Lease Candidates', 'Cluster'],
+        ['controllerrevisions', 'Controller Revisions', 'Workloads'],
+        ['podtemplates', 'Pod Templates', 'Workloads'],
+        ['servicecidrs', 'Service CIDRs', 'Network'],
+        ['ipaddresses', 'IP Addresses', 'Network'],
+        ['volumeattributesclasses', 'Volume Attributes Classes', 'Storage'],
+        ['volumeattachments', 'Volume Attachments', 'Storage'],
+        ['csidrivers', 'CSI Drivers', 'Storage'],
+        ['csinodes', 'CSI Nodes', 'Storage'],
+        ['csistoragecapacities', 'CSI Storage Capacities', 'Storage'],
+        ['certificatesigningrequests', 'Certificate Signing Requests', 'Access'],
+        ['podcertificaterequests', 'Pod Certificate Requests', 'Access'],
+        ['clustertrustbundles', 'Cluster Trust Bundles', 'Access'],
+        ['workloads', 'Scheduling Workloads', 'Scheduling'],
+        ['podgroups', 'Pod Groups', 'Scheduling'],
+        ['compositepodgroups', 'Composite Pod Groups', 'Scheduling'],
+        ['evictionrequests', 'Eviction Requests', 'Scheduling'],
+        ['evictions', 'Evictions', 'Scheduling'],
+        ['deviceclasses', 'Device Classes', 'Dynamic Resources'],
+        ['resourceclaims', 'Resource Claims', 'Dynamic Resources'],
+        ['resourceclaimtemplates', 'Resource Claim Templates', 'Dynamic Resources'],
+        ['resourceslices', 'Resource Slices', 'Dynamic Resources'],
+        ['devicetaintrules', 'Device Taint Rules', 'Dynamic Resources'],
+        ['resourcepoolstatusrequests', 'Pool Status Requests', 'Dynamic Resources'],
+        ['apiservices', 'API Services', 'API Server'],
+        ['flowschemas', 'Flow Schemas', 'API Server'],
+        ['prioritylevelconfigurations', 'Priority Levels', 'API Server'],
+        ['storageversions', 'Storage Versions', 'API Server'],
+        ['storageversionmigrations', 'Storage Version Migrations', 'API Server'],
+    ];
+
+    test.each(REST)('%s is offered as "%s" under %s', (kind, label, group) => {
+        expect(KINDS).toContain(kind);
+        expect(labelFor(kind)).toBe(label);
+        expect(groupForKind(kind)).toBe(group);
+        expect(iconFor(kind)).not.toBe('box');
+    });
+
+    test('their singular forms read correctly', () => {
+        expect(singularFor('ipaddresses')).toBe('IP Address');
+        expect(singularFor('csistoragecapacities')).toBe('CSI Storage Capacity');
+        expect(singularFor('volumeattributesclasses')).toBe('Volume Attributes Class');
+        expect(singularFor('deviceclasses')).toBe('Device Class');
+        expect(singularFor('prioritylevelconfigurations')).toBe('Priority Level');
+        expect(singularFor('certificatesigningrequests')).toBe('Certificate Signing Request');
+    });
+});
+
 describe('groupForKind', () => {
     test('names the section a resource is listed under', () => {
         expect(groupForKind('pods')).toBe('Workloads');

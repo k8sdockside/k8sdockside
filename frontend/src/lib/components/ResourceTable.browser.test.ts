@@ -685,14 +685,28 @@ test('a kind the cluster does not serve says it is not installed, not that somet
 });
 
 test('any other optional kind is described by its API group', async () => {
+    render(ResourceTable, { contextId: PROD, kind: 'crd:certificates.cert-manager.io' });
+
+    pushed.fail('this cluster does not serve certificates.cert-manager.io -- the cert-manager.io API is not installed');
+
+    await expect
+        .element(page.getByRole('heading', { name: 'This cluster does not serve Certificates' }))
+        .toBeVisible();
+    await expect.element(page.getByText(/cert-manager\.io API is not installed on/)).toBeVisible();
+});
+
+// A kind that ships with Kubernetes has nothing to install: it is too new for
+// the cluster, or switched off on its API server, and the page says which.
+test('a built-in kind the cluster does not serve is described as switched off', async () => {
     render(ResourceTable, { contextId: PROD, kind: 'mutatingadmissionpolicies' });
 
     pushed.fail('this cluster does not serve mutatingadmissionpolicies -- the admissionregistration.k8s.io API is not installed');
 
     await expect
-        .element(page.getByRole('heading', { name: 'This cluster does not serve Mutating Admission Policies' }))
+        .element(page.getByRole('heading', { name: 'Mutating Admission Policies are switched off on this cluster' }))
         .toBeVisible();
-    await expect.element(page.getByText(/admissionregistration\.k8s\.io API is not installed on/)).toBeVisible();
+    await expect.element(page.getByRole('link', { name: 'How API versions are enabled' })).toBeVisible();
+    expect(page.getByText(/is not installed on/).elements()).toHaveLength(0);
 });
 
 test('a real failure still reads as one', async () => {

@@ -12,8 +12,8 @@
 -->
 <script lang="ts">
     import { singularFor } from '../catalogue';
-    import { actionsFor, actionsForVM, type Action, type ActionId } from '../actions';
-    import { actions, type DrainOptions } from '../state/actions.svelte';
+    import { ANSWERS, actionsFor, actionsForVM, type Action, type ActionId } from '../actions';
+    import { actions, type DrainOptions, type RolloutRevision } from '../state/actions.svelte';
     import { forwards, type PortOption } from '../state/forwards.svelte';
     import { helm } from '../state/helm.svelte';
     import { session } from '../state/session.svelte';
@@ -61,13 +61,19 @@
     let pluginOwnsKind = $derived(workspace.pluginActsOn(object.kind, { external: true }));
     /**
      * Forward is left out of the web version, where the port it opens would be
-     * one on the server rather than on the machine the user is sitting at.
+     * one on the server rather than on the machine the user is sitting at. A
+     * signing request's answers are left out once it has one: approving a
+     * request that was denied is refused by the API server, and offering it
+     * would be a button that only ever fails.
      */
     let available = $derived(
         (facts.vm.isMachine && !pluginOwnsKind
             ? [...actionsForVM(facts.vm), ...actionsFor(object.kind)]
             : actionsFor(object.kind)
-        ).filter((action) => !(session.server && action.id === 'forward')),
+        ).filter(
+            (action) =>
+                !(session.server && action.id === 'forward') && !(ANSWERS.includes(action.id) && !facts.pending),
+        ),
     );
 
     // ----- buttons from plugins ----------------------------------------------
@@ -157,6 +163,18 @@
     let revision = $state<number | null>(null);
     /** Whether an uninstall keeps the release's records, so it can be rolled back. */
     let keepHistory = $state(false);
+
+    /**
+     * A workload's rollout history, read when its Rollback is pressed rather
+     * than with the object: it is a listing of ReplicaSets or revisions, and
+     * most panels are opened without anyone wanting it.
+     */
+    let history = $state<RolloutRevision[]>([]);
+    let historyError = $state('');
+    let loadingHistory = $state(false);
+    /** Which revision the workload's picker is on. */
+    let undoTo = $state<number | null>(null);
+    let undoChoice = $derived(history.find((r) => r.revision === undoTo) ?? null);
 
     /**
      * What a drain is told beyond kubectl's defaults: the flags k9s's drain
@@ -270,6 +288,9 @@
         portsError = '';
         revision = null;
         keepHistory = false;
+        history = [];
+        historyError = '';
+        undoTo = null;
         void actions.load(ref);
     });
 
@@ -302,7 +323,18 @@
      */
     function labelOf(action: Action): string {
         if (action.id === 'cordon') return facts.cordoned ? 'Uncordon' : 'Cordon';
+        // Suspend and Pause follow the object the same way: a suspended job
+        // offers to resume, not to be suspended again.
+        if (action.id === 'suspend') return facts.suspended ? 'Resume' : 'Suspend';
+        if (action.id === 'pause') return facts.paused ? 'Resume rollout' : 'Pause rollout';
         return action.label;
+    }
+
+    /** The icon follows the label, for the two whose label changes meaning. */
+    function iconOf(action: Action): string {
+        if (action.id === 'suspend' && facts.suspended) return 'play';
+        if (action.id === 'pause' && facts.paused) return 'play';
+        return action.icon;
     }
 
     function choose(action: Action): void {
@@ -336,6 +368,11 @@
             workspace.showPodsOnNode(object.contextId, object.name);
             return;
         }
+        if (action.form === 'history') {
+            asking = action.id;
+            void loadHistory();
+            return;
+        }
         if (action.form === 'ports') {
             asking = action.id;
             void loadPorts();
@@ -348,6 +385,35 @@
         if (action.form === 'number') openScale();
         if (action.id === 'drain') resetDrain();
         asking = action.id;
+    }
+
+    /**
+     * Reads the workload's revisions for the rollback picker, defaulting to the
+     * one before the current -- which is what "roll back" means when nobody
+     * says otherwise, and what `kubectl rollout undo` does.
+     */
+    async function loadHistory(): Promise<void> {
+        loadingHistory = true;
+        historyError = '';
+        const ref = { ...object };
+        try {
+            const got = await actions.history(ref);
+            if (ref.name !== object.name || ref.kind !== object.kind) return;
+            history = got;
+            undoTo = got.find((r) => !r.current)?.revision ?? null;
+        } catch (err) {
+            historyError = err instanceof Error ? err.message : String(err);
+        } finally {
+            loadingHistory = false;
+        }
+    }
+
+    /** How one revision reads in the workload's picker. */
+    function historyLabel(entry: RolloutRevision): string {
+        const parts = [`Revision ${entry.revision}`];
+        if (entry.images.length > 0) parts.push(entry.images.join(', '));
+        if (entry.age) parts.push(`${entry.age} ago`);
+        return parts.join(' · ');
     }
 
     function resetDrain(): void {
@@ -409,6 +475,34 @@
                 case 'cordon':
                     await actions.cordon(object, !facts.cordoned);
                     notices.inform(`${subject} ${facts.cordoned ? 'cordoned' : 'uncordoned'}`);
+                    break;
+                case 'suspend':
+                    await actions.suspend(object, !facts.suspended);
+                    notices.inform(`${subject} ${facts.suspended ? 'suspended' : 'resumed'}`);
+                    break;
+                case 'pause':
+                    await actions.pause(object, !facts.paused);
+                    notices.inform(`${subject} rollout ${facts.paused ? 'paused' : 'resumed'}`);
+                    break;
+                case 'trigger': {
+                    const job = await actions.trigger(object);
+                    notices.inform(`${subject} started job ${job}`);
+                    break;
+                }
+                case 'evict':
+                    await actions.evict(object);
+                    notices.inform(`${subject} evicted`);
+                    // The pod is on its way out, exactly as after a delete.
+                    detail.close();
+                    return;
+                case 'approve':
+                case 'deny':
+                    await actions.answer(object, id === 'approve');
+                    notices.inform(`${subject} ${id === 'approve' ? 'approved' : 'denied'}`);
+                    break;
+                case 'undo':
+                    await actions.undo(object, value);
+                    notices.inform(`${subject} rolling back to revision ${value}`);
                     break;
                 case 'drain':
                     await actions.drain(object, drainOptions());
@@ -537,6 +631,14 @@
             // spelling out rather than asking "Uninstall X?".
             case 'uninstall':
                 return `Uninstall ${object.name}? Everything the release installed will be removed.`;
+            // An eviction asks the disruption budgets, which is the whole
+            // difference from Delete and the thing worth saying.
+            case 'evict':
+                return `Evict ${subject}? It is stopped and replaced by whatever manages it, unless a disruption budget refuses.`;
+            case 'approve':
+                return `Approve ${subject}? The signer will issue a certificate the cluster trusts, and this cannot be taken back.`;
+            case 'deny':
+                return `Deny ${subject}? No certificate will be issued, and this cannot be taken back.`;
 
             // The machine ones say what happens to the guest, because that is
             // the part that is not obvious from the button. A virtual machine
@@ -723,6 +825,39 @@
                     Rollback
                 </button>
             </div>
+        {:else if asked && asked.form === 'history'}
+            {#if loadingHistory}
+                <p class="question">Reading {subject}'s history…</p>
+            {:else if historyError}
+                <p class="question failed">{historyError}</p>
+            {:else if history.length < 2}
+                <p class="question">
+                    {subject} has only the revision it is on — there is nothing behind it to go back to.
+                </p>
+            {:else}
+                <label class="field">
+                    Roll back to
+                    <select bind:value={undoTo}>
+                        {#each history.filter((r) => !r.current) as entry (entry.revision)}
+                            <option value={entry.revision}>{historyLabel(entry)}</option>
+                        {/each}
+                    </select>
+                </label>
+                {#if undoChoice?.changeCause}
+                    <span class="cause" title="The change cause recorded for this revision">{undoChoice.changeCause}</span>
+                {/if}
+            {/if}
+
+            <div class="answers">
+                <button bind:this={cancelEl} class="plain" onclick={() => (asking = null)}>Cancel</button>
+                <button
+                    class="go"
+                    disabled={busy || loadingHistory || undoTo === null}
+                    onclick={() => perform('undo', undoTo ?? 0)}
+                >
+                    Rollback
+                </button>
+            </div>
         {:else if asked && asked.form === 'number'}
             <!-- Drag, step or type: all three move the one count. The tick
                  under the track marks what is running now, so how far the
@@ -871,7 +1006,7 @@
         title={action.needsHelm === true && helmMissing ? helm.tool.reason : labelOf(action)}
         onclick={() => choose(action)}
     >
-        <Icon name={action.icon} size={13} />
+        <Icon name={iconOf(action)} size={13} />
         {labelOf(action)}
     </button>
 {/snippet}
@@ -885,8 +1020,11 @@
         flex: 0 0 auto;
     }
 
+    /* Wraps rather than overflowing: a Deployment offers nine buttons, and a
+       narrow pane has room for five. */
     .bar {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 6px;
         padding: 8px 12px;
@@ -972,6 +1110,15 @@
         font: inherit;
         font-size: 12px;
         max-width: 170px;
+    }
+
+    .cause {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 11.5px;
+        color: var(--text-faint);
     }
 
     .check {

@@ -16,7 +16,7 @@ var Icons = []string{
 	"check", "clock", "share", "globe", "sliders", "lock", "unlock", "play",
 	"pause", "stop", "power", "drive", "gateway", "route", "grant", "puzzle",
 	"terminal", "forward", "chevron-left", "chevron-right", "chevron-down", "copies", "copy", "tick", "scale", "gauge",
-	"shield", "priority", "chip", "webhook", "policy", "link", "graph", "user",
+	"shield", "priority", "chip", "webhook", "policy", "history", "certificate", "exit", "link", "graph", "user",
 	"users", "helm", "refresh", "download", "expand-all", "collapse-all", "sort-asc", "sort-desc",
 	"sort-off", "plus", "minus", "folder-plus", "folder", "close", "dot", "edit", "save",
 	"chevron-up", "alert", "file", "search", "trash", "undo", "dock-right", "dock-bottom",

@@ -46,8 +46,8 @@ describe('what every object can do', () => {
 });
 
 describe('what particular kinds can do', () => {
-    test('a pod offers its logs', () => {
-        expect(ids('pods')).toEqual(['edit', 'logs', 'shell', 'forward', 'delete']);
+    test('a pod offers its logs, and to be evicted rather than deleted', () => {
+        expect(ids('pods')).toEqual(['edit', 'logs', 'shell', 'forward', 'evict', 'delete']);
     });
 
     // A workload's logs are every container of every pod its selector finds,
@@ -95,14 +95,57 @@ describe('what particular kinds can do', () => {
         expect(ids('cronjobs')).not.toContain('shell');
     });
 
-    test.each(['deployments', 'statefulsets'])('a %s can be scaled and restarted', (kind) => {
-        expect(ids(kind)).toEqual(['edit', 'logs', 'shell', 'forward', 'scale', 'restart', 'delete']);
+    test('a statefulset can be scaled, restarted and rolled back', () => {
+        expect(ids('statefulsets')).toEqual(['edit', 'logs', 'shell', 'forward', 'scale', 'restart', 'undo', 'delete']);
+    });
+
+    // Only a Deployment's rollout can be paused: the other two have no such
+    // field, and roll pod by pod under their own update strategy.
+    test('a deployment can also have its rollout paused', () => {
+        expect(ids('deployments')).toEqual([
+            'edit',
+            'logs',
+            'shell',
+            'forward',
+            'scale',
+            'restart',
+            'undo',
+            'pause',
+            'delete',
+        ]);
     });
 
     // A DaemonSet runs one pod per node, so there is no replica count to set --
-    // but it does roll.
-    test('a daemonset restarts but does not scale', () => {
-        expect(ids('daemonsets')).toEqual(['edit', 'logs', 'shell', 'forward', 'restart', 'delete']);
+    // but it does roll, and keeps a history to roll back through.
+    test('a daemonset restarts and rolls back but does not scale', () => {
+        expect(ids('daemonsets')).toEqual(['edit', 'logs', 'shell', 'forward', 'restart', 'undo', 'delete']);
+    });
+
+    // A ReplicaSet's history is its Deployment's; rolling back is done there.
+    test.each(['replicasets', 'jobs', 'pods'])('a %s has no rollout to go back through', (kind) => {
+        expect(ids(kind)).not.toContain('undo');
+    });
+
+    test('a cron job can be run now and suspended', () => {
+        expect(ids('cronjobs')).toEqual(['edit', 'logs', 'trigger', 'suspend', 'delete']);
+    });
+
+    test('a job can be suspended but not run again', () => {
+        expect(ids('jobs')).toContain('suspend');
+        expect(ids('jobs')).not.toContain('trigger');
+    });
+
+    // Both answers ask first: neither can be taken back.
+    test('a signing request can be approved or denied, after a question', () => {
+        expect(ids('certificatesigningrequests')).toEqual(['edit', 'approve', 'deny', 'delete']);
+        for (const action of actionsFor('certificatesigningrequests')) {
+            if (action.id === 'approve' || action.id === 'deny') expect(action.form).toBe('confirm');
+        }
+    });
+
+    test('evicting asks first, and rollback asks which revision', () => {
+        expect(actionsFor('pods').find((a) => a.id === 'evict')?.form).toBe('confirm');
+        expect(actionsFor('deployments').find((a) => a.id === 'undo')?.form).toBe('history');
     });
 
     // A ReplicaSet has a replica count, but rolling one means nothing: the
