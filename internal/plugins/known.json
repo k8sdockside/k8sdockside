@@ -64,6 +64,37 @@
         "official": true
     },
     {
+        "id": "kubeovn",
+        "name": "Kube-OVN",
+        "tagline": "VPCs, subnets and IPAM on OVN",
+        "icon": "layers",
+        "description": "Every subnet with what it has handed out against what it has left, and the addresses in it by the pod holding each one. VPC topology draws each logical router with the subnets hanging off it. The overview checks ovs-ovn and kube-ovn-cni on every node, because Kube-OVN's control plane stays green while its dataplane is down.",
+        "repo": "https://github.com/rogerwesterbo/k8sdockside-kubeovn.git",
+        "author": "Roger Westerbo",
+        "authorUrl": "https://github.com/rogerwesterbo",
+        "detect": ["crd:subnets.kubeovn.io"],
+        "links": [
+            { "label": "kubeovn.io", "url": "https://kubeovn.github.io/docs/stable/en/" },
+            { "label": "GitHub", "url": "https://github.com/kubeovn/kube-ovn" }
+        ],
+        "official": true
+    },
+    {
+        "id": "flannel",
+        "name": "Flannel",
+        "tagline": "one subnet per node, joined by an overlay",
+        "icon": "route",
+        "description": "The cluster network drawn to scale with every node's lease placed where it actually falls, and the backend that joins them with the endpoint and VTEP MAC each node is reached at. Names the nodes holding no lease, leases falling outside the network, and nodes whose backend disagrees with net-conf.json.",
+        "repo": "https://github.com/rogerwesterbo/k8sdockside-flannel.git",
+        "author": "Roger Westerbo",
+        "authorUrl": "https://github.com/rogerwesterbo",
+        "links": [
+            { "label": "GitHub", "url": "https://github.com/flannel-io/flannel" },
+            { "label": "Backends", "url": "https://github.com/flannel-io/flannel/blob/master/Documentation/backends.md" }
+        ],
+        "official": true
+    },
+    {
         "id": "kubevirt",
         "name": "KubeVirt",
         "tagline": "virtual machines as Kubernetes objects",

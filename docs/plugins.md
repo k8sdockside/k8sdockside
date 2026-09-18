@@ -81,6 +81,8 @@ definitions.
 | MetalLB | Roger Westerbo | [rogerwesterbo/k8sdockside-metallb](https://github.com/rogerwesterbo/k8sdockside-metallb) | `crd:ipaddresspools.metallb.io` |
 | Cilium | Roger Westerbo | [rogerwesterbo/k8sdockside-cilium](https://github.com/rogerwesterbo/k8sdockside-cilium) | `crd:ciliumnetworkpolicies.cilium.io` |
 | Calico | Roger Westerbo | [rogerwesterbo/k8sdockside-calico](https://github.com/rogerwesterbo/k8sdockside-calico) | `crd:ippools.crd.projectcalico.org` |
+| Kube-OVN | Roger Westerbo | [rogerwesterbo/k8sdockside-kubeovn](https://github.com/rogerwesterbo/k8sdockside-kubeovn) | `crd:subnets.kubeovn.io` |
+| Flannel | Roger Westerbo | [rogerwesterbo/k8sdockside-flannel](https://github.com/rogerwesterbo/k8sdockside-flannel) | — Flannel has no custom resources to detect |
 | KubeVirt | Roger Westerbo | [rogerwesterbo/k8sdockside-kubevirt](https://github.com/rogerwesterbo/k8sdockside-kubevirt) | `crd:virtualmachines.kubevirt.io` |
 | Vitistack | Roger Westerbo | [rogerwesterbo/k8sdockside-vitistack](https://github.com/rogerwesterbo/k8sdockside-vitistack) | `crd:kubernetesclusters.vitistack.io` |
 | Image inventory | Roger Westerbo | [rogerwesterbo/k8sdockside-example-plugin-typescript](https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript) | — works on any cluster |
