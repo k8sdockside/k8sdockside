@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/metrics"
+	"github.com/k8sdockside/k8sdockside/internal/metrics"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

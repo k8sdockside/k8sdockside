@@ -35,7 +35,7 @@
 </script>
 
 <script lang="ts">
-    import { ResourceService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
+    import { ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import ErrorState from '../components/ErrorState.svelte';
     import Icon from '../components/Icon.svelte';
     import { clusters } from '../state/health.svelte';

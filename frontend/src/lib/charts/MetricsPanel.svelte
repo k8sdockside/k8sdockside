@@ -11,7 +11,7 @@
   so a cluster with no monitoring shows no empty frame.
 -->
 <script lang="ts">
-    import { MetricsService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
+    import { MetricsService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import Icon from '../components/Icon.svelte';
     import { adoptPanel, type MetricsPanelData } from './adopt';
     import LineChart from './LineChart.svelte';

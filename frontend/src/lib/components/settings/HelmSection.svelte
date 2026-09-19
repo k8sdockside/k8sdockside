@@ -14,7 +14,7 @@
   found, so it is clear which helm is being used.
 -->
 <script lang="ts">
-    import type * as helmcli from '../../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/helmcli/models.js';
+    import type * as helmcli from '../../../../bindings/github.com/k8sdockside/k8sdockside/internal/helmcli/models.js';
     import { helm } from '../../state/helm.svelte';
     import { workspace } from '../../state/workspace.svelte';
     import Icon from '../Icon.svelte';

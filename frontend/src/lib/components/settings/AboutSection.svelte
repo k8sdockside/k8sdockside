@@ -13,8 +13,8 @@
   than from here -- so what is left is what this build is.
 -->
 <script lang="ts">
-    import { SettingsService } from '../../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
-    import type { About } from '../../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services/models.js';
+    import { SettingsService } from '../../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
+    import type { About } from '../../../../bindings/github.com/k8sdockside/k8sdockside/internal/services/models.js';
     import { session } from '../../state/session.svelte';
     import { updates } from '../../state/updates.svelte';
     import { workspace } from '../../state/workspace.svelte';

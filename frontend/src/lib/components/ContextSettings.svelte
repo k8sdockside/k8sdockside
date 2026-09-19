@@ -5,7 +5,7 @@
   the kubeconfig file.
 -->
 <script lang="ts">
-    import type * as kube from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/kube/models.js';
+    import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
     import { CONTEXT_COLORS, isValidColor } from '../colors';
     import { workspace } from '../state/workspace.svelte';
     import Icon from './Icon.svelte';

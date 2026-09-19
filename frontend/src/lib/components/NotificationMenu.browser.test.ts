@@ -37,7 +37,7 @@ const settingsFile = vi.hoisted(() => {
             }),
     };
 });
-vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services', () => ({
+vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => ({
     HelmService: {
         Releases: vi.fn().mockResolvedValue({ kind: 'helmreleases', columns: [], rows: [], namespaced: true, error: '' }),
         Detail: vi.fn().mockResolvedValue({
@@ -119,7 +119,7 @@ const { updates } = await import('../state/updates.svelte');
 const RELEASE = {
     version: 'v0.0.3',
     name: 'v0.0.3',
-    url: 'https://github.com/rogerwesterbo/k8sdockside/releases/tag/v0.0.3',
+    url: 'https://github.com/k8sdockside/k8sdockside/releases/tag/v0.0.3',
     publishedAt: '2026-09-05T16:02:10Z',
     assets: [],
 };
@@ -221,7 +221,7 @@ test('viewing the release hands off to the backend and closes the panel', async 
 // The release page is always offered; the file for this install only when the
 // backend found one, since it is the backend that knows what this build is.
 test('offers the download for this install when the release has one', async () => {
-    const DOWNLOAD = 'https://github.com/rogerwesterbo/k8sdockside/releases/download/v0.0.3/k8sdockside-0.0.3-linux-amd64.deb';
+    const DOWNLOAD = 'https://github.com/k8sdockside/k8sdockside/releases/download/v0.0.3/k8sdockside-0.0.3-linux-amd64.deb';
     Status.mockResolvedValueOnce({ ...NEWS, download: DOWNLOAD });
     render(NotificationMenu);
     await expect.element(page.getByRole('button', { name: 'Notifications, 1 unread' })).toBeVisible();

@@ -1,7 +1,7 @@
 // Command pluginmarks regenerates frontend/src/lib/plugins/marks.ts from the
 // logos the plugins ship.
 //
-//	go run ./cmd/pluginmarks ../k8sdockside-*
+//	go run ./cmd/pluginmarks ../*/
 //
 // The app draws an installed plugin with the logo file that plugin serves, so
 // these copies are only for the moment before that: an offer in the sidebar or

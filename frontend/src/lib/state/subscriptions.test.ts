@@ -12,7 +12,7 @@ let handler: (event: { data: unknown }) => void = () => {};
 vi.mock('@wailsio/runtime', () => ({
     Events: { On: vi.fn((_: string, fn: (event: { data: unknown }) => void) => { handler = fn; }) },
 }));
-vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services', () => ({
+vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => ({
     LogService: {
         Containers: vi.fn().mockResolvedValue([]),
         Open: vi.fn().mockResolvedValue('logs-1'),

@@ -299,7 +299,7 @@
         <h3>Would not load</h3>
         <p class="note">
             Fix what is listed and press <strong>Reload</strong>. To check a plugin without the app, run
-            <code>go run github.com/rogerwesterbo/k8sdockside/cmd/plugincheck@main</code> in its folder.
+            <code>go run github.com/k8sdockside/k8sdockside/cmd/plugincheck@main</code> in its folder.
         </p>
         <ul class="problems">
             {#each workspace.pluginProblems as problem (problem.path + problem.message)}
@@ -332,7 +332,7 @@
             path such as <code>status.health.status</code> or <code>status.conditions[Ready]</code>.
         </p>
         <pre class="example selectable">{`{
-    "$schema": "https://raw.githubusercontent.com/rogerwesterbo/k8sdockside/main/docs/plugin.schema.json",
+    "$schema": "https://raw.githubusercontent.com/k8sdockside/k8sdockside/main/docs/plugin.schema.json",
     "id": "acme",
     "name": "Acme Mesh",
     "version": "1.0.0",

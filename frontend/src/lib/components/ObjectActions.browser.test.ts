@@ -43,7 +43,7 @@ const settingsFile = vi.hoisted(() => {
             }),
     };
 });
-vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services', () => ({
+vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => ({
     HelmService: {
         Releases: vi.fn().mockResolvedValue({ kind: 'helmreleases', columns: [], rows: [], namespaced: true, error: '' }),
         Detail: vi.fn().mockResolvedValue({
@@ -140,7 +140,7 @@ const { resourceTabId } = await import('../state/panes');
 const { actions } = await import('../state/actions.svelte');
 const { helm } = await import('../state/helm.svelte');
 const { ActionService, HelmService, PortForwardService, TerminalService } = await import(
-    '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services'
+    '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services'
 );
 
 const PROD = '/home/u/.kube/prod::admin@prod';

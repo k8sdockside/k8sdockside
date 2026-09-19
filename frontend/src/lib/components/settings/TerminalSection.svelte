@@ -17,8 +17,8 @@
   whatever an older preference says. See workspace.openShell.
 -->
 <script lang="ts">
-    import { TerminalService } from '../../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
-    import type { ExternalTerminals } from '../../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services/models.js';
+    import { TerminalService } from '../../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
+    import type { ExternalTerminals } from '../../../../bindings/github.com/k8sdockside/k8sdockside/internal/services/models.js';
     import { session } from '../../state/session.svelte';
     import { workspace } from '../../state/workspace.svelte';
     import Icon from '../Icon.svelte';

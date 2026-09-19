@@ -11,7 +11,7 @@
   container picker for the log view, and each rectangle is a button.
 -->
 <script lang="ts">
-    import type * as kube from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/kube/models.js';
+    import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
 
     interface Props {
         /** Null rather than empty is what Go sends for a kind that has none. */

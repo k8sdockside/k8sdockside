@@ -6,7 +6,7 @@
 // choosing the denominator is a judgement rather than a layout detail and it is
 // the part worth testing.
 
-import type * as kube from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/kube/models.js';
+import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
 
 export interface BudgetAmount {
     label: string;

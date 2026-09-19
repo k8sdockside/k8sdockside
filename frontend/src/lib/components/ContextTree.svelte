@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
     import { tick } from 'svelte';
-    import type * as kube from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/kube/models.js';
+    import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
     import {
         DASHBOARD_ITEM,
         DEFINITIONS_GROUP,

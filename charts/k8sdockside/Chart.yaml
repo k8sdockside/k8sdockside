@@ -10,10 +10,10 @@ type: application
 version: 0.1.0
 appVersion: "0.1.0"
 kubeVersion: ">=1.27.0-0"
-home: https://github.com/rogerwesterbo/k8sdockside
-icon: https://raw.githubusercontent.com/rogerwesterbo/k8sdockside/main/build/appicon.png
+home: https://github.com/k8sdockside/k8sdockside
+icon: https://raw.githubusercontent.com/k8sdockside/k8sdockside/main/build/appicon.png
 sources:
-  - https://github.com/rogerwesterbo/k8sdockside
+  - https://github.com/k8sdockside/k8sdockside
 keywords:
   - kubernetes
   - dashboard
@@ -22,4 +22,4 @@ keywords:
   - oauth
 maintainers:
   - name: Roger Westerbø
-    url: https://github.com/rogerwesterbo
+    url: https://github.com/k8sdockside

@@ -3,8 +3,8 @@ name: Server Image
 # The server-mode container image and its Helm chart, published to ghcr.io on
 # the same tags that drive release.yml:
 #
-#   ghcr.io/rogerwesterbo/k8sdockside:<version>          linux/amd64 + linux/arm64
-#   oci://ghcr.io/rogerwesterbo/helm/k8sdockside       chart <version>, appVersion <version>
+#   ghcr.io/k8sdockside/k8sdockside:<version>          linux/amd64 + linux/arm64
+#   oci://ghcr.io/k8sdockside/helm/k8sdockside       chart <version>, appVersion <version>
 #
 # Its own workflow rather than a job in release.yml, so a failed image push does
 # not hold back the desktop release or the other way round, and either can be
@@ -29,8 +29,8 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/rogerwesterbo/k8sdockside
-  CHART_REPO: oci://ghcr.io/rogerwesterbo/helm
+  IMAGE: ghcr.io/k8sdockside/k8sdockside
+  CHART_REPO: oci://ghcr.io/k8sdockside/helm
 
 jobs:
   publish:

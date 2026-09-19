@@ -61,10 +61,10 @@ describe('in the web version', () => {
     test('the click handler keeps the page where it is and opens the tab', () => {
         const event = new MouseEvent('click', { cancelable: true });
 
-        onExternalClick('https://github.com/rogerwesterbo/k8sdockside')(event);
+        onExternalClick('https://github.com/k8sdockside/k8sdockside')(event);
 
         expect(event.defaultPrevented).toBe(true);
-        expect(windowOpen).toHaveBeenCalledWith('https://github.com/rogerwesterbo/k8sdockside', '_blank', 'noopener,noreferrer');
+        expect(windowOpen).toHaveBeenCalledWith('https://github.com/k8sdockside/k8sdockside', '_blank', 'noopener,noreferrer');
     });
 });
 

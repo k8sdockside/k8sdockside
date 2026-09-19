@@ -12,10 +12,10 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/appconfig"
-	"github.com/rogerwesterbo/k8sdockside/internal/gateway"
-	"github.com/rogerwesterbo/k8sdockside/internal/services"
-	"github.com/rogerwesterbo/k8sdockside/internal/session"
+	"github.com/k8sdockside/k8sdockside/internal/appconfig"
+	"github.com/k8sdockside/k8sdockside/internal/gateway"
+	"github.com/k8sdockside/k8sdockside/internal/services"
+	"github.com/k8sdockside/k8sdockside/internal/session"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 

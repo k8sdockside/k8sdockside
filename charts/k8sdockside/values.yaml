@@ -6,12 +6,12 @@
 #
 # The full guide, including setting up each OAuth provider, is docs/server-mode.md
 # in the repository:
-# https://github.com/rogerwesterbo/k8sdockside/blob/main/docs/server-mode.md
+# https://github.com/k8sdockside/k8sdockside/blob/main/docs/server-mode.md
 
 image:
   # Built from build/docker/Dockerfile.server and published for linux/amd64 and
   # linux/arm64 by .github/workflows/server-image.yml on every release tag.
-  repository: ghcr.io/rogerwesterbo/k8sdockside
+  repository: ghcr.io/k8sdockside/k8sdockside
   # Defaults to the chart's appVersion.
   tag: ""
   # Pin by digest instead, e.g. sha256:0123...; takes precedence over tag.

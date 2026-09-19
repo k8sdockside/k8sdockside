@@ -8,7 +8,7 @@
   thing you actually want to copy somewhere.
 -->
 <script lang="ts">
-    import type * as kube from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/kube/models.js';
+    import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
     import { classify } from '../errors';
     import Icon from './Icon.svelte';
 

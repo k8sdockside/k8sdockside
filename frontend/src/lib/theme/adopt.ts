@@ -2,7 +2,7 @@
 // state/adopt.ts: the generated types are nullable everywhere a Go slice or map
 // could be nil, and resolving that once here keeps `?? []` out of the gallery.
 
-import type * as bindings from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/themes/models.js';
+import type * as bindings from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/themes/models.js';
 import type { Theme, ThemeCatalogue, ThemeToken } from './apply';
 
 export function adoptTheme(theme: bindings.Theme): Theme {

@@ -18,7 +18,7 @@
         MetricsService,
         PluginService,
         ResourceService,
-    } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
+    } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import { adoptPanel } from '../charts/adopt';
     import { isPluginOverview, PLUGIN_OVERVIEW, pluginKindFor } from '../catalogue';
     import { openExternal } from '../links';

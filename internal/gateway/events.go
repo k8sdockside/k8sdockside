@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/rogerwesterbo/k8sdockside/internal/session"
+	"github.com/k8sdockside/k8sdockside/internal/session"
 )
 
 const (

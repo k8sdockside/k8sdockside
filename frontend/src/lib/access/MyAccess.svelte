@@ -7,7 +7,7 @@
   authorizers besides RBAC say, when they are willing to enumerate it.
 -->
 <script lang="ts">
-    import { ResourceService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
+    import { ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import ErrorState from '../components/ErrorState.svelte';
     import RuleMatrix from './RuleMatrix.svelte';
     import { adoptMyRules, assessRules, type Identity, type MyRules } from './model';

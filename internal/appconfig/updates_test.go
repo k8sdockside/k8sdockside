@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/themes"
+	"github.com/k8sdockside/k8sdockside/internal/themes"
 )
 
 // The default is on, so a file written before the field existed must not read

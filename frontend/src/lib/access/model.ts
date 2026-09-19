@@ -12,7 +12,7 @@
 // authorizers (the Node authorizer, a webhook) are invisible from here, and the
 // view says so.
 
-import type * as kube from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/kube/models.js';
+import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
 
 // ----- shapes --------------------------------------------------------------
 

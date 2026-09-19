@@ -5,7 +5,7 @@ package main
 import (
 	"testing"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/appconfig"
+	"github.com/k8sdockside/k8sdockside/internal/appconfig"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 

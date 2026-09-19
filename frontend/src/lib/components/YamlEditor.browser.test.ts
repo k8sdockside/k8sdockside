@@ -31,7 +31,7 @@ const settingsFile = vi.hoisted(() => {
             }),
     };
 });
-vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services', () => ({
+vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => ({
     HelmService: {
         Releases: vi.fn().mockResolvedValue({ kind: 'helmreleases', columns: [], rows: [], namespaced: true, error: '' }),
         Detail: vi.fn().mockResolvedValue({
@@ -107,7 +107,7 @@ vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/service
 
 const { workspace } = await import('../state/workspace.svelte');
 const { editors } = await import('../state/editor.svelte');
-const { ResourceService } = await import('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services');
+const { ResourceService } = await import('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services');
 
 /**
  * The editor is CodeMirror now, so its text is not an input's value. The view

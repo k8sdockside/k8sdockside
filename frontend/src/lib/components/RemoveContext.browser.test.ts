@@ -3,7 +3,7 @@ import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import Sidebar from './Sidebar.svelte';
 
-vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services', () => ({
+vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => ({
     HelmService: {
         Releases: vi.fn().mockResolvedValue({ kind: 'helmreleases', columns: [], rows: [], namespaced: true, error: '' }),
         Detail: vi.fn().mockResolvedValue({
@@ -98,7 +98,7 @@ function ctx(file: string, name: string) {
 // contexts stay. A rescan finds the context and hides it again, so -- exactly
 // like a hidden file -- it is listed under Hidden, where it can be brought
 // back.
-const { KubeconfigService } = await import('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services');
+const { KubeconfigService } = await import('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services');
 
 const CONFIG = '/home/u/.kube/config';
 const PROD = `${CONFIG}::prod`;

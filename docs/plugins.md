@@ -77,16 +77,16 @@ definitions.
 
 | Plugin | By | Repository | Suggested for clusters serving |
 | --- | --- | --- | --- |
-| cert-manager | Roger Westerbo | [rogerwesterbo/k8sdockside-certmanager](https://github.com/rogerwesterbo/k8sdockside-certmanager) | `crd:certificates.cert-manager.io` |
-| MetalLB | Roger Westerbo | [rogerwesterbo/k8sdockside-metallb](https://github.com/rogerwesterbo/k8sdockside-metallb) | `crd:ipaddresspools.metallb.io` |
-| Cilium | Roger Westerbo | [rogerwesterbo/k8sdockside-cilium](https://github.com/rogerwesterbo/k8sdockside-cilium) | `crd:ciliumnetworkpolicies.cilium.io` |
-| Calico | Roger Westerbo | [rogerwesterbo/k8sdockside-calico](https://github.com/rogerwesterbo/k8sdockside-calico) | `crd:ippools.crd.projectcalico.org` |
-| Kube-OVN | Roger Westerbo | [rogerwesterbo/k8sdockside-kubeovn](https://github.com/rogerwesterbo/k8sdockside-kubeovn) | `crd:subnets.kubeovn.io` |
-| Flannel | Roger Westerbo | [rogerwesterbo/k8sdockside-flannel](https://github.com/rogerwesterbo/k8sdockside-flannel) | — Flannel has no custom resources to detect |
-| KubeVirt | Roger Westerbo | [rogerwesterbo/k8sdockside-kubevirt](https://github.com/rogerwesterbo/k8sdockside-kubevirt) | `crd:virtualmachines.kubevirt.io` |
-| Vitistack | Roger Westerbo | [rogerwesterbo/k8sdockside-vitistack](https://github.com/rogerwesterbo/k8sdockside-vitistack) | `crd:kubernetesclusters.vitistack.io` |
-| Image inventory | Roger Westerbo | [rogerwesterbo/k8sdockside-example-plugin-typescript](https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript) | — works on any cluster |
-| Optimization advisor | Roger Westerbo | [rogerwesterbo/k8sdockside-optimization](https://github.com/rogerwesterbo/k8sdockside-optimization) | — works on any cluster |
+| cert-manager | K8s Dockside | [k8sdockside/certmanager](https://github.com/k8sdockside/certmanager) | `crd:certificates.cert-manager.io` |
+| MetalLB | K8s Dockside | [k8sdockside/metallb](https://github.com/k8sdockside/metallb) | `crd:ipaddresspools.metallb.io` |
+| Cilium | K8s Dockside | [k8sdockside/cilium](https://github.com/k8sdockside/cilium) | `crd:ciliumnetworkpolicies.cilium.io` |
+| Calico | K8s Dockside | [k8sdockside/calico](https://github.com/k8sdockside/calico) | `crd:ippools.crd.projectcalico.org` |
+| Kube-OVN | K8s Dockside | [k8sdockside/kubeovn](https://github.com/k8sdockside/kubeovn) | `crd:subnets.kubeovn.io` |
+| Flannel | K8s Dockside | [k8sdockside/flannel](https://github.com/k8sdockside/flannel) | — Flannel has no custom resources to detect |
+| KubeVirt | K8s Dockside | [k8sdockside/kubevirt](https://github.com/k8sdockside/kubevirt) | `crd:virtualmachines.kubevirt.io` |
+| Vitistack | K8s Dockside | [k8sdockside/vitistack](https://github.com/k8sdockside/vitistack) | `crd:kubernetesclusters.vitistack.io` |
+| Image inventory | K8s Dockside | [k8sdockside/image-inventory](https://github.com/k8sdockside/image-inventory) | — works on any cluster |
+| Optimization advisor | K8s Dockside | [k8sdockside/optimization](https://github.com/k8sdockside/optimization) | — works on any cluster |
 
 Every card credits its author, and says whether the plugin is **Official** —
 kept alongside the app by its author — or from the **Community**. Yours can be
@@ -109,7 +109,7 @@ working file you can edit a line at a time.
 
 ```json
 {
-    "$schema": "https://raw.githubusercontent.com/rogerwesterbo/k8sdockside/main/docs/plugin.schema.json",
+    "$schema": "https://raw.githubusercontent.com/k8sdockside/k8sdockside/main/docs/plugin.schema.json",
     "id": "acme",
     "name": "Acme Mesh",
     "version": "1.0.0",
@@ -511,8 +511,8 @@ The SDK sets the app's colour tokens on the page's `:root` — `var(--bg)`,
 `var(--text)`, `var(--accent)`, `var(--ok)`, `var(--error)` and the rest — and
 keeps them in step with the app, so a view looks like the app without trying.
 
-Complete ones to read: [k8sdockside-metallb](https://github.com/rogerwesterbo/k8sdockside-metallb)
-and [k8sdockside-certmanager](https://github.com/rogerwesterbo/k8sdockside-certmanager)
+Complete ones to read: [k8sdockside/metallb](https://github.com/k8sdockside/metallb)
+and [k8sdockside/certmanager](https://github.com/k8sdockside/certmanager)
 in plain script — views, panels and an overview of their own — and the built-in
 Argo CD plugin's pages, in `internal/plugins/builtin/ui/argocd/`, which are the
 same thing shipped with the app.
@@ -573,7 +573,7 @@ Plugins** names them before any of its views is opened.
 
 ### Writing the pages in TypeScript, or with a framework
 
-[k8sdockside-example-plugin-typescript](https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript)
+[k8sdockside/image-inventory](https://github.com/k8sdockside/image-inventory)
 is a complete plugin written in TypeScript and built with esbuild — an overview,
 a view and a panel over core kinds, so it works on any cluster — meant to be
 copied as the start of your own. The bridge's types are
@@ -659,7 +659,7 @@ particular:
   to draw its own way. The generated chart panel is not on screen, so without
   it those charts would go nowhere.
 
-[k8sdockside-metallb](https://github.com/rogerwesterbo/k8sdockside-metallb) has
+[k8sdockside/metallb](https://github.com/k8sdockside/metallb) has
 one: a verdict and a sentence on what MetalLB is doing, the addresses in use as
 a ring by pool, the path an address takes drawn as five stages that turn red
 where it is broken, what needs attention, MetalLB's recent events, its charts,
@@ -749,7 +749,7 @@ The page gets these on top of the calls above:
 
 The panel's page is reloaded when the detail view moves to another object.
 
-[k8sdockside-kubevirt](https://github.com/rogerwesterbo/k8sdockside-kubevirt)
+[k8sdockside/kubevirt](https://github.com/k8sdockside/kubevirt)
 has both: the seven lifecycle actions on the action bar, and a *Machine* panel
 with the state, the node, the addresses, the conditions and recent migrations,
 and a round icon button group drawn from `actions()`.
@@ -869,7 +869,7 @@ session so nobody has to go looking.
 The same checks run outside the app:
 
 ```
-go run github.com/rogerwesterbo/k8sdockside/cmd/plugincheck@main .
+go run github.com/k8sdockside/k8sdockside/cmd/plugincheck@main .
 ```
 
 reads the folder it is given exactly as the app reads it once cloned — the

@@ -5,9 +5,9 @@
         "tagline": "TLS certificates, issued and renewed inside the cluster",
         "icon": "lock",
         "description": "When every certificate expires, which renewals are stuck and exactly where — the request, the ACME order or the challenge — and why, in plain words. Panels on certificates, issuers, Ingresses and Gateways.",
-        "repo": "https://github.com/rogerwesterbo/k8sdockside-certmanager.git",
-        "author": "Roger Westerbo",
-        "authorUrl": "https://github.com/rogerwesterbo",
+        "repo": "https://github.com/k8sdockside/certmanager.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
         "detect": ["crd:certificates.cert-manager.io"],
         "links": [
             { "label": "cert-manager.io", "url": "https://cert-manager.io" },
@@ -21,9 +21,9 @@
         "tagline": "load balancer addresses for bare-metal clusters",
         "icon": "gateway",
         "description": "Every address pool as a map of its addresses, the route each address takes out of the cluster, and what is wrong with it. Services still waiting for an address come first, with the reason and a fix.",
-        "repo": "https://github.com/rogerwesterbo/k8sdockside-metallb.git",
-        "author": "Roger Westerbo",
-        "authorUrl": "https://github.com/rogerwesterbo",
+        "repo": "https://github.com/k8sdockside/metallb.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
         "detect": ["crd:ipaddresspools.metallb.io"],
         "links": [
             { "label": "metallb.io", "url": "https://metallb.io" },
@@ -37,9 +37,9 @@
         "tagline": "eBPF networking, identities and the policies between them",
         "icon": "shield",
         "description": "Every endpoint as a hexagon coloured by whether policy protects it, every network policy drawn as a flow from who may connect to where it may go, the datapath read from cilium-config, and nodes, LB IPAM pools, L2 announcements and BGP sessions with what is wrong with them.",
-        "repo": "https://github.com/rogerwesterbo/k8sdockside-cilium.git",
-        "author": "Roger Westerbo",
-        "authorUrl": "https://github.com/rogerwesterbo",
+        "repo": "https://github.com/k8sdockside/cilium.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
         "detect": ["crd:ciliumnetworkpolicies.cilium.io"],
         "links": [
             { "label": "cilium.io", "url": "https://cilium.io" },
@@ -53,9 +53,9 @@
         "tagline": "pod networking, IPAM and tiered network policy",
         "icon": "policy",
         "description": "Policy tiers as lanes in the order Calico evaluates them, a trace of one pod's traffic tier by tier, every IP pool as a map of its blocks and addresses, the BGP mesh and peers with their session states, and Whisker's flow logs: who talks to whom and what is denied, by which policy.",
-        "repo": "https://github.com/rogerwesterbo/k8sdockside-calico.git",
-        "author": "Roger Westerbo",
-        "authorUrl": "https://github.com/rogerwesterbo",
+        "repo": "https://github.com/k8sdockside/calico.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
         "detect": ["crd:ippools.crd.projectcalico.org"],
         "links": [
             { "label": "projectcalico.org", "url": "https://www.projectcalico.org" },
@@ -69,9 +69,9 @@
         "tagline": "VPCs, subnets and IPAM on OVN",
         "icon": "layers",
         "description": "Every subnet with what it has handed out against what it has left, and the addresses in it by the pod holding each one. VPC topology draws each logical router with the subnets hanging off it. The overview checks ovs-ovn and kube-ovn-cni on every node, because Kube-OVN's control plane stays green while its dataplane is down.",
-        "repo": "https://github.com/rogerwesterbo/k8sdockside-kubeovn.git",
-        "author": "Roger Westerbo",
-        "authorUrl": "https://github.com/rogerwesterbo",
+        "repo": "https://github.com/k8sdockside/kubeovn.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
         "detect": ["crd:subnets.kubeovn.io"],
         "links": [
             { "label": "kubeovn.io", "url": "https://kubeovn.github.io/docs/stable/en/" },
@@ -85,9 +85,9 @@
         "tagline": "one subnet per node, joined by an overlay",
         "icon": "route",
         "description": "The cluster network drawn to scale with every node's lease placed where it actually falls, and the backend that joins them with the endpoint and VTEP MAC each node is reached at. Names the nodes holding no lease, leases falling outside the network, and nodes whose backend disagrees with net-conf.json.",
-        "repo": "https://github.com/rogerwesterbo/k8sdockside-flannel.git",
-        "author": "Roger Westerbo",
-        "authorUrl": "https://github.com/rogerwesterbo",
+        "repo": "https://github.com/k8sdockside/flannel.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
         "links": [
             { "label": "GitHub", "url": "https://github.com/flannel-io/flannel" },
             { "label": "Backends", "url": "https://github.com/flannel-io/flannel/blob/master/Documentation/backends.md" }
@@ -100,9 +100,9 @@
         "tagline": "virtual machines as Kubernetes objects",
         "icon": "display",
         "description": "Your fleet of virtual machines at a glance, the nodes hosting them and the migrations in flight, with Start, Pause, Restart, Migrate and Stop on every machine and guest charts from Prometheus.",
-        "repo": "https://github.com/rogerwesterbo/k8sdockside-kubevirt.git",
-        "author": "Roger Westerbo",
-        "authorUrl": "https://github.com/rogerwesterbo",
+        "repo": "https://github.com/k8sdockside/kubevirt.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
         "detect": ["crd:virtualmachines.kubevirt.io"],
         "links": [
             { "label": "kubevirt.io", "url": "https://kubevirt.io" },
@@ -116,12 +116,12 @@
         "tagline": "which container images run where",
         "icon": "layers",
         "description": "Every image in the cluster by registry, the workloads using it, and the risky ones — unpinned tags and images that will not pull. Works on any cluster. Also the starting point for writing a plugin of your own in TypeScript.",
-        "repo": "https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript.git",
-        "author": "Roger Westerbo",
-        "authorUrl": "https://github.com/rogerwesterbo",
+        "repo": "https://github.com/k8sdockside/image-inventory.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
         "links": [
             { "label": "Container images", "url": "https://kubernetes.io/docs/concepts/containers/images/" },
-            { "label": "Source", "url": "https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript" }
+            { "label": "Source", "url": "https://github.com/k8sdockside/image-inventory" }
         ],
         "official": true
     },
@@ -131,12 +131,12 @@
         "tagline": "a score for this cluster, and what to change to raise it",
         "icon": "sliders",
         "description": "Checks requests and limits, replicas and disruption budgets, probes, autoscalers, idle volumes and node headroom against plain rules, scores the cluster, and says what to change. Switch rules off, accept findings, and rightsize from Prometheus, VictoriaMetrics or metrics-server. Works on any cluster.",
-        "repo": "https://github.com/rogerwesterbo/k8sdockside-optimization.git",
-        "author": "Roger Westerbo",
-        "authorUrl": "https://github.com/rogerwesterbo",
+        "repo": "https://github.com/k8sdockside/optimization.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
         "links": [
             { "label": "Resource management", "url": "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/" },
-            { "label": "Source", "url": "https://github.com/rogerwesterbo/k8sdockside-optimization" }
+            { "label": "Source", "url": "https://github.com/k8sdockside/optimization" }
         ],
         "official": true
     },
@@ -146,13 +146,13 @@
         "tagline": "a supervisor cluster -- networks, clusters, machines and their VMs -- as one picture",
         "icon": "layers",
         "description": "Every network namespace, Kubernetes cluster, machine provider, machine and VM as one node graph that lights up the chains through whatever you select, with what is failing and why. Cluster and machine pages in full, and every cluster against the Kubernetes release calendar and the Talos support matrix, with buttons that start talos-operator's upgrades.",
-        "repo": "https://github.com/rogerwesterbo/k8sdockside-vitistack.git",
-        "author": "Roger Westerbo",
-        "authorUrl": "https://github.com/rogerwesterbo",
+        "repo": "https://github.com/k8sdockside/vitistack.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
         "detect": ["crd:kubernetesclusters.vitistack.io"],
         "links": [
             { "label": "Vitistack", "url": "https://github.com/vitistack" },
-            { "label": "Source", "url": "https://github.com/rogerwesterbo/k8sdockside-vitistack" }
+            { "label": "Source", "url": "https://github.com/k8sdockside/vitistack" }
         ],
         "official": true
     }

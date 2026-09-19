@@ -1,6 +1,6 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
-    "$id": "https://raw.githubusercontent.com/rogerwesterbo/k8sdockside/main/docs/plugin.schema.json",
+    "$id": "https://raw.githubusercontent.com/k8sdockside/k8sdockside/main/docs/plugin.schema.json",
     "title": "K8s Dockside plugin",
     "description": "A K8s Dockside solution plugin, or a pack of them. See docs/plugins.md. The app checks more than this schema can say (that kinds exist, that queries parse, that pages are in the ui folder): run plugincheck for the whole of it.",
     "if": {

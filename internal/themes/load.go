@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/addons"
+	"github.com/k8sdockside/k8sdockside/internal/addons"
 )
 
 //go:embed builtin/*.json

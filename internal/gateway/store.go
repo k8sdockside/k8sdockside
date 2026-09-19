@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/session"
+	"github.com/k8sdockside/k8sdockside/internal/session"
 )
 
 const (

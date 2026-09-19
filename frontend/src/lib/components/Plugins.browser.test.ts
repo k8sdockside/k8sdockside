@@ -38,7 +38,7 @@ const ARGO: Plugin = {
 
 const Summary = vi.fn();
 
-vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services', () => ({
+vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => ({
     HelmService: {
         Releases: vi.fn().mockResolvedValue({ kind: 'helmreleases', columns: [], rows: [], namespaced: true, error: '' }),
         Detail: vi.fn().mockResolvedValue({
@@ -286,7 +286,7 @@ test('a card opens the view that lists what it counts', async () => {
 // panel drew every installed plugin's overview charts on every overview --
 // Argo CD's application health on the MetalLB overview.
 test("the overview asks for its own plugin's charts, not every plugin's", async () => {
-    const { MetricsService } = await import('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services');
+    const { MetricsService } = await import('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services');
     const Charts = vi.mocked(MetricsService.Charts);
     Charts.mockClear();
     workspace.metricsAttachments = ['plugin:argocd/overview', 'plugin:flux/overview'];
@@ -333,7 +333,7 @@ test('a plugin with an overview of its own opens that page in its frame', async 
 // A page may call only the services its plugin declares, and the query it
 // sends reaches Go as lists of strings whatever shape the page gave it.
 test('a page calls the services its plugin declares, and no others', async () => {
-    const { PluginService } = await import('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services');
+    const { PluginService } = await import('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services');
     const ServiceGet = vi.mocked(PluginService.ServiceGet);
     ServiceGet.mockClear();
     const PluginFrame = (await import('./PluginFrame.svelte')).default;
@@ -415,11 +415,11 @@ test('settings offers the known plugins and explains the ones that would not loa
             tagline: 'TLS certificates',
             icon: 'lock',
             description: 'When every certificate expires.',
-            repo: 'https://github.com/rogerwesterbo/k8sdockside-certmanager.git',
+            repo: 'https://github.com/k8sdockside/certmanager.git',
             detect: ['crd:certificates.cert-manager.io'],
             links: [{ label: 'cert-manager.io', url: 'https://cert-manager.io' }],
             author: 'Roger Westerbo',
-            authorUrl: 'https://github.com/rogerwesterbo',
+            authorUrl: 'https://github.com/k8sdockside',
             official: true,
             installed: false,
         },
@@ -451,11 +451,11 @@ test('settings offers the known plugins and explains the ones that would not loa
     render(PluginsSection);
 
     // One offer: Argo CD is installed already, and is listed where it is.
-    await expect.element(page.getByTitle('git clone https://github.com/rogerwesterbo/k8sdockside-certmanager.git')).toBeVisible();
+    await expect.element(page.getByTitle('git clone https://github.com/k8sdockside/certmanager.git')).toBeVisible();
     expect(page.getByTitle(/^git clone/).elements()).toHaveLength(1);
     await expect.element(page.getByRole('link', { name: 'cert-manager.io' })).toBeVisible();
     // Each offer credits its author, linked, and says whose it is.
-    await expect.element(page.getByRole('link', { name: 'Roger Westerbo' })).toHaveAttribute('href', 'https://github.com/rogerwesterbo');
+    await expect.element(page.getByRole('link', { name: 'Roger Westerbo' })).toHaveAttribute('href', 'https://github.com/k8sdockside');
     await expect.element(page.getByText('Official', { exact: true })).toBeVisible();
     // The built-in Argo CD card credits the project.
     await expect.element(page.getByText('Built in', { exact: true }).first()).toBeVisible();

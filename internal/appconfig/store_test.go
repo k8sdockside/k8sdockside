@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/themes"
+	"github.com/k8sdockside/k8sdockside/internal/themes"
 )
 
 // tempSettings is a throwaway settings file for one test. Tests must never

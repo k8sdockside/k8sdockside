@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/metrics"
+	"github.com/k8sdockside/k8sdockside/internal/metrics"
 )
 
 // quietPrometheus answers every query with no series.

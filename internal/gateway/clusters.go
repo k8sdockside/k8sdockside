@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/kube"
+	"github.com/k8sdockside/k8sdockside/internal/kube"
 )
 
 // maxKubeconfigBytes bounds an uploaded kubeconfig. The largest real ones --

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/addons"
+	"github.com/k8sdockside/k8sdockside/internal/addons"
 )
 
 // builtinFS holds the built-in manifests, builtin/<id>.json, and the pages of
@@ -385,7 +385,7 @@ func checkUIDir(p Plugin) error {
 // SchemaURL is where the plugin manifest's JSON Schema is published, for an
 // editor to check a file against while it is written. See
 // docs/plugin.schema.json.
-const SchemaURL = "https://raw.githubusercontent.com/rogerwesterbo/k8sdockside/main/docs/plugin.schema.json"
+const SchemaURL = "https://raw.githubusercontent.com/k8sdockside/k8sdockside/main/docs/plugin.schema.json"
 
 // Example is a starter plugin, written into the plugins folder on request. It
 // is a real, working plugin for something almost every cluster has -- rather

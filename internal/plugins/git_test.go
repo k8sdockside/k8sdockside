@@ -10,7 +10,7 @@ import (
 
 func TestSameRepositoryIgnoresHowTheAddressIsSpelt(t *testing.T) {
 	same := [][2]string{
-		{"https://github.com/rogerwesterbo/k8sdockside-certmanager", "https://github.com/rogerwesterbo/k8sdockside-certmanager.git"},
+		{"https://github.com/k8sdockside/certmanager", "https://github.com/k8sdockside/certmanager.git"},
 		{"https://github.com/Acme/Plugin.git/", "https://github.com/acme/plugin"},
 		{"git@github.com:acme/plugin.git", "https://github.com/acme/plugin"},
 		{"ssh://git@github.com/acme/plugin.git", "git@github.com:acme/plugin"},

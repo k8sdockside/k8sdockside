@@ -10,7 +10,7 @@
 import { DASHBOARD } from '../catalogue';
 import type { Page } from './types';
 
-const GUIDES = 'https://github.com/rogerwesterbo/k8sdockside/blob/main/docs';
+const GUIDES = 'https://github.com/k8sdockside/k8sdockside/blob/main/docs';
 
 export const HELP: Page = {
     title: 'Help',
@@ -398,7 +398,7 @@ export const HELP: Page = {
                     type: 'links',
                     links: [
                         { label: 'The full plugin guide', href: `${GUIDES}/plugins.md`, note: 'every field, the chart rules, and the three built-ins as worked examples' },
-                        { label: 'The built-in plugins', href: 'https://github.com/rogerwesterbo/k8sdockside/tree/main/internal/plugins/builtin', note: 'in exactly the format above' },
+                        { label: 'The built-in plugins', href: 'https://github.com/k8sdockside/k8sdockside/tree/main/internal/plugins/builtin', note: 'in exactly the format above' },
                     ],
                 },
             ],
@@ -481,7 +481,7 @@ export const HELP: Page = {
                     type: 'links',
                     links: [
                         { label: 'The full theme guide', href: `${GUIDES}/themes.md`, note: 'every token with what it is drawn on, and the contrast rules' },
-                        { label: 'The built-in themes', href: 'https://github.com/rogerwesterbo/k8sdockside/tree/main/internal/themes/builtin', note: 'the same shape yours is; any of them is a starting point' },
+                        { label: 'The built-in themes', href: 'https://github.com/k8sdockside/k8sdockside/tree/main/internal/themes/builtin', note: 'the same shape yours is; any of them is a starting point' },
                     ],
                 },
             ],
@@ -532,8 +532,8 @@ export const HELP: Page = {
                     type: 'links',
                     only: 'desktop',
                     links: [
-                        { label: 'K8s Dockside on GitHub', href: 'https://github.com/rogerwesterbo/k8sdockside', note: 'source, releases, and where to report a problem' },
-                        { label: 'Verifying a download', href: 'https://github.com/rogerwesterbo/k8sdockside/blob/main/SECURITY.md#verifying-a-download' },
+                        { label: 'K8s Dockside on GitHub', href: 'https://github.com/k8sdockside/k8sdockside', note: 'source, releases, and where to report a problem' },
+                        { label: 'Verifying a download', href: 'https://github.com/k8sdockside/k8sdockside/blob/main/SECURITY.md#verifying-a-download' },
                         { label: 'Running it on a server', href: `${GUIDES}/server-mode.md`, note: 'the same app as a web app inside a cluster, for a team, behind a sign-in of its own' },
                     ],
                 },
@@ -541,7 +541,7 @@ export const HELP: Page = {
                     type: 'links',
                     only: 'web',
                     links: [
-                        { label: 'K8s Dockside on GitHub', href: 'https://github.com/rogerwesterbo/k8sdockside', note: 'source, releases, and where to report a problem' },
+                        { label: 'K8s Dockside on GitHub', href: 'https://github.com/k8sdockside/k8sdockside', note: 'source, releases, and where to report a problem' },
                         { label: 'Running the web version', href: `${GUIDES}/server-mode.md`, note: 'the Helm chart, sign-in providers, clusters and the security model' },
                     ],
                 },

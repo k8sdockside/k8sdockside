@@ -169,7 +169,7 @@ func TestLinksAreWebAddressesWithALabel(t *testing.T) {
 
 func TestASchemaReferenceIsAccepted(t *testing.T) {
 	problems := problemsFor(t, "", `{
-    "$schema": "https://raw.githubusercontent.com/rogerwesterbo/k8sdockside/main/docs/plugin.schema.json",
+    "$schema": "https://raw.githubusercontent.com/k8sdockside/k8sdockside/main/docs/plugin.schema.json",
     "id": "acme",
     "views": [{ "id": "pods", "kind": "pods" }]
 }`)

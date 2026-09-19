@@ -9,7 +9,7 @@
   second look for the reader who has just done that.
 -->
 <script lang="ts">
-    import type * as kube from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/kube/models.js';
+    import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
     import { labelFor } from '../catalogue';
     import { notServedGroup } from '../errors';
     import { onExternalClick } from '../links';

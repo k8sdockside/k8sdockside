@@ -9,7 +9,7 @@
 			"FileDescription": "A Kubernetes workspace for your local kubeconfig contexts",
 			"LegalCopyright": "© 2026, Roger Westerbø",
 			"ProductName": "K8s Dockside",
-			"Comments": "https://github.com/rogerwesterbo/k8sdockside"
+			"Comments": "https://github.com/k8sdockside/k8sdockside"
 		}
 	}
 }

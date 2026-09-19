@@ -1,7 +1,7 @@
 // The boundary between the metrics bindings and the charts, matching the other
 // adopt modules: nullable everywhere a Go slice could be nil, resolved once here.
 
-import type * as bindings from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services/models.js';
+import type * as bindings from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services/models.js';
 
 export interface ChartSeries {
     name: string;

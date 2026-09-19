@@ -104,7 +104,7 @@ Every release tag publishes the image, for `linux/amd64` and `linux/arm64`,
 and the chart beside it:
 
 ```sh
-helm install k8sdockside oci://ghcr.io/rogerwesterbo/helm/k8sdockside \
+helm install k8sdockside oci://ghcr.io/k8sdockside/helm/k8sdockside \
   --namespace k8sdockside --create-namespace \
   --version <version>
 ```
@@ -464,7 +464,7 @@ running it some other way.
 
 ```sh
 make build-server      # the binary alone, into bin/k8sdockside-server
-make docker-build      # the image, as IMG (default ghcr.io/rogerwesterbo/k8sdockside:dev)
+make docker-build      # the image, as IMG (default ghcr.io/k8sdockside/k8sdockside:dev)
 make docker-buildx     # linux/amd64 + linux/arm64, and PUSHES to IMG
 make kind-load         # load IMG into the kind cluster KIND_CLUSTER (default kind)
 make helm-install      # install or upgrade the chart into HELM_NAMESPACE, running IMG
