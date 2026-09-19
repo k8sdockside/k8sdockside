@@ -596,6 +596,70 @@ func (s *PluginService) SetEnabled(ctx context.Context, id string, enabled bool)
 	return s.catalogue(), nil
 }
 
+// ClusterProbe is what only a query can answer about one cluster: which
+// plugins belong to it, for the ones a sweep of the definitions cannot tell
+// apart.
+//
+// Both halves exist for the same reason. A product that defines custom
+// resources gives itself away in the definitions the sidebar has already read,
+// and costs nothing to recognise. A product that defines none -- Flannel is a
+// DaemonSet, a ConfigMap and nothing else -- can only be recognised by finding
+// what it runs, and that is a real request, which is why it is asked for here
+// rather than folded into what the frontend already holds.
+type ClusterProbe struct {
+	// Known are the ids of known plugins whose product is running here, found
+	// by their workload probes. Only plugins that are not installed are asked
+	// about: one already in the catalogue is under Installed, where its own
+	// overview answers this.
+	Known []string `json:"known"`
+	// Absent are the ids of installed plugins whose object requirements are
+	// not met here -- the ones that would otherwise read as installed in every
+	// cluster, because the kinds they need are kinds every cluster serves.
+	//
+	// Only plugins with such a requirement appear either way: one whose
+	// requirements are all kinds is answered from the definitions, as before.
+	// A plugin the cluster could not be asked about is in neither list, which
+	// leaves it as it was rather than calling it absent.
+	Absent []string `json:"absent"`
+}
+
+// Probe asks a cluster what the definitions cannot say: which known plugins
+// are running here, and which installed plugins are not. See ClusterProbe.
+//
+// It is one list per probe or object requirement and nothing at all for a
+// plugin that has none, so a cluster is usually one request or none.
+func (s *PluginService) Probe(contextID string) (ClusterProbe, error) {
+	out := ClusterProbe{Known: []string{}, Absent: []string{}}
+	ctx, ok := s.configs.lookup(contextID)
+	if !ok {
+		return out, fmt.Errorf("unknown context %q -- it may have been removed from the kubeconfig", contextID)
+	}
+	catalogue := s.catalogue()
+	cl := &clusterFor{watcher: s.watcher, ctx: ctx}
+
+	for _, known := range plugins.KnownPlugins() {
+		if len(known.DetectWorkloads) == 0 {
+			continue
+		}
+		if _, installed := catalogue.InstalledHere(known.ID); installed {
+			continue
+		}
+		if known.RunsIn(cl) {
+			out.Known = append(out.Known, known.ID)
+		}
+	}
+
+	for _, plugin := range catalogue.Plugins {
+		if plugin.Disabled || !plugins.NeedsObjects(plugin) {
+			continue
+		}
+		if here, told := plugins.HasItsObjects(plugin, cl); told && !here {
+			out.Absent = append(out.Absent, plugin.ID)
+		}
+	}
+	return out, nil
+}
+
 // HideSuggestion stops the sidebar suggesting a known plugin, or lets it
 // suggest it again, and returns the settings as saved.
 func (s *PluginService) HideSuggestion(id string, hidden bool) (appconfig.Settings, error) {

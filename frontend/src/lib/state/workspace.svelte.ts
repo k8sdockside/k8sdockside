@@ -455,6 +455,13 @@ class Workspace {
     /** Custom resource definitions per context, loaded on demand. */
     customKinds = $state<Record<string, CustomKinds>>({});
     /**
+     * What only a query can say about a cluster's plugins, keyed by context id
+     * and filled alongside that context's definitions -- see probeCluster.
+     * `known` are known plugins found running by their workload; `absent` are
+     * installed plugins whose object requirements this cluster does not meet.
+     */
+    pluginProbes = $state<Record<string, { known: string[]; absent: string[] }>>({});
+    /**
      * Which API groups are open, as `contextId\0group`. Not persisted: it is
      * where you are looking right now rather than how you like the sidebar, and
      * it would otherwise grow the settings file a line per group per cluster.
@@ -2076,9 +2083,42 @@ class Workspace {
                 groups: (groups ?? []).map((g) => ({ group: g.group, kinds: g.kinds ?? [] })),
                 message: '',
             };
+            // The definitions answer for every plugin that defines a custom
+            // resource. The handful that define none are asked about here, on
+            // the same trigger and with the same laziness.
+            void this.probeCluster(contextId);
         } catch (err) {
             this.customKinds[contextId] = { status: 'error', groups: [], message: message(err) };
         }
+    }
+
+    /**
+     * Asks the backend what a cluster's definitions cannot say: which known
+     * plugins are running here, and which installed ones are not.
+     *
+     * Flannel is the case this exists for. It defines no custom resources at
+     * all, so there is nothing in the definitions to recognise it by: as an
+     * offer it was suggested for every cluster, and once installed its row
+     * read "installed in this cluster" everywhere, because the kinds it needs
+     * -- DaemonSets, Nodes, ConfigMaps -- are kinds every cluster serves. The
+     * backend looks for the objects instead, for the few plugins that ask it
+     * to, so this is usually one request or none.
+     *
+     * A failure is not reported: the definitions beside it already say the
+     * cluster would not answer, and it leaves every row as it was.
+     */
+    private async probeCluster(contextId: string): Promise<void> {
+        try {
+            const probe = await PluginService.Probe(contextId);
+            this.pluginProbes[contextId] = { known: probe?.known ?? [], absent: probe?.absent ?? [] };
+        } catch {
+            this.pluginProbes[contextId] = { known: [], absent: [] };
+        }
+    }
+
+    /** Whether a known plugin was found running in a cluster by its workload. */
+    private detectedIn(contextId: string, id: string): boolean {
+        return (this.pluginProbes[contextId]?.known ?? []).includes(id);
     }
 
     /** Whether one API group's definitions are showing, for one context. */
@@ -2129,6 +2169,16 @@ class Workspace {
         const served = new Set(loaded.groups.flatMap((group) => group.kinds.map((kind) => kind.kind)));
         const required = plugin.requires.filter((req) => !req.optional);
         if (required.length === 0) return true;
+
+        // A requirement that names objects cannot be answered from the
+        // definitions -- the kinds such a plugin needs are ones every cluster
+        // serves -- so the backend is asked, and until it has answered the
+        // honest verdict is that we do not know.
+        if (required.some((req) => req.selector)) {
+            const probe = this.pluginProbes[contextId];
+            if (!probe) return null;
+            if (probe.absent.includes(plugin.id)) return false;
+        }
 
         return required.every((req) => {
             // Only custom resources can be looked up this way. A requirement on
@@ -2233,6 +2283,11 @@ class Workspace {
             if (known.has(id)) kept[id] = loaded;
         }
         this.customKinds = kept;
+        const keptProbes: Record<string, { known: string[]; absent: string[] }> = {};
+        for (const [id, probe] of Object.entries(this.pluginProbes)) {
+            if (known.has(id)) keptProbes[id] = probe;
+        }
+        this.pluginProbes = keptProbes;
     }
 
     // ----- the describe tab's place among the panes -----------------------
@@ -2488,7 +2543,7 @@ class Workspace {
             (known) =>
                 !this.hasPlugin(known.id) &&
                 !hidden.includes(known.id) &&
-                known.detect.some((kind) => served.has(kind)),
+                (known.detect.some((kind) => served.has(kind)) || this.detectedIn(contextId, known.id)),
         );
     }
 
@@ -2497,11 +2552,11 @@ class Workspace {
      * they have been read -- show a known plugin's product running.
      */
     clustersRunning(known: KnownPlugin): string[] {
-        if (known.detect.length === 0) return [];
         return this.orderContexts(this.contexts)
             .filter((context) => {
                 const loaded = this.customKinds[context.id];
                 if (!loaded || loaded.status !== 'ready') return false;
+                if (this.detectedIn(context.id, known.id)) return true;
                 return loaded.groups.some((group) => group.kinds.some((kind) => known.detect.includes(kind.kind)));
             })
             .map((context) => this.displayName(context));

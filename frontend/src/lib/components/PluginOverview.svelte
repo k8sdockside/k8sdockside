@@ -195,7 +195,7 @@
             <section>
                 <h2>What it needs from the cluster</h2>
                 <ul class="requirements">
-                    {#each summary.requirements as req (req.kind)}
+                    {#each summary.requirements as req (req.kind + (req.selector ?? ''))}
                         <li
                             class:met={req.served}
                             class:unknown={req.error !== ''}
@@ -210,6 +210,9 @@
                             {/if}
                             <span class="label">{req.label}</span>
                             <code class="selectable">{req.kind}</code>
+                            <!-- A requirement that asks for objects says which
+                                 ones, so "not installed here" can be checked. -->
+                            {#if req.selector}<code class="selectable">{req.selector}</code>{/if}
                             {#if req.optional}<span class="optional">optional</span>{/if}
                         </li>
                     {/each}

@@ -51,6 +51,7 @@ vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services'
         InstallKnown: vi.fn().mockResolvedValue({ plugins: [], dir: '', folders: [], problems: [] }),
         InstallFromGit: vi.fn().mockResolvedValue({ plugins: [], dir: '', folders: [], problems: [] }),
         HideSuggestion: vi.fn().mockResolvedValue({}),
+        Probe: vi.fn().mockResolvedValue({ known: [], absent: [] }),
     },
     ThemeService: {
         List: vi.fn().mockResolvedValue({ themes: [], dir: '', folders: [], problems: [] }),
@@ -1875,7 +1876,7 @@ describe('themes', () => {
 // machine*, and the solution it describes is installed in a *cluster*. Those
 // come apart constantly, and the sidebar has to say which it means.
 describe('solution plugins', () => {
-    function plugin(id: string, requires: { kind: string; optional?: boolean }[] = []) {
+    function plugin(id: string, requires: { kind: string; optional?: boolean; selector?: string }[] = []) {
         return {
             id,
             name: id,
@@ -1884,7 +1885,12 @@ describe('solution plugins', () => {
             author: '',
             docs: '',
             description: '',
-            requires: requires.map((r) => ({ kind: r.kind, label: r.kind, optional: r.optional ?? false })),
+            requires: requires.map((r) => ({
+                kind: r.kind,
+                label: r.kind,
+                optional: r.optional ?? false,
+                selector: r.selector ?? '',
+            })),
             views: [{ id: 'things', label: 'Things', icon: 'box', type: 'table', kind: 'pods', namespace: '', selector: '' }],
             origin: 'builtin',
             pack: '',
@@ -2082,6 +2088,41 @@ describe('solution plugins', () => {
         expect(workspace.pluginInstalledIn(PROD, plugin('x'))).toBe(true);
     });
 
+    // Flannel's requirements are DaemonSets, Nodes and ConfigMaps -- kinds
+    // every cluster serves -- so taking them as met made it read "installed
+    // here" in every cluster. A requirement that names objects is the answer,
+    // and only the backend can check it.
+    test('a requirement that names objects waits for the cluster to be asked', async () => {
+        const flannel = plugin('flannel', [{ kind: 'daemonsets', selector: 'app=flannel' }]);
+        clusterServes(PROD, []);
+        expect(workspace.pluginInstalledIn(PROD, flannel)).toBeNull();
+
+        vi.mocked(PluginService.Probe).mockResolvedValueOnce({ known: [], absent: ['flannel'] });
+        await workspace.loadCustomKinds(PROD, { force: true });
+        await vi.waitFor(() => expect(workspace.pluginInstalledIn(PROD, flannel)).toBe(false));
+    });
+
+    test('a cluster that has the objects counts as installed', async () => {
+        const flannel = plugin('flannel', [{ kind: 'daemonsets', selector: 'app=flannel' }]);
+        clusterServes(PROD, []);
+
+        vi.mocked(PluginService.Probe).mockResolvedValueOnce({ known: [], absent: [] });
+        await workspace.loadCustomKinds(PROD, { force: true });
+        await vi.waitFor(() => expect(workspace.pluginInstalledIn(PROD, flannel)).toBe(true));
+    });
+
+    // A cluster that would not answer leaves the row as it was: the backend
+    // reports nothing about it, rather than reporting it as missing.
+    test('a cluster that could not be probed does not read as missing the plugin', async () => {
+        const flannel = plugin('flannel', [{ kind: 'daemonsets', selector: 'app=flannel' }]);
+        clusterServes(PROD, []);
+
+        vi.mocked(PluginService.Probe).mockRejectedValueOnce(new Error('forbidden'));
+        await workspace.loadCustomKinds(PROD, { force: true });
+        await vi.waitFor(() => expect(workspace.pluginProbes[PROD]).toBeDefined());
+        expect(workspace.pluginInstalledIn(PROD, flannel)).toBe(true);
+    });
+
     test('unfolding a plugin is per context', () => {
         workspace.togglePlugin(PROD, 'argocd');
 
@@ -2160,6 +2201,42 @@ describe('solution plugins', () => {
         workspace.settings = { ...workspace.settings, hiddenPluginSuggestions: [] };
     });
 
+    // Flannel installs no custom resources at all, so there is nothing in a
+    // cluster's definitions to recognise it by -- and with an empty `detect`
+    // it was offered for every cluster. The backend looks for what it runs
+    // instead, and the answer arrives with the definitions.
+    test('a plugin with nothing to detect is suggested only where its workload was found', async () => {
+        workspace.knownPlugins = [known('flannel', [])];
+
+        clusterServes(PROD, []);
+        expect(workspace.pluginSuggestionsFor(PROD)).toEqual([]);
+
+        vi.mocked(PluginService.Probe).mockResolvedValueOnce({ known: ['flannel'], absent: [] });
+        await workspace.loadCustomKinds(PROD, { force: true });
+
+        expect(PluginService.Probe).toHaveBeenCalledWith(PROD);
+        // The probe is a second request, so the suggestion arrives after the
+        // definitions rather than holding them up.
+        await vi.waitFor(() => expect(workspace.pluginSuggestionsFor(PROD).map((k) => k.id)).toEqual(['flannel']));
+        // Another cluster nobody looked at says nothing about this one.
+        expect(workspace.pluginSuggestionsFor(STAGING)).toEqual([]);
+    });
+
+    test('a cluster that could not be probed suggests nothing, and says nothing about it', async () => {
+        workspace.knownPlugins = [known('flannel', [])];
+        vi.mocked(PluginService.Probe).mockRejectedValueOnce(new Error('forbidden'));
+
+        await workspace.loadCustomKinds(PROD, { force: true });
+        await vi.waitFor(() => expect(workspace.pluginProbes[PROD]).toEqual({ known: [], absent: [] }));
+
+        expect(workspace.pluginSuggestionsFor(PROD)).toEqual([]);
+        // Nothing is said about it: the definitions beside it already report a
+        // cluster that would not answer, and a plugin left unsuggested is not
+        // something anyone can act on.
+        expect(notices.current?.tone).not.toBe('error');
+        expect(notices.current?.text ?? '').not.toContain('flannel');
+    });
+
     test('the settings list says which clusters run a known plugin', () => {
         workspace.knownPlugins = [known('cert-manager', ['crd:certificates.cert-manager.io'])];
         clusterServes(PROD, ['crd:certificates.cert-manager.io']);
@@ -2170,6 +2247,21 @@ describe('solution plugins', () => {
         ] as unknown as typeof workspace.files;
 
         expect(workspace.clustersRunning(workspace.knownPlugins[0])).toEqual(['admin@prod']);
+        workspace.files = [];
+    });
+
+    test('the settings list counts a cluster where the workload was found, not only the definitions', async () => {
+        workspace.knownPlugins = [known('flannel', [])];
+        workspace.files = [
+            { path: '/home/u/.kube/prod', contexts: [{ id: PROD, name: 'admin@prod' }] },
+            { path: '/home/u/.kube/staging', contexts: [{ id: STAGING, name: 'admin@staging' }] },
+        ] as unknown as typeof workspace.files;
+        clusterServes(STAGING, []);
+
+        vi.mocked(PluginService.Probe).mockResolvedValueOnce({ known: ['flannel'], absent: [] });
+        await workspace.loadCustomKinds(PROD, { force: true });
+
+        await vi.waitFor(() => expect(workspace.clustersRunning(workspace.knownPlugins[0])).toEqual(['admin@prod']));
         workspace.files = [];
     });
 

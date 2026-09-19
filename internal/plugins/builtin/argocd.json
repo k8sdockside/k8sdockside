@@ -2,6 +2,7 @@
     "id": "argocd",
     "name": "Argo CD",
     "tagline": "GitOps continuous delivery",
+    "category": "delivery",
     "icon": "rocket",
     "docs": "https://argo-cd.readthedocs.io",
     "links": [

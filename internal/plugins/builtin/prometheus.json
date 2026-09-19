@@ -2,6 +2,7 @@
     "id": "prometheus",
     "name": "Prometheus",
     "tagline": "monitoring, as the Prometheus Operator installs it",
+    "category": "observability",
     "icon": "gauge",
     "docs": "https://prometheus-operator.dev/docs/getting-started/introduction/",
     "links": [

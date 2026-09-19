@@ -156,6 +156,7 @@ func LoadAt(appVersion, dir string, extra []string, disabled []string) Catalogue
 		loaded[i].Repo, _ = RepoOf(loaded[i])
 		// Always decided here, whatever the manifest wrote.
 		loaded[i].Official = officialClone(loaded[i])
+		loaded[i].Category = knownCategory(loaded[i])
 	}
 
 	return Catalogue{

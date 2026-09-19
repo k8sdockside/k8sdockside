@@ -111,12 +111,28 @@ export interface PluginRequirement {
     kind: string;
     label: string;
     optional: boolean;
+    /**
+     * With a selector, the requirement is for the objects rather than the
+     * kind: the cluster has to hold something matching it. Only the backend
+     * can answer that -- see workspace.probeCluster -- and only a plugin whose
+     * product defines no custom resources needs it.
+     */
+    namespace?: string;
+    selector?: string;
 }
 
 export interface Plugin {
     id: string;
     name: string;
     tagline: string;
+    /**
+     * What the plugin is about, in one word: `storage`, `networking`, ... The
+     * Go loader fills in `other` for a manifest that names none, so what the
+     * app receives is always one of CATEGORIES -- see
+     * lib/plugins/categories.ts. Optional here only so hand-built fixtures
+     * need not spell it out; absent reads as `other`.
+     */
+    category?: string;
     icon: string;
     /**
      * The plugin's own mark, a file in its ui folder, served at
@@ -176,6 +192,8 @@ export interface KnownPlugin {
     id: string;
     name: string;
     tagline: string;
+    /** What it is about, as on an installed plugin. Absent reads as `other`. */
+    category?: string;
     icon: string;
     description: string;
     /** What installing it clones. */
@@ -204,6 +222,8 @@ export interface Presence {
     kind: string;
     label: string;
     optional: boolean;
+    /** What it looked for, when the requirement asks for objects. */
+    selector?: string;
     served: boolean;
     /** Set when we could not find out, as opposed to finding out it is absent. */
     error: string;

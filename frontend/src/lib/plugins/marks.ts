@@ -39,6 +39,8 @@ const MARKED = new Set([
     'kubeovn',
     // KubeVirt
     'kubevirt',
+    // Longhorn
+    'longhorn',
     // MetalLB
     'metallb',
     // Optimization advisor

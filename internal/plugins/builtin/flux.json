@@ -2,6 +2,7 @@
     "id": "flux",
     "name": "Flux",
     "tagline": "GitOps toolkit",
+    "category": "delivery",
     "icon": "repeat",
     "docs": "https://fluxcd.io/flux/",
     "links": [

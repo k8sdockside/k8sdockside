@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/k8sdockside/k8sdockside/internal/kube"
@@ -20,9 +21,14 @@ import (
 type Presence struct {
 	Kind  string `json:"kind"`
 	Label string `json:"label"`
+	// Selector is the requirement's own, when it asks for objects rather than
+	// for a kind. Reported so the overview can say what it looked for.
+	Selector string `json:"selector,omitzero"`
 	// Optional requirements are reported but do not decide Installed.
 	Optional bool `json:"optional"`
-	Served   bool `json:"served"`
+	// Served is whether the cluster has what the requirement asks for: the
+	// kind, or -- with a selector -- at least one object matching it.
+	Served bool `json:"served"`
 	// Error is set when we could not find out, as opposed to finding out that
 	// the kind is absent. An unreachable cluster must not read as "Argo CD is
 	// not installed here".
@@ -110,9 +116,17 @@ func Summarise(p Plugin, cl Cluster) Summary {
 	required, met := 0, 0
 	for _, req := range p.Requires {
 		ok, reason := check(req.Kind)
+		// A requirement that names objects is not answered by discovery: the
+		// kind being served is necessary but says nothing, because the kinds
+		// such a plugin needs are ones every cluster serves. Only a cluster
+		// that has the objects has the product.
+		if ok && req.Selector != "" {
+			ok, reason = found(cl, req)
+		}
 		out.Requirements = append(out.Requirements, Presence{
 			Kind:     req.Kind,
 			Label:    req.Label,
+			Selector: req.Selector,
 			Optional: req.Optional,
 			Served:   ok,
 			Error:    reason,
@@ -138,6 +152,54 @@ func Summarise(p Plugin, cl Cluster) Summary {
 		out.Cards = append(out.Cards, summariseCard(card, cl, check))
 	}
 	return out
+}
+
+// found answers a requirement that names objects: are any of them there?
+//
+// The error it returns is why we could not tell, which Summarise treats the
+// same way as a discovery failure -- an unreachable cluster must never read as
+// "Flannel is not installed here".
+func found(cl Cluster, req Requirement) (bool, string) {
+	tally, err := cl.CountBy(req.Kind, req.Namespace, req.Selector, "")
+	if err != nil {
+		return false, fmt.Sprintf("could not look for %s: %v", req.Kind, err)
+	}
+	return tally.Total > 0, ""
+}
+
+// NeedsObjects reports whether any of a plugin's requirements names objects
+// rather than a kind -- whether, in other words, the definitions alone cannot
+// say if it belongs to a cluster.
+func NeedsObjects(p Plugin) bool {
+	for _, req := range p.Requires {
+		if !req.Optional && req.Selector != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// HasItsObjects answers whether a cluster has the objects a plugin requires,
+// for the requirements that name any. told is false when the cluster could not
+// be asked, which is not the same as the objects being absent: a plugin whose
+// cluster would not answer is left as it was rather than called missing.
+//
+// Only the object requirements are checked. The kinds are the sidebar's
+// question, answered from the definitions it has already read.
+func HasItsObjects(p Plugin, cl Cluster) (here, told bool) {
+	for _, req := range p.Requires {
+		if req.Optional || req.Selector == "" {
+			continue
+		}
+		ok, reason := found(cl, req)
+		if reason != "" {
+			return false, false
+		}
+		if !ok {
+			return false, true
+		}
+	}
+	return true, true
 }
 
 // kindsServed asks the cluster about every kind the plugin names, once.

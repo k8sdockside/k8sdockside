@@ -75,26 +75,41 @@ own, each with a line on what it shows, links to what it is about, and an
 which of your clusters run the product, where the sidebar has read their
 definitions.
 
-| Plugin | By | Repository | Suggested for clusters serving |
-| --- | --- | --- | --- |
-| cert-manager | K8s Dockside | [k8sdockside/certmanager](https://github.com/k8sdockside/certmanager) | `crd:certificates.cert-manager.io` |
-| MetalLB | K8s Dockside | [k8sdockside/metallb](https://github.com/k8sdockside/metallb) | `crd:ipaddresspools.metallb.io` |
-| Cilium | K8s Dockside | [k8sdockside/cilium](https://github.com/k8sdockside/cilium) | `crd:ciliumnetworkpolicies.cilium.io` |
-| Calico | K8s Dockside | [k8sdockside/calico](https://github.com/k8sdockside/calico) | `crd:ippools.crd.projectcalico.org` |
-| Kube-OVN | K8s Dockside | [k8sdockside/kubeovn](https://github.com/k8sdockside/kubeovn) | `crd:subnets.kubeovn.io` |
-| Flannel | K8s Dockside | [k8sdockside/flannel](https://github.com/k8sdockside/flannel) | — Flannel has no custom resources to detect |
-| KubeVirt | K8s Dockside | [k8sdockside/kubevirt](https://github.com/k8sdockside/kubevirt) | `crd:virtualmachines.kubevirt.io` |
-| Vitistack | K8s Dockside | [k8sdockside/vitistack](https://github.com/k8sdockside/vitistack) | `crd:kubernetesclusters.vitistack.io` |
-| Image inventory | K8s Dockside | [k8sdockside/image-inventory](https://github.com/k8sdockside/image-inventory) | — works on any cluster |
-| Optimization advisor | K8s Dockside | [k8sdockside/optimization](https://github.com/k8sdockside/optimization) | — works on any cluster |
+| Plugin | Category | By | Repository | Suggested for clusters serving |
+| --- | --- | --- | --- | --- |
+| cert-manager | Security | K8s Dockside | [k8sdockside/certmanager](https://github.com/k8sdockside/certmanager) | `crd:certificates.cert-manager.io` |
+| Longhorn | Storage | K8s Dockside | [k8sdockside/longhorn](https://github.com/k8sdockside/longhorn) | `crd:volumes.longhorn.io` |
+| MetalLB | Networking | K8s Dockside | [k8sdockside/metallb](https://github.com/k8sdockside/metallb) | `crd:ipaddresspools.metallb.io` |
+| Cilium | CNI | K8s Dockside | [k8sdockside/cilium](https://github.com/k8sdockside/cilium) | `crd:ciliumnetworkpolicies.cilium.io` |
+| Calico | CNI | K8s Dockside | [k8sdockside/calico](https://github.com/k8sdockside/calico) | `crd:ippools.crd.projectcalico.org` |
+| Kube-OVN | CNI | K8s Dockside | [k8sdockside/kubeovn](https://github.com/k8sdockside/kubeovn) | `crd:subnets.kubeovn.io` |
+| Flannel | CNI | K8s Dockside | [k8sdockside/flannel](https://github.com/k8sdockside/flannel) | its `kube-flannel` DaemonSet — it has no custom resources |
+| KubeVirt | Virtualization | K8s Dockside | [k8sdockside/kubevirt](https://github.com/k8sdockside/kubevirt) | `crd:virtualmachines.kubevirt.io` |
+| Vitistack | Platform | K8s Dockside | [k8sdockside/vitistack](https://github.com/k8sdockside/vitistack) | `crd:kubernetesclusters.vitistack.io` |
+| Image inventory | Images | K8s Dockside | [k8sdockside/image-inventory](https://github.com/k8sdockside/image-inventory) | — works on any cluster |
+| Optimization advisor | Cost & efficiency | K8s Dockside | [k8sdockside/optimization](https://github.com/k8sdockside/optimization) | — works on any cluster |
 
 Every card credits its author, and says whether the plugin is **Official** —
 kept alongside the app by its author — or from the **Community**. Yours can be
 on this list: see [Get listed in the app](writing-plugins.md#get-listed-in-the-app).
 
-When a cluster serves one of those kinds and no plugin with that id is
-installed, the cluster's **Plugins** section in the sidebar shows a faint
-*get plugin* row that opens Settings on it. Nothing is cloned from the sidebar.
+The list is long enough now that reading all of it is the wrong way to find
+one, so the top of the section has a search box, a row of category chips and an
+order. They narrow every list at once — available, built in, installed and the
+ones read from folders you watch — because "where is the one for storage" is
+not a question about which folder a plugin happens to be in. The search matches
+a plugin's name, id, tagline, description, author and category, and every word
+has to match, so a second word narrows. A card's category tag is also a filter:
+pressing it shows only that category, and pressing it again undoes that.
+
+A product with no custom resources of its own cannot be recognised that way —
+Flannel is a DaemonSet, a ConfigMap and nothing else — so such an entry names
+the workload to look for instead, and the app asks the cluster for it once,
+alongside the definitions. Only plugins that are not installed are asked about.
+
+When a cluster serves one of those kinds, or runs that workload, and no plugin
+with that id is installed, the cluster's **Plugins** section in the sidebar
+shows a faint *get plugin* row that opens Settings on it. Nothing is cloned from the sidebar.
 The cross on the row stops the suggestion for good; the card in Settings can
 bring it back.
 
@@ -115,6 +130,7 @@ working file you can edit a line at a time.
     "version": "1.0.0",
     "minAppVersion": "0.0.15",
     "tagline": "service mesh",
+    "category": "networking",
     "icon": "share",
     "docs": "https://example.com/acme",
     "links": [
@@ -153,6 +169,7 @@ working file you can edit a line at a time.
 | `id` | required | Lowercase letters, digits and dashes. It appears in every tab's identity, so changing it later loses those tabs from a saved session. |
 | `name` | required | What the sidebar calls it. |
 | `tagline` | optional | One short line, shown under the name on the overview. |
+| `category` | optional | What the plugin is about, in one word: `storage`, `cni`, `networking`, `security`, `images`, `observability`, `delivery`, `virtualization`, `cost`, `platform` or `other`. `cni` is the pod network itself — a cluster has one, and those plugins are alternatives to each other; `networking` is what sits on top of it. Settings groups, filters and searches by it. Left out, it is `other`. Needs K8s Dockside 0.1.1 or newer. |
 | `description` | optional | A paragraph on the overview. Worth writing: it is where you say what to look at first. |
 | `icon` | optional | See [icons](#icons). Defaults to `puzzle`. |
 | `logo` | optional | The plugin's own mark, drawn in place of `icon` wherever the app names it. See [A mark of its own](#a-mark-of-its-own). Needs a `ui/` folder, and K8s Dockside 0.0.30 or newer. |
@@ -163,7 +180,7 @@ working file you can edit a line at a time.
 | `$schema` | optional | Where an editor finds [the schema](#checking-a-plugin). Ignored by the app. |
 | `author` | optional | Who wrote it — you, or your company. Credited on the plugin's card in Settings, on its overview, and on a line the app draws under an overview page of its own. At most 80 characters. |
 | `authorUrl` | optional | Where to find the author — a profile, a company site. `http(s)` only; the author's name links to it. Needs `author`, and K8s Dockside 0.0.19 or newer. See [Credit](writing-plugins.md#credit). |
-| `requires` | optional | The kinds the overview checks this cluster for. |
+| `requires` | optional | What the overview checks this cluster for: kinds, or — with a `selector` — the objects themselves. See [Requirements](#requirements). |
 | `views` | required¹ | The rows under the plugin in the sidebar. |
 | `cards` | optional¹ | The live counts on the overview. |
 | `charts` | optional¹ | Time-series graphs from the cluster's Prometheus. See [Charts](#charts). |
@@ -221,6 +238,33 @@ the reader looking in the wrong place.
 Mark the extras `"optional": true`. Argo CD without ApplicationSets is still
 Argo CD, and an absent optional requirement is shown greyed rather than as a red
 cross.
+
+| Field | | |
+| --- | --- | --- |
+| `kind` | required | A built-in name, or `crd:<plural>.<group>`. |
+| `label` | optional | How the overview names it. Defaults to the kind. |
+| `optional` | optional | Reported, but does not decide whether the plugin counts as installed. |
+| `namespace`, `selector` | optional | Ask for *objects* rather than for the kind. Needs K8s Dockside 0.1.1 or newer. |
+
+**A requirement usually names a kind, because that is enough.** A custom
+resource is served only where the product that defines it is installed, so
+`crd:applications.argoproj.io` being there *is* Argo CD being there, and the
+answer comes free from definitions the sidebar has already read.
+
+**A product that defines no custom resources needs more.** Flannel is a
+DaemonSet, a ConfigMap and nothing else, so a manifest requiring `daemonsets`,
+`nodes` and `configmaps` requires only kinds every cluster serves — and reads as
+installed in every cluster, which helps nobody. Give such a requirement a
+selector, and it is met only if the objects are actually there:
+
+```json
+{ "kind": "daemonsets", "label": "Flannel daemonset", "selector": "app=flannel" }
+```
+
+That costs one list per requirement against each cluster, asked once alongside
+its definitions, so name only what identifies the product. A cluster that
+cannot be asked leaves the row as it was rather than reading as "not
+installed": not knowing and knowing it is absent are different answers.
 
 ### Cards
 

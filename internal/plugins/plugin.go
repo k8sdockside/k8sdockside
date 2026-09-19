@@ -161,6 +161,18 @@ type Requirement struct {
 	// Optional requirements are reported but do not decide whether the plugin
 	// counts as installed. Argo CD without ApplicationSets is still Argo CD.
 	Optional bool `json:"optional,omitzero"`
+	// Namespace and Selector turn "this cluster serves the kind" into "this
+	// cluster has these objects". Most plugins need neither: a custom resource
+	// is served only where the product that defines it is installed, so the
+	// kind alone gives it away. A product that defines none -- Flannel is a
+	// DaemonSet, a ConfigMap and nothing else -- would otherwise require only
+	// kinds every cluster serves, and read as installed everywhere. With a
+	// selector the requirement is met only if something matching it is there.
+	//
+	// The cost is a list per requirement, so it is worth naming only what
+	// actually identifies the product.
+	Namespace string `json:"namespace,omitzero"`
+	Selector  string `json:"selector,omitzero"`
 }
 
 // Card is one live tile on the plugin's overview: how many of a kind there are,
@@ -291,7 +303,12 @@ type Plugin struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	Tagline string `json:"tagline,omitzero"`
-	Icon    string `json:"icon,omitzero"`
+	// Category is what the plugin is about, in one word from Categories:
+	// storage, networking, security and the rest. It is what the settings
+	// view groups and filters by, so a manifest that names none is filed
+	// under "other" rather than left blank. See categories.go.
+	Category string `json:"category,omitzero"`
+	Icon     string `json:"icon,omitzero"`
 	// Logo is the plugin's own mark -- a file in its ui folder -- shown
 	// wherever the app names the plugin, in place of Icon. A plugin for a
 	// product is recognised by that product's mark long before its name is
@@ -573,6 +590,8 @@ func validate(p Plugin) (Plugin, error) {
 	if p.Icon == "" {
 		p.Icon = "puzzle"
 	}
+	fail(checkCategory(p.ID, p.Category))
+	p.Category = category(p.Category)
 	p.Logo = strings.TrimSpace(p.Logo)
 	fail(checkLogo(p.ID, p.Logo))
 	// The logo is served from the ui folder by the same handler that serves the
@@ -586,6 +605,12 @@ func validate(p Plugin) (Plugin, error) {
 		req.Kind = strings.TrimSpace(req.Kind)
 		if !kube.IsKnownKind(req.Kind) {
 			fail(fmt.Errorf("plugin %q requires %q, which is not a kind this app can open", p.ID, req.Kind))
+			continue
+		}
+		req.Namespace = strings.TrimSpace(req.Namespace)
+		req.Selector = strings.TrimSpace(req.Selector)
+		if err := checkFilter(req.Namespace, req.Selector); err != nil {
+			fail(fmt.Errorf("plugin %q requires %s: %w", p.ID, req.Kind, err))
 			continue
 		}
 		if req.Label == "" {

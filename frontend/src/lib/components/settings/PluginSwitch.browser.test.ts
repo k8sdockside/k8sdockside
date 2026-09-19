@@ -142,9 +142,10 @@ test('a watched folder’s plugin is listed apart, and the published one is stil
     render(PluginsSection);
     await settle();
 
-    const headings = [...document.querySelectorAll('h3')].map((h) => h.textContent?.trim());
-    expect(headings).toContain('From folders you watch');
-    expect(headings).not.toContain('Installed');
+    // Each heading carries its count, so match on what it is called.
+    const headings = [...document.querySelectorAll('h3')].map((h) => h.textContent?.trim() ?? '');
+    expect(headings.some((h) => h.startsWith('From folders you watch'))).toBe(true);
+    expect(headings.some((h) => h.startsWith('Installed'))).toBe(false);
 
     const card = [...document.querySelectorAll('article.plugin:not(.known)')].find((el) => el.textContent?.includes('Vitistack'))!;
     expect(card.querySelector('button.update')).toBeNull();

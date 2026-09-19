@@ -75,6 +75,23 @@
                 "tagline": {
                     "type": "string"
                 },
+                "category": {
+                    "type": "string",
+                    "enum": [
+                        "storage",
+                        "cni",
+                        "networking",
+                        "security",
+                        "images",
+                        "observability",
+                        "delivery",
+                        "virtualization",
+                        "cost",
+                        "platform",
+                        "other"
+                    ],
+                    "description": "What the plugin is about, in one word. The settings view groups and filters by it. Left out, it is \"other\"."
+                },
                 "icon": {
                     "type": "string",
                     "enum": [
@@ -288,6 +305,15 @@
                 "optional": {
                     "type": "boolean",
                     "description": "Reported, but does not decide whether the solution counts as installed."
+                },
+                "namespace": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$",
+                    "description": "With selector: the namespace to look in. Every namespace without it."
+                },
+                "selector": {
+                    "type": "string",
+                    "description": "Turns \"the cluster serves this kind\" into \"the cluster has these objects\": a label selector the requirement is met only if something matches. For a product that defines no custom resources, e.g. \"app=flannel\" on daemonsets. Costs one list."
                 }
             }
         },

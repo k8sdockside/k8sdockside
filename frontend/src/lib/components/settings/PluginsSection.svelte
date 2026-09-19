@@ -15,6 +15,15 @@
 -->
 <script lang="ts">
     import { onExternalClick } from '../../links';
+    import {
+        ANY_PLUGIN,
+        arrange,
+        categoryCounts,
+        categoryOf,
+        narrowed,
+        PLUGIN_SORTS,
+        type PluginQuery,
+    } from '../../plugins/categories';
     import { authorOf, knownStanding, standingOf } from '../../plugins/credit';
     import type { KnownPlugin, PluginLink } from '../../plugins/types';
     import { session } from '../../state/session.svelte';
@@ -25,6 +34,15 @@
     import SettingsSection from './SettingsSection.svelte';
 
     let showFormat = $state(false);
+
+    /**
+     * What the reader is looking for: a word, a category, an order. There are
+     * a dozen plugins now and reading all of them is the wrong way to find
+     * one, so every list below is drawn through this. The rules themselves --
+     * what a word matches, what order a category comes in -- are in
+     * lib/plugins/categories.ts, where they are tested.
+     */
+    let query = $state<PluginQuery>({ ...ANY_PLUGIN });
 
     /** The repository address being typed, and whether a clone is running. */
     let repoUrl = $state('');
@@ -148,6 +166,33 @@
         workspace.knownPlugins.filter((k) => !installed.some((p) => p.id === k.id) && !builtin.some((p) => p.id === k.id)),
     );
 
+    /**
+     * Every plugin this page lists, whatever section it is in: what the
+     * category counts are taken from, so a count says how many there are
+     * rather than how many are in one list.
+     */
+    let everything = $derived([...known, ...builtin, ...installed, ...watched]);
+    let counts = $derived(categoryCounts(everything));
+
+    let shownKnown = $derived(arrange(known, query));
+    let shownBuiltin = $derived(arrange(builtin, query));
+    let shownInstalled = $derived(arrange(installed, query));
+    let shownWatched = $derived(arrange(watched, query));
+    let shownTotal = $derived(
+        shownKnown.length + shownBuiltin.length + shownInstalled.length + shownWatched.length,
+    );
+    /** A search that found nothing -- said once, rather than as four empty lists. */
+    let foundNothing = $derived(narrowed(query) && shownTotal === 0);
+
+    function pickCategory(id: string): void {
+        query.category = query.category === id ? '' : id;
+    }
+
+    function clearQuery(): void {
+        query.text = '';
+        query.category = '';
+    }
+
     /** The watched folder a plugin was read from; '' when it was not. */
     function watchedFolder(plugin: { origin: string }): string {
         return (
@@ -172,44 +217,97 @@
     title="Plugins"
     lede="A solution plugin gives something installed in your clusters — Argo CD, cert-manager, KubeVirt — a place of its own in the sidebar, instead of leaving its custom resources scattered through the definitions tree under group names. At heart it is a JSON file naming things the app already knows how to show. It may also bring pages of its own, drawn in a sandboxed frame that reads only the kinds its card lists and asks before changing anything."
 >
-    {#if known.length > 0}
-        <h3>Available</h3>
+    <!-- One search, one set of categories and one order over every list below:
+         available, built in, installed and watched all narrow together, because
+         "where is the one for storage" is not a question about which folder a
+         plugin happens to be in. -->
+    <div class="finder">
+        <div class="search">
+            <Icon name="search" size={13} />
+            <input
+                type="search"
+                placeholder="Search plugins by name, subject or author"
+                aria-label="Search plugins"
+                spellcheck="false"
+                autocomplete="off"
+                bind:value={query.text}
+            />
+        </div>
+        <label class="sort">
+            <span>Sort by</span>
+            <select bind:value={query.sort} aria-label="Sort plugins by">
+                {#each PLUGIN_SORTS as option (option.id)}
+                    <option value={option.id}>{option.label}</option>
+                {/each}
+            </select>
+        </label>
+    </div>
+
+    <div class="chips">
+        <button class="chip" class:on={query.category === ''} onclick={() => (query.category = '')}>
+            All <span class="n">{everything.length}</span>
+        </button>
+        {#each counts as entry (entry.category.id)}
+            <button
+                class="chip"
+                class:on={query.category === entry.category.id}
+                title={entry.category.note}
+                onclick={() => pickCategory(entry.category.id)}
+            >
+                <Icon name={entry.category.icon} size={12} />
+                {entry.category.label}
+                <span class="n">{entry.count}</span>
+            </button>
+        {/each}
+    </div>
+
+    {#if foundNothing}
+        <p class="note nothing">
+            No plugin matches that.
+            <button class="suggest" onclick={clearQuery}>Show all {everything.length} again</button>
+        </p>
+    {/if}
+
+    {#if shownKnown.length > 0}
+        <h3>Available <span class="tally">{shownKnown.length}</span></h3>
         <p class="note">
             Plugins kept in repositories of their own. Installing one clones it into the plugins folder; its card
             then updates it from there. The sidebar suggests one for any cluster running what it is about.
         </p>
         <div class="gallery wide">
-            {#each known as offer (offer.id)}
+            {#each shownKnown as offer (offer.id)}
                 {@render knownCard(offer)}
             {/each}
         </div>
     {/if}
 
-    <h3>Built in</h3>
-    <div class="gallery">
-        {#each builtin as plugin (plugin.id)}
-            {@render card(plugin)}
-        {/each}
-    </div>
-
-    {#if installed.length > 0}
-        <h3>Installed</h3>
+    {#if shownBuiltin.length > 0}
+        <h3>Built in <span class="tally">{shownBuiltin.length}</span></h3>
         <div class="gallery">
-            {#each installed as plugin (plugin.id)}
+            {#each shownBuiltin as plugin (plugin.id)}
                 {@render card(plugin)}
             {/each}
         </div>
     {/if}
 
-    {#if watched.length > 0}
-        <h3>From folders you watch</h3>
+    {#if shownInstalled.length > 0}
+        <h3>Installed <span class="tally">{shownInstalled.length}</span></h3>
+        <div class="gallery">
+            {#each shownInstalled as plugin (plugin.id)}
+                {@render card(plugin)}
+            {/each}
+        </div>
+    {/if}
+
+    {#if shownWatched.length > 0}
+        <h3>From folders you watch <span class="tally">{shownWatched.length}</span></h3>
         <p class="note">
             Read from the folders under <strong>Extra folders</strong> — your own checkouts, typically a plugin you
             are writing. The app neither updates nor deletes anything in them: pull and edit them yourself, and press
             <strong>Reload</strong> to see the change.
         </p>
         <div class="gallery">
-            {#each watched as plugin (plugin.id)}
+            {#each shownWatched as plugin (plugin.id)}
                 {@render card(plugin)}
             {/each}
         </div>
@@ -388,6 +486,7 @@
         <p class="credit-line">
             <PluginCredit author={authorOf(plugin)} authorUrl={plugin.authorUrl} standing={standingOf(plugin)} />
         </p>
+        <p class="tags">{@render categoryTag(plugin.category)}</p>
         <p class="counts">
             {#if plugin.version}<span class="version">v{plugin.version.replace(/^v/, '')}</span> ·{/if}
             {plugin.views.length} view{plugin.views.length === 1 ? '' : 's'}
@@ -490,6 +589,20 @@
     </article>
 {/snippet}
 
+{#snippet categoryTag(id: string | undefined)}
+    <!-- Also the filter: the quickest way to "more like this one". -->
+    {@const category = categoryOf(id)}
+    <button
+        class="tag"
+        class:on={query.category === category.id}
+        title="{category.note} — show only these"
+        onclick={() => pickCategory(category.id)}
+    >
+        <Icon name={category.icon} size={11} />
+        {category.label}
+    </button>
+{/snippet}
+
 {#snippet links(list: PluginLink[], docs = '')}
     <!-- What the plugin is about, one click each; the docs link is shown only
          when the links do not already carry it. -->
@@ -530,6 +643,7 @@
         <p class="credit-line">
             <PluginCredit author={offer.author ?? ''} authorUrl={offer.authorUrl} standing={knownStanding(offer)} />
         </p>
+        <p class="tags">{@render categoryTag(offer.category)}</p>
         <p class="description">{offer.description}</p>
         {#if watchedCopy}
             <!-- Installing is still offered: it is how to get the published
@@ -624,6 +738,140 @@
         overflow: hidden;
         clip-path: inset(50%);
         white-space: nowrap;
+    }
+
+    /* ----- finding one ------------------------------------------------ */
+
+    .finder {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin: 4px 0 8px;
+    }
+
+    .search {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 1 1 240px;
+        min-width: 200px;
+        padding: 0 9px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--bg-raised);
+        color: var(--text-faint);
+    }
+
+    .search:focus-within {
+        border-color: var(--accent);
+        color: var(--text-dim);
+    }
+
+    .search input {
+        flex: 1;
+        min-width: 0;
+        border: none;
+        background: none;
+        color: var(--text);
+        font: inherit;
+        font-size: 12px;
+        padding: 5px 0;
+        outline: none;
+    }
+
+    .sort {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11.5px;
+        color: var(--text-faint);
+    }
+
+    .sort select {
+        font: inherit;
+        font-size: 11.5px;
+        color: var(--text);
+        background: var(--bg-raised);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 4px 6px;
+    }
+
+    .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 4px;
+    }
+
+    .chip {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 9px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--bg-raised);
+        color: var(--text-dim);
+        font-size: 11.5px;
+    }
+
+    .chip:hover {
+        color: var(--text);
+        border-color: var(--text-faint);
+    }
+
+    .chip.on {
+        background: color-mix(in srgb, var(--accent) 16%, transparent);
+        border-color: var(--accent);
+        color: var(--text);
+    }
+
+    .chip .n {
+        font-variant-numeric: tabular-nums;
+        color: var(--text-faint);
+    }
+
+    .tally {
+        font-size: 10.5px;
+        color: var(--text-faint);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0;
+    }
+
+    .nothing {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .tags {
+        display: flex;
+        gap: 5px;
+        margin: 0;
+    }
+
+    .tag {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 1px 7px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--text-faint);
+        font-size: 10.5px;
+    }
+
+    .tag:hover {
+        color: var(--text);
+        border-color: var(--text-faint);
+    }
+
+    .tag.on {
+        border-color: var(--accent);
+        color: var(--text-dim);
     }
 
     h3 {

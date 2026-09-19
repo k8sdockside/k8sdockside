@@ -44,6 +44,7 @@ plugins folder. Or start from this:
     "version": "1.0.0",
     "minAppVersion": "0.0.15",
     "tagline": "service mesh",
+    "category": "networking",
     "icon": "share",
     "author": "Acme Inc",
     "links": [{ "label": "acme.io", "url": "https://acme.io" }],
@@ -304,6 +305,7 @@ exists — so getting on it is a pull request to this repository adding an entry
     "id": "acme",
     "name": "Acme Mesh",
     "tagline": "service mesh",
+    "category": "networking",
     "icon": "share",
     "description": "What it shows, in two sentences: what to look at first, and what it adds to objects.",
     "repo": "https://github.com/acme/k8sdockside-mesh.git",
@@ -320,9 +322,11 @@ exists — so getting on it is a pull request to this repository adding an entry
 | Field | |
 | --- | --- |
 | `id` | The plugin's own id, exactly as in its `plugin.json`. |
+| `category` | What it is about, from the list in [the manifest reference](plugins.md#writing-one). Every entry on the list names one: it is what Settings filters by, and a plugin filed under `other` is one nobody finds by looking for what it does. |
 | `repo` | A public `https://` git address; installing clones it. |
 | `author`, `authorUrl` | Required and optional, as in the manifest. Everyone on the list is credited. |
 | `detect` | Kinds whose presence means the product runs in a cluster, so the sidebar can suggest the plugin there. Leave it out for a plugin that works on any cluster. |
+| `detectWorkloads` | For a product that installs no custom resources at all: objects whose presence gives it away, as `[{ "kind", "namespace", "selector" }]` — Flannel is found by its DaemonSet, `{ "kind": "daemonsets", "selector": "app=flannel" }`. Any one of them matching is enough. `selector` is required, and `namespace` is optional (every namespace without it). Unlike `detect`, which is answered from definitions the app has already read, each of these is a real query, so keep them few and narrow. |
 | `links` | At least one: what it is about, and its source. |
 | `official` | Leave it out. It is for plugins kept alongside the app by its author. |
 
@@ -332,8 +336,8 @@ What the pull request needs:
 - [ ] Its README says what it shows, what it reads and whether it writes.
 - [ ] It does something for a real product or a common need, and is not a
       duplicate of a built-in or of another plugin on the list.
-- [ ] The entry has a tagline, a description, an author and a link — the
-      app's own test, `go test ./internal/plugins/`, fails without them.
+- [ ] The entry has a tagline, a category, a description, an author and a link
+      — the app's own test, `go test ./internal/plugins/`, fails without them.
 - [ ] A row for it in the table under
       [The plugins the app knows of](plugins.md#the-plugins-the-app-knows-of).
 
