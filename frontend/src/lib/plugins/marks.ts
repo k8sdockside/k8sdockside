@@ -21,6 +21,8 @@
 
 /** Plugin ids this app ships a mark for, as files under public/plugin-marks. */
 const MARKED = new Set([
+    // argocd, built into the app
+    'argocd',
     // Calico
     'calico',
     // cert-manager
@@ -29,6 +31,8 @@ const MARKED = new Set([
     'cilium',
     // Flannel
     'flannel',
+    // flux, built into the app
+    'flux',
     // Image inventory
     'image-inventory',
     // Kube-OVN
@@ -39,6 +43,8 @@ const MARKED = new Set([
     'metallb',
     // Optimization advisor
     'optimization',
+    // prometheus, built into the app
+    'prometheus',
     // Vitistack
     'vitistack',
 ]);

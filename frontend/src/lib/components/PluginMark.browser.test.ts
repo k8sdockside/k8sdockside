@@ -53,7 +53,11 @@ test("a plugin the app has no mark for keeps its manifest's icon", () => {
 // -- a missing one shows as a blank space in the sidebar, not as an error.
 test('every listed mark has a file behind it that will draw', async () => {
     const { markFor } = await import('../plugins/marks');
-    const ids = ['calico', 'cert-manager', 'cilium', 'flannel', 'image-inventory',
+    // The three built-ins first: they ship inside the app rather than being
+    // cloned, so nothing regenerates them from a plugin folder and it would
+    // be easy to drop them without noticing.
+    const ids = ['argocd', 'flux', 'prometheus',
+                 'calico', 'cert-manager', 'cilium', 'flannel', 'image-inventory',
                  'kubeovn', 'kubevirt', 'metallb', 'optimization', 'vitistack'];
 
     for (const id of ids) {

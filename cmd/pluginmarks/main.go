@@ -87,6 +87,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		svg      []byte
 	}
 	var marks []mark
+	var dropped []string
 	var failed bool
 
 	for _, dir := range args {
@@ -102,10 +103,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 			failed = true
 			continue
 		}
-		// A plugin without a logo is not an error: it falls back to its icon,
-		// and there is simply nothing to carry for it.
+		// A plugin without a logo is not an error: it falls back to its icon.
+		// Any mark left here from when it had one is dropped, so the listing
+		// never points at something the plugin no longer has.
 		if m.Logo == "" {
-			_, _ = fmt.Fprintf(stdout, "%-16s no logo, skipped\n", m.ID)
+			dropped = append(dropped, m.ID)
+			_, _ = fmt.Fprintf(stdout, "%-16s no logo\n", m.ID)
 			continue
 		}
 		uiDir := "ui"
@@ -133,27 +136,47 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	slices.SortFunc(marks, func(a, b mark) int { return strings.Compare(a.id, b.id) })
 
-	// Written fresh each time, so a plugin that loses its logo loses its file
-	// here too rather than leaving one nothing points at.
-	if err := os.RemoveAll(assets); err != nil {
-		_, _ = fmt.Fprintf(stderr, "%v\n", err)
-		return 1
-	}
 	if err := os.MkdirAll(assets, 0o750); err != nil {
 		_, _ = fmt.Fprintf(stderr, "%v\n", err)
 		return 1
 	}
 
-	var out strings.Builder
-	out.WriteString(header)
+	// Only the folders named on the command line are touched. The built-in
+	// plugins -- Argo CD, Flux, Prometheus -- ship inside the app and have no
+	// repository to be read from, so their marks live here as ordinary assets
+	// and have to survive a run that knows nothing about them.
+	named := map[string]string{}
 	var bytes int
 	for _, m := range marks {
 		if err := os.WriteFile(filepath.Join(assets, m.id+".svg"), m.svg, 0o600); err != nil {
 			_, _ = fmt.Fprintf(stderr, "%v\n", err)
 			return 1
 		}
+		named[m.id] = m.name
 		bytes += len(m.svg)
-		fmt.Fprintf(&out, "    // %s\n    '%s',\n", m.name, m.id)
+	}
+	for _, id := range dropped {
+		if err := os.Remove(filepath.Join(assets, id+".svg")); err != nil && !os.IsNotExist(err) {
+			_, _ = fmt.Fprintf(stderr, "%v\n", err)
+			return 1
+		}
+	}
+
+	ids, err := onDisk(assets)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "%v\n", err)
+		return 1
+	}
+
+	var out strings.Builder
+	out.WriteString(header)
+	for _, id := range ids {
+		if name := named[id]; name != "" {
+			fmt.Fprintf(&out, "    // %s\n", name)
+		} else {
+			fmt.Fprintf(&out, "    // %s, built into the app\n", id)
+		}
+		fmt.Fprintf(&out, "    '%s',\n", id)
 	}
 	out.WriteString(`]);
 
@@ -167,6 +190,24 @@ export function markFor(id: string): string {
 		_, _ = fmt.Fprintf(stderr, "%v\n", err)
 		return 1
 	}
-	_, _ = fmt.Fprintf(stdout, "\nwrote %s and %d files in %s (%d bytes of drawing)\n", listing, len(marks), assets, bytes)
+	_, _ = fmt.Fprintf(stdout, "\nwrote %s: %d marks (%d refreshed, %d bytes of drawing)\n", listing, len(ids), len(marks), bytes)
 	return 0
+}
+
+// onDisk is every mark in the folder, by id, sorted -- the ones just written
+// and the ones that were already there.
+func onDisk(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".svg") {
+			continue
+		}
+		ids = append(ids, strings.TrimSuffix(e.Name(), ".svg"))
+	}
+	slices.Sort(ids)
+	return ids, nil
 }
