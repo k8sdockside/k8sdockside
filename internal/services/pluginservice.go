@@ -644,20 +644,44 @@ func (s *PluginService) Probe(contextID string) (ClusterProbe, error) {
 		if _, installed := catalogue.InstalledHere(known.ID); installed {
 			continue
 		}
-		if known.RunsIn(cl) {
+		if here, _ := known.RunsIn(cl); here {
 			out.Known = append(out.Known, known.ID)
 		}
 	}
 
 	for _, plugin := range catalogue.Plugins {
-		if plugin.Disabled || !plugins.NeedsObjects(plugin) {
+		if plugin.Disabled {
 			continue
 		}
-		if here, told := plugins.HasItsObjects(plugin, cl); told && !here {
+		here, told := s.hasWhatItNeeds(plugin, cl)
+		if told && !here {
 			out.Absent = append(out.Absent, plugin.ID)
 		}
 	}
 	return out, nil
+}
+
+// hasWhatItNeeds answers whether a cluster has what an installed plugin needs,
+// for the plugins the definitions cannot answer for. told is false when there
+// was nothing to ask or the cluster would not say -- in both cases the row is
+// left as the definitions had it.
+//
+// A manifest that names the objects it needs is believed first. Failing that,
+// the known list is asked: a plugin published before requirements could name
+// objects -- or one whose author has not got round to it -- is still a plugin
+// this app knows how to recognise, and a row reading "installed here" in every
+// cluster helps nobody. The id is enough to look it up, as it is for the
+// category: being told a plugin is not in this cluster is not a claim anyone
+// would borrow an id to make.
+func (s *PluginService) hasWhatItNeeds(plugin plugins.Plugin, cl plugins.Cluster) (here, told bool) {
+	if plugins.NeedsObjects(plugin) {
+		return plugins.HasItsObjects(plugin, cl)
+	}
+	known, ok := plugins.FindKnown(plugin.ID)
+	if !ok || len(known.DetectWorkloads) == 0 {
+		return false, false
+	}
+	return known.RunsIn(cl)
 }
 
 // HideSuggestion stops the sidebar suggesting a known plugin, or lets it

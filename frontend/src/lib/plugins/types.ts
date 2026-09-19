@@ -200,6 +200,13 @@ export interface KnownPlugin {
     repo: string;
     /** Kinds whose presence in a cluster gives the product away. Empty: never suggested. */
     detect: string[];
+    /**
+     * Whether the app can recognise this one by what it runs, for a product
+     * that defines no custom resources -- see PluginService.Probe. Only used
+     * to know that an answer is coming, so a row can wait for it instead of
+     * guessing.
+     */
+    probed?: boolean;
     links: PluginLink[];
     /** Who wrote it, and where to find them. Optional so fixtures need not spell it out. */
     author?: string;

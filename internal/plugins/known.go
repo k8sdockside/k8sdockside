@@ -167,17 +167,23 @@ func validateProbe(id string, p Probe) (Probe, error) {
 // far as its workload probes can tell -- one list per probe, stopping at the
 // first that finds something.
 //
-// A probe that fails is not a match and not an error to show anyone: this
-// answers "is it worth suggesting this plugin here", and the honest answer for
-// a cluster that would not say is no.
-func (k Known) RunsIn(cl Cluster) bool {
+// told is false when a probe could not be answered, which is a different thing
+// from finding nothing. Suggesting a plugin needs a match, so either answer
+// means "do not suggest"; saying an installed plugin is *not* here needs the
+// cluster to have actually said so.
+func (k Known) RunsIn(cl Cluster) (here, told bool) {
+	told = true
 	for _, probe := range k.DetectWorkloads {
 		tally, err := cl.CountBy(probe.Kind, probe.Namespace, probe.Selector, "")
-		if err == nil && tally.Total > 0 {
-			return true
+		if err != nil {
+			told = false
+			continue
+		}
+		if tally.Total > 0 {
+			return true, true
 		}
 	}
-	return false
+	return false, told
 }
 
 // KnownOffer is a known plugin as the settings view lists it: whether it is

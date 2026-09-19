@@ -158,3 +158,67 @@ func TestServiceGetRefusesWhatIsNotDeclared(t *testing.T) {
 		})
 	}
 }
+
+// probeCluster answers the one question hasWhatItNeeds asks, and records it.
+type probeCluster struct {
+	counts map[string]int
+	fail   map[string]error
+}
+
+func (p *probeCluster) KindsServed(kinds []string) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
+func (p *probeCluster) CountBy(_, _, selector string, _ kube.FieldPath) (kube.Tally, error) {
+	if err, bad := p.fail[selector]; bad {
+		return kube.Tally{}, err
+	}
+	return kube.Tally{Total: p.counts[selector]}, nil
+}
+
+// The published Flannel plugin asks only for DaemonSets, Nodes and ConfigMaps
+// -- kinds every cluster serves -- so nothing in a manifest written before
+// requirements could name objects stops it reading as installed everywhere.
+// The known list knows how to find flannel, and an installed plugin is the
+// same plugin it was when it was an offer.
+func TestAnInstalledPluginIsJudgedByTheKnownListWhenItsManifestCannotSay(t *testing.T) {
+	s := &PluginService{}
+	flannel := plugins.Plugin{
+		ID:       "flannel",
+		Requires: []plugins.Requirement{{Kind: "daemonsets"}, {Kind: "nodes"}},
+	}
+
+	running := &probeCluster{counts: map[string]int{"app=flannel": 1}}
+	if here, told := s.hasWhatItNeeds(flannel, running); !here || !told {
+		t.Errorf("a cluster running flannel: here=%v told=%v", here, told)
+	}
+
+	other := &probeCluster{counts: map[string]int{}}
+	if here, told := s.hasWhatItNeeds(flannel, other); here || !told {
+		t.Errorf("a cluster with no flannel: here=%v told=%v, want a plain no", here, told)
+	}
+
+	// A cluster that would not answer leaves the row as the definitions had it.
+	unreachable := &probeCluster{fail: map[string]error{
+		"app=flannel":     context.DeadlineExceeded,
+		"k8s-app=flannel": context.DeadlineExceeded,
+	}}
+	if _, told := s.hasWhatItNeeds(flannel, unreachable); told {
+		t.Error("a cluster that could not be asked was treated as an answer")
+	}
+
+	// A plugin the manifest can answer for is answered by the manifest.
+	own := plugins.Plugin{
+		ID:       "flannel",
+		Requires: []plugins.Requirement{{Kind: "daemonsets", Selector: "app=my-flannel"}},
+	}
+	if here, told := s.hasWhatItNeeds(own, &probeCluster{counts: map[string]int{"app=my-flannel": 1}}); !here || !told {
+		t.Errorf("the manifest's own requirement was not used: here=%v told=%v", here, told)
+	}
+
+	// And one nothing can probe is left to the definitions.
+	argo := plugins.Plugin{ID: "argocd", Requires: []plugins.Requirement{{Kind: "crd:applications.argoproj.io"}}}
+	if _, told := s.hasWhatItNeeds(argo, &probeCluster{}); told {
+		t.Error("a plugin detected by its custom resources was given a verdict it did not need")
+	}
+}

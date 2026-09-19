@@ -45,8 +45,8 @@ func TestFlannelIsDetectedByItsDaemonSet(t *testing.T) {
 	}
 
 	cluster := &probeCluster{counts: map[string]int{"app=flannel": 1}}
-	if !flannel.RunsIn(cluster) {
-		t.Error("a cluster with a flannel DaemonSet was not recognised")
+	if here, told := flannel.RunsIn(cluster); !here || !told {
+		t.Errorf("a cluster with a flannel DaemonSet was not recognised: here=%v told=%v", here, told)
 	}
 	// The first probe found it, so the second was never asked.
 	if len(cluster.asked) != 1 {
@@ -54,8 +54,8 @@ func TestFlannelIsDetectedByItsDaemonSet(t *testing.T) {
 	}
 
 	empty := &probeCluster{counts: map[string]int{}}
-	if flannel.RunsIn(empty) {
-		t.Error("a cluster with no flannel was recognised as running it")
+	if here, told := flannel.RunsIn(empty); here || !told {
+		t.Errorf("a cluster with no flannel: here=%v told=%v, want a plain no", here, told)
 	}
 	if len(empty.asked) != len(flannel.DetectWorkloads) {
 		t.Errorf("asked %v, want every probe tried before giving up", empty.asked)
@@ -70,15 +70,17 @@ func TestAProbeThatFailsIsNotAMatch(t *testing.T) {
 		"app=flannel":     errors.New("the cluster could not be reached"),
 		"k8s-app=flannel": errors.New("the cluster could not be reached"),
 	}}
-	if flannel.RunsIn(broken) {
-		t.Error("a cluster that could not be asked was counted as running flannel")
+	// Not a match, and -- unlike an empty cluster -- not an answer either: an
+	// installed plugin is only called absent when the cluster has said so.
+	if here, told := flannel.RunsIn(broken); here || told {
+		t.Errorf("a cluster that could not be asked: here=%v told=%v, want no opinion", here, told)
 	}
 }
 
 func TestAPluginWithNoProbesIsNeverProbed(t *testing.T) {
 	cilium, _ := FindKnown("cilium")
 	cluster := &probeCluster{counts: map[string]int{"app=flannel": 1}}
-	if cilium.RunsIn(cluster) {
+	if here, _ := cilium.RunsIn(cluster); here {
 		t.Error("cilium matched a probe it does not have")
 	}
 	if len(cluster.asked) != 0 {

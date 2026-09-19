@@ -124,6 +124,7 @@ export function adoptKnownPlugin(known: bindings.KnownOffer): KnownPlugin {
         description: known.description ?? '',
         repo: known.repo,
         detect: [...(known.detect ?? [])],
+        probed: (known.detectWorkloads ?? []).length > 0,
         links: adoptLinks(known.links),
         author: known.author ?? '',
         authorUrl: known.authorUrl ?? '',

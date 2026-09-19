@@ -1925,6 +1925,10 @@ describe('solution plugins', () => {
     beforeEach(() => {
         workspace.pluginCatalogue = { plugins: [], dir: '', folders: [], problems: [] };
         workspace.customKinds = {};
+        // What a cluster was asked about its plugins is cached per context, so
+        // a test starting with last test's answer would be testing that.
+        workspace.pluginProbes = {};
+        workspace.knownPlugins = [];
         workspace.expandedPlugins = [];
     });
 
@@ -2113,6 +2117,31 @@ describe('solution plugins', () => {
 
     // A cluster that would not answer leaves the row as it was: the backend
     // reports nothing about it, rather than reporting it as missing.
+    // The published Flannel plugin predates requirements that name objects, so
+    // its own manifest still asks only for kinds every cluster serves. The
+    // known list knows how to find flannel, and that is enough: an installed
+    // plugin nobody has updated should not read as present everywhere.
+    test('a plugin the known list can recognise is judged by that, not by its kinds', async () => {
+        const flannel = plugin('flannel', [{ kind: 'daemonsets' }, { kind: 'nodes' }]);
+        workspace.knownPlugins = [{ ...known('flannel', []), probed: true }];
+        clusterServes(PROD, []);
+
+        // A probe is coming, so the row waits rather than saying "installed".
+        expect(workspace.pluginInstalledIn(PROD, flannel)).toBeNull();
+
+        vi.mocked(PluginService.Probe).mockResolvedValueOnce({ known: [], absent: ['flannel'] });
+        await workspace.loadCustomKinds(PROD, { force: true });
+        await vi.waitFor(() => expect(workspace.pluginInstalledIn(PROD, flannel)).toBe(false));
+    });
+
+    test('a plugin nothing can probe is still taken at its kinds', async () => {
+        const argo = plugin('argocd', [{ kind: 'crd:applications.argoproj.io' }]);
+        workspace.knownPlugins = [known('argocd', ['crd:applications.argoproj.io'])];
+        clusterServes(PROD, ['crd:applications.argoproj.io']);
+
+        expect(workspace.pluginInstalledIn(PROD, argo)).toBe(true);
+    });
+
     test('a cluster that could not be probed does not read as missing the plugin', async () => {
         const flannel = plugin('flannel', [{ kind: 'daemonsets', selector: 'app=flannel' }]);
         clusterServes(PROD, []);

@@ -2116,6 +2116,16 @@ class Workspace {
         }
     }
 
+    /**
+     * Whether this plugin is one the definitions cannot answer for: it asks
+     * for objects itself, or the known list knows how to find what it is
+     * about. Either way a probe is coming, and a row should wait for it.
+     */
+    private probeDecides(plugin: Plugin): boolean {
+        if (plugin.requires.some((req) => !req.optional && req.selector)) return true;
+        return this.knownPlugins.some((known) => known.id === plugin.id && known.probed === true);
+    }
+
     /** Whether a known plugin was found running in a cluster by its workload. */
     private detectedIn(contextId: string, id: string): boolean {
         return (this.pluginProbes[contextId]?.known ?? []).includes(id);
@@ -2170,11 +2180,13 @@ class Workspace {
         const required = plugin.requires.filter((req) => !req.optional);
         if (required.length === 0) return true;
 
-        // A requirement that names objects cannot be answered from the
-        // definitions -- the kinds such a plugin needs are ones every cluster
-        // serves -- so the backend is asked, and until it has answered the
-        // honest verdict is that we do not know.
-        if (required.some((req) => req.selector)) {
+        // Some plugins the definitions cannot answer for at all: a product
+        // that defines no custom resources requires only kinds every cluster
+        // serves, so taking those as met would read "installed here" in every
+        // cluster. The backend looks for the objects instead -- what the
+        // manifest asks for, or what the known list knows to look for -- and
+        // until it has answered the honest verdict is that we do not know.
+        if (this.probeDecides(plugin)) {
             const probe = this.pluginProbes[contextId];
             if (!probe) return null;
             if (probe.absent.includes(plugin.id)) return false;
