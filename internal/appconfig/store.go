@@ -18,7 +18,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/themes"
+	"github.com/k8sdockside/k8sdockside/internal/themes"
 )
 
 // ContextPrefs is what the user decided about one kubeconfig context. Alias

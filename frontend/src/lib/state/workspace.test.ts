@@ -4,7 +4,7 @@ import { detail } from './detail.svelte';
 // The workspace talks to the Go side the moment it does anything, so the
 // bindings are stubbed. What is under test is which tabs survive a close and
 // where focus lands -- none of which involves a cluster.
-vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services', () => ({
+vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => ({
     HelmService: {
         Releases: vi.fn().mockResolvedValue({ kind: 'helmreleases', columns: [], rows: [], namespaced: true, error: '' }),
         Detail: vi.fn().mockResolvedValue({
@@ -112,7 +112,7 @@ const { SETTINGS, HELP, KUBERNETES } = await import('../catalogue');
 const { notices } = await import('./notices.svelte');
 const { session } = await import('./session.svelte');
 const { ResourceService, KubeconfigService, SettingsService, ThemeService, PluginService, MetricsService, TerminalService } = await import(
-    '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services',
+    '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services',
 );
 
 const PROD = '/home/u/.kube/prod::admin@prod';

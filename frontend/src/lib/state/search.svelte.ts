@@ -12,9 +12,9 @@
 // as if it had been probed.
 
 import { Events } from '@wailsio/runtime';
-import { SearchService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
-import type * as kube from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/kube/models.js';
-import type * as services from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services/models.js';
+import { SearchService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
+import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
+import type * as services from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services/models.js';
 import { clusters } from './health.svelte';
 
 export type SearchHit = kube.SearchHit;

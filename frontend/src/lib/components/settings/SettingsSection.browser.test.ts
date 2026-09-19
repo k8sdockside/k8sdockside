@@ -5,7 +5,7 @@ import SettingsView from './SettingsView.svelte';
 
 // The About section asks the backend what this build is the moment it mounts,
 // and the sources section reads the file list; neither is what is under test.
-vi.mock('../../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services', () => ({
+vi.mock('../../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => ({
     HelmService: {
         Releases: vi.fn().mockResolvedValue({ kind: 'helmreleases', columns: [], rows: [], namespaced: true, error: '' }),
         Detail: vi.fn().mockResolvedValue({

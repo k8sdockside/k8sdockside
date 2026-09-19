@@ -3,7 +3,7 @@ package services
 import (
 	"context"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/session"
+	"github.com/k8sdockside/k8sdockside/internal/session"
 )
 
 // SessionInfo is which version of the app the window is running in, and for

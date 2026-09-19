@@ -4,7 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { detail } from '../state/detail.svelte';
 
 const KubeVirtDetail = vi.hoisted(() => vi.fn());
-vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services', () => ({
+vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => ({
     ResourceService: { KubeVirtDetail },
     KubeconfigService: { Sync: vi.fn().mockResolvedValue([]), Files: vi.fn().mockResolvedValue([]) },
     SettingsService: {

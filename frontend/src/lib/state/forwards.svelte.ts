@@ -16,9 +16,9 @@
 // them, and this list stays empty rather than asking.
 
 import { Events } from '@wailsio/runtime';
-import { PortForwardService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
-import type * as kube from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/kube/models.js';
-import type * as main from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services/models.js';
+import { PortForwardService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
+import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
+import type * as main from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services/models.js';
 import { session } from './session.svelte';
 
 /** One forward, live or waiting to be reconnected. */

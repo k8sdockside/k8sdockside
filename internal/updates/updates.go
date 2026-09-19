@@ -24,7 +24,7 @@ import (
 )
 
 // Repo is the GitHub repository whose releases are looked at.
-const Repo = "rogerwesterbo/k8sdockside"
+const Repo = "k8sdockside/k8sdockside"
 
 // LatestURL is GitHub's "latest release" endpoint for Repo. It answers with
 // the newest published release that is neither a draft nor a pre-release --

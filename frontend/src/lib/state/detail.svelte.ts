@@ -11,7 +11,7 @@
 // that implies -- this store is handed the two operations it needs and knows
 // nothing else about panes.
 
-import { ResourceService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
+import { ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
 import { HELM_RELEASES } from '../catalogue';
 import { changes } from './changes.svelte';
 

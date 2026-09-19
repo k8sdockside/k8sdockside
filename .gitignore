@@ -57,7 +57,7 @@ build/android/gen/
 # A binary built into the repository root rather than into bin/. Anchored with
 # a leading slash: this rule used to be a bare `k8sdockside`, which -- having no
 # slash -- git matched against every path component of that name at any depth,
-# so it silently swallowed frontend/bindings/github.com/rogerwesterbo/k8sdockside/ too.
+# so it silently swallowed frontend/bindings/github.com/k8sdockside/k8sdockside/ too.
 /k8sdockside
 
 # Wails regenerates these on every `wails3 generate bindings`, which `make dev`

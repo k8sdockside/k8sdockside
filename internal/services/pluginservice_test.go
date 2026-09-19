@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/kube"
-	"github.com/rogerwesterbo/k8sdockside/internal/plugins"
-	"github.com/rogerwesterbo/k8sdockside/internal/registry"
+	"github.com/k8sdockside/k8sdockside/internal/kube"
+	"github.com/k8sdockside/k8sdockside/internal/plugins"
+	"github.com/k8sdockside/k8sdockside/internal/registry"
 )
 
 // After a clone, "installed" followed by nothing appearing is the outcome that

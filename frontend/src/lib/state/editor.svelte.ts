@@ -12,7 +12,7 @@
 // exception: it is a leaf that names objects the same way, and saying an object
 // changed is not the same as knowing who is looking at it.
 
-import { HelmService, ResourceService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
+import { HelmService, ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
 import { HELM_RELEASES } from '../catalogue';
 import { changes } from './changes.svelte';
 

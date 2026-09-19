@@ -12,7 +12,7 @@ vi.mock('@wailsio/runtime', () => ({
         }),
     },
 }));
-vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services', () => ({
+vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => ({
     HelmService: {
         Releases: vi.fn().mockResolvedValue({ kind: 'helmreleases', columns: [], rows: [], namespaced: true, error: '' }),
         Detail: vi.fn().mockResolvedValue({

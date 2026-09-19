@@ -133,7 +133,7 @@ clean-tools: ## Remove the locally installed tools in bin/tools.
 # wails3 CLI, which needs the GTK headers -- so the image targets build bindings
 # and the bundle here first, and the Dockerfile copies frontend/dist in.
 
-IMG ?= ghcr.io/rogerwesterbo/k8sdockside:dev
+IMG ?= ghcr.io/k8sdockside/k8sdockside:dev
 PLATFORMS ?= linux/amd64,linux/arm64
 KIND_CLUSTER ?= kind
 CHART_DIR ?= charts/k8sdockside

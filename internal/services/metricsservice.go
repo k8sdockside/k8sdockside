@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/appconfig"
-	"github.com/rogerwesterbo/k8sdockside/internal/kube"
-	"github.com/rogerwesterbo/k8sdockside/internal/metrics"
-	"github.com/rogerwesterbo/k8sdockside/internal/plugins"
+	"github.com/k8sdockside/k8sdockside/internal/appconfig"
+	"github.com/k8sdockside/k8sdockside/internal/kube"
+	"github.com/k8sdockside/k8sdockside/internal/metrics"
+	"github.com/k8sdockside/k8sdockside/internal/plugins"
 )
 
 // MetricsService draws the charts a plugin declares, against the cluster's own

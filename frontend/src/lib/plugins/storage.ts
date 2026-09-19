@@ -3,7 +3,7 @@
 // from the settings already in memory; writes go through Go, which holds the
 // limits, and come back as the settings as saved.
 
-import { PluginService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
+import { PluginService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
 import { adoptSettings } from '../state/adopt';
 import { workspace } from '../state/workspace.svelte';
 

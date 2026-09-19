@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/addons"
-	"github.com/rogerwesterbo/k8sdockside/internal/kube"
+	"github.com/k8sdockside/k8sdockside/internal/addons"
+	"github.com/k8sdockside/k8sdockside/internal/kube"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 

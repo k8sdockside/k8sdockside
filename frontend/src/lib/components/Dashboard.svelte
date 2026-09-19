@@ -1,7 +1,7 @@
 <!-- The overview tab: what the cluster is, how much of it is healthy, and what has gone wrong lately. -->
 <script lang="ts">
-    import { ResourceService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
-    import type * as kube from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/kube/models.js';
+    import { ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
+    import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
     import { adoptOverview, type Overview } from '../state/adopt';
     import { workspace } from '../state/workspace.svelte';
     import { clusters } from '../state/health.svelte';

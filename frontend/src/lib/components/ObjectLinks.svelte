@@ -11,8 +11,8 @@
   and three empty headings above it would only push it down.
 -->
 <script lang="ts">
-    import { ResourceService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
-    import type * as kube from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/kube/models.js';
+    import { ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
+    import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
     import { PODS, singularFor } from '../catalogue';
     import { detail, type DetailTarget } from '../state/detail.svelte';
     import ContainerPills from './ContainerPills.svelte';

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/appconfig"
-	"github.com/rogerwesterbo/k8sdockside/internal/helmcli"
-	"github.com/rogerwesterbo/k8sdockside/internal/kube"
-	"github.com/rogerwesterbo/k8sdockside/internal/session"
+	"github.com/k8sdockside/k8sdockside/internal/appconfig"
+	"github.com/k8sdockside/k8sdockside/internal/helmcli"
+	"github.com/k8sdockside/k8sdockside/internal/kube"
+	"github.com/k8sdockside/k8sdockside/internal/session"
 )
 
 // HelmService serves Helm releases: the tab that lists them, and the drawer

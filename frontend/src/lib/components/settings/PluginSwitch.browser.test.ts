@@ -134,7 +134,7 @@ test('a watched folder’s plugin is listed apart, and the published one is stil
     workspace.knownPlugins = [
         {
             id: 'vitistack', name: 'Vitistack', tagline: 'supervisor clusters', icon: 'layers', description: 'Networks, clusters and machines.',
-            repo: 'https://github.com/rogerwesterbo/k8sdockside-vitistack.git', detect: [], links: [], official: true, installed: false,
+            repo: 'https://github.com/k8sdockside/vitistack.git', detect: [], links: [], official: true, installed: false,
         },
     ];
     const dropped = vi.spyOn(workspace, 'removePluginFolder').mockResolvedValue(undefined);

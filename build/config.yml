@@ -10,7 +10,7 @@ info:
   productIdentifier: "io.github.rogerwesterbo.k8sdockside" # The unique product identifier
   description: "A Kubernetes workspace for your local kubeconfig contexts" # The application description
   copyright: "© 2026, Roger Westerbø" # Copyright text
-  comments: "https://github.com/rogerwesterbo/k8sdockside" # Comments
+  comments: "https://github.com/k8sdockside/k8sdockside" # Comments
   version: "0.0.1" # The application version
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)
   #                               # Should match the name of your .icon file without the extension

@@ -37,7 +37,7 @@ const settingsFile = vi.hoisted(() => {
             }),
     };
 });
-vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services', () => ({
+vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => ({
     HelmService: {
         Releases: vi.fn().mockResolvedValue({ kind: 'helmreleases', columns: [], rows: [], namespaced: true, error: '' }),
         Detail: vi.fn().mockResolvedValue({
@@ -117,7 +117,7 @@ vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/service
 
 const ResourceTable = (await import('./ResourceTable.svelte')).default;
 const { workspace } = await import('../state/workspace.svelte');
-const { ActionService } = await import('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services');
+const { ActionService } = await import('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services');
 
 // Patching several rows at once. The form builds one merge patch, shows it,
 // and one call carries it with the whole selection to the backend.

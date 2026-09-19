@@ -3,7 +3,7 @@
 // a Go slice could be nil, and resolving that once here keeps `?? []` out of
 // the sidebar and the overview.
 
-import type * as bindings from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/plugins/models.js';
+import type * as bindings from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/plugins/models.js';
 import type { KnownPlugin, Plugin, PluginCatalogue, PluginLink, PluginSummary } from './types';
 
 function adoptLinks(links: bindings.Link[] | null | undefined): PluginLink[] {

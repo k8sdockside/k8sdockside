@@ -1,13 +1,13 @@
 # k8sdockside Helm chart
 
-Runs [K8s Dockside](https://github.com/rogerwesterbo/k8sdockside) in server
+Runs [K8s Dockside](https://github.com/k8sdockside/k8sdockside) in server
 mode: the Kubernetes desktop app as a web app inside a cluster, behind a sign-in
 of its own — local users (the first becomes the admin) and GitHub, Google,
 Facebook, GitLab, Microsoft or any OIDC provider.
 
 The full guide — how it fits together, setting up each OAuth provider, the
 security model — is
-[docs/server-mode.md](https://github.com/rogerwesterbo/k8sdockside/blob/main/docs/server-mode.md).
+[docs/server-mode.md](https://github.com/k8sdockside/k8sdockside/blob/main/docs/server-mode.md).
 
 > **Every signed-in user acts with the pod's cluster credentials** — its
 > ServiceAccount and every mounted or uploaded kubeconfig — not their own. The
@@ -18,7 +18,7 @@ security model — is
 ### Quickstart: port-forward
 
 ```sh
-helm install k8sdockside oci://ghcr.io/rogerwesterbo/helm/k8sdockside \
+helm install k8sdockside oci://ghcr.io/k8sdockside/helm/k8sdockside \
   --namespace k8sdockside --create-namespace
 kubectl -n k8sdockside port-forward svc/k8sdockside 8080:80
 ```
@@ -89,7 +89,7 @@ extraEnv:
 ```
 
 ```sh
-helm upgrade --install k8sdockside oci://ghcr.io/rogerwesterbo/helm/k8sdockside \
+helm upgrade --install k8sdockside oci://ghcr.io/k8sdockside/helm/k8sdockside \
   --namespace k8sdockside -f values.yaml
 ```
 
@@ -136,7 +136,7 @@ The most used keys. [values.yaml](values.yaml) documents every one.
 
 | Key | Default | Description |
 |---|---|---|
-| `image.repository` | `ghcr.io/rogerwesterbo/k8sdockside` | Image |
+| `image.repository` | `ghcr.io/k8sdockside/k8sdockside` | Image |
 | `image.tag` | appVersion | Image tag |
 | `image.digest` | `""` | Pin by digest; wins over the tag |
 | `service.type` / `service.port` | `ClusterIP` / `80` | The container listens on 8080 |

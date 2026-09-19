@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/kube"
-	"github.com/rogerwesterbo/k8sdockside/internal/session"
+	"github.com/k8sdockside/k8sdockside/internal/kube"
+	"github.com/k8sdockside/k8sdockside/internal/session"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 

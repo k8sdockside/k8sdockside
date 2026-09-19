@@ -12,7 +12,7 @@ priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
 description: "A Kubernetes workspace for your local kubeconfig contexts"
 vendor: "Roger Westerbø"
-homepage: "https://github.com/rogerwesterbo/k8sdockside"
+homepage: "https://github.com/k8sdockside/k8sdockside"
 license: "Apache-2.0"
 release: "1"
 

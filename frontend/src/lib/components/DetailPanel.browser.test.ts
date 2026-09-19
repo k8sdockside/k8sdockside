@@ -26,7 +26,7 @@ const settingsFile = vi.hoisted(() => {
             }),
     };
 });
-vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services', () => ({
+vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => ({
     KubeconfigService: { Sync: vi.fn().mockResolvedValue([]), Files: vi.fn().mockResolvedValue([]) },
     ResourceService: {
         // The describe panel draws a budget for what it is describing, and
@@ -126,7 +126,7 @@ vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/service
 
 const { workspace } = await import('../state/workspace.svelte');
 const { changes } = await import('../state/changes.svelte');
-const { HelmService, ResourceService } = await import('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services');
+const { HelmService, ResourceService } = await import('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services');
 
 /** One release as the backend decodes it. See internal/kube/helmdetail.go. */
 function releaseDetail(name: string, chart: string, values: string) {

@@ -13,12 +13,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/appconfig"
-	"github.com/rogerwesterbo/k8sdockside/internal/kube"
-	"github.com/rogerwesterbo/k8sdockside/internal/plugins"
-	"github.com/rogerwesterbo/k8sdockside/internal/registry"
-	"github.com/rogerwesterbo/k8sdockside/internal/session"
-	"github.com/rogerwesterbo/k8sdockside/internal/updates"
+	"github.com/k8sdockside/k8sdockside/internal/appconfig"
+	"github.com/k8sdockside/k8sdockside/internal/kube"
+	"github.com/k8sdockside/k8sdockside/internal/plugins"
+	"github.com/k8sdockside/k8sdockside/internal/registry"
+	"github.com/k8sdockside/k8sdockside/internal/session"
+	"github.com/k8sdockside/k8sdockside/internal/updates"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )

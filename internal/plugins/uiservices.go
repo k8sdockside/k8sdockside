@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/addons"
+	"github.com/k8sdockside/k8sdockside/internal/addons"
 	"k8s.io/apimachinery/pkg/labels"
 )
 

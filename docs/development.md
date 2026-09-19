@@ -97,7 +97,7 @@ K8SDOCKSIDE_TEST_SERVICE=argocd/argocd-server \
 | [`ci.yml`](../.github/workflows/ci.yml) | every branch push, and PRs into `main` | Go build (desktop and server mode), test, vet, gofmt check and golangci-lint; bindings generation, svelte-check, vitest and the frontend bundle; gosec, govulncheck and `npm audit --audit-level=high`; `helm lint` and `helm template` of the chart |
 | [`security.yml`](../.github/workflows/security.yml) | Mondays 03:00 UTC, manual, and dependency changes on `main` | The same Go scanners in reporting mode with SARIF filed under **Security → Code scanning**, a Trivy filesystem scan for secrets and misconfiguration, and a full npm audit |
 | [`release.yml`](../.github/workflows/release.yml) | tags matching `v*`, and manual | Builds and packages every platform, then publishes the GitHub release |
-| [`server-image.yml`](../.github/workflows/server-image.yml) | tags matching `v*`, and manual | Builds the server-mode image for linux/amd64 and linux/arm64 and pushes it to `ghcr.io/rogerwesterbo/k8sdockside`, then pushes the Helm chart to `oci://ghcr.io/rogerwesterbo/helm` |
+| [`server-image.yml`](../.github/workflows/server-image.yml) | tags matching `v*`, and manual | Builds the server-mode image for linux/amd64 and linux/arm64 and pushes it to `ghcr.io/k8sdockside/k8sdockside`, then pushes the Helm chart to `oci://ghcr.io/k8sdockside/helm` |
 
 CI only runs the jobs a change can affect, via `dorny/paths-filter`. Note that
 the frontend filter includes `**/*.go`: `frontend/bindings/` is generated from

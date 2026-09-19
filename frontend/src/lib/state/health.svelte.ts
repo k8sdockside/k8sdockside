@@ -5,7 +5,7 @@
 // workspace reads a status except to draw it. What connects them is one call on
 // load -- see prune -- and that is passed in rather than reached for.
 
-import { ResourceService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
+import { ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
 
 export type HealthStatus = 'unknown' | 'checking' | 'connected' | 'error';
 

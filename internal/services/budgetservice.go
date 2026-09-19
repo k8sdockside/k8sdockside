@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/kube"
-	"github.com/rogerwesterbo/k8sdockside/internal/metrics"
-	"github.com/rogerwesterbo/k8sdockside/internal/plugins"
+	"github.com/k8sdockside/k8sdockside/internal/kube"
+	"github.com/k8sdockside/k8sdockside/internal/metrics"
+	"github.com/k8sdockside/k8sdockside/internal/plugins"
 )
 
 // Budget reports what one slice of a cluster has, what has been promised out of

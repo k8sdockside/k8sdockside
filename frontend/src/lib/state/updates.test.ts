@@ -14,7 +14,7 @@ vi.mock('@wailsio/runtime', () => ({
         }),
     },
 }));
-vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services', () => ({
+vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => ({
     UpdateService: { Status, Check, MarkRead, OpenRelease, OpenDownload },
 }));
 
@@ -27,7 +27,7 @@ const { session } = await import('./session.svelte');
 const RELEASE = {
     version: 'v0.0.3',
     name: 'v0.0.3',
-    url: 'https://github.com/rogerwesterbo/k8sdockside/releases/tag/v0.0.3',
+    url: 'https://github.com/k8sdockside/k8sdockside/releases/tag/v0.0.3',
     publishedAt: '2026-09-05T16:02:10Z',
     assets: [],
 };
@@ -148,7 +148,7 @@ describe('the download for this install', () => {
         await updates.load();
         expect(updates.download).toBe('');
 
-        Check.mockResolvedValueOnce(status({ ...NEWS, download: 'https://github.com/rogerwesterbo/k8sdockside/releases/download/v0.0.3/k8sdockside-0.0.3-linux-amd64.deb' }));
+        Check.mockResolvedValueOnce(status({ ...NEWS, download: 'https://github.com/k8sdockside/k8sdockside/releases/download/v0.0.3/k8sdockside-0.0.3-linux-amd64.deb' }));
         await updates.check();
         expect(updates.download).toContain('k8sdockside-0.0.3-linux-amd64.deb');
         expect(updates.downloadName).toBe('k8sdockside-0.0.3-linux-amd64.deb');

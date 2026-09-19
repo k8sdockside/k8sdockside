@@ -7,7 +7,7 @@
 		<key>CFBundleExecutable</key>
 		<string>k8sdockside</string>
 		<key>CFBundleGetInfoString</key>
-		<string>https://github.com/rogerwesterbo/k8sdockside</string>
+		<string>https://github.com/k8sdockside/k8sdockside</string>
 		<key>CFBundleIdentifier</key>
 		<string>io.github.rogerwesterbo.k8sdockside</string>
 		<key>CFBundleName</key>

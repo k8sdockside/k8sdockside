@@ -20,8 +20,8 @@
 // of a name such a module does not have fails as the module is linked, where
 // nothing can catch it; read at call time, it fails inside the `try` below and
 // is answered like any other backend that could not say.
-import * as services from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
-import type * as main from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services/models.js';
+import * as services from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
+import type * as main from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services/models.js';
 
 /** What the backend says about this window. */
 export type SessionInfo = main.SessionInfo;

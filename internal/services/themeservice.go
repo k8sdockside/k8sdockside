@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/appconfig"
-	"github.com/rogerwesterbo/k8sdockside/internal/session"
-	"github.com/rogerwesterbo/k8sdockside/internal/themes"
+	"github.com/k8sdockside/k8sdockside/internal/appconfig"
+	"github.com/k8sdockside/k8sdockside/internal/session"
+	"github.com/k8sdockside/k8sdockside/internal/themes"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 

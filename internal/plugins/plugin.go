@@ -33,10 +33,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/addons"
-	"github.com/rogerwesterbo/k8sdockside/internal/kube"
-	"github.com/rogerwesterbo/k8sdockside/internal/metrics"
-	"github.com/rogerwesterbo/k8sdockside/internal/updates"
+	"github.com/k8sdockside/k8sdockside/internal/addons"
+	"github.com/k8sdockside/k8sdockside/internal/kube"
+	"github.com/k8sdockside/k8sdockside/internal/metrics"
+	"github.com/k8sdockside/k8sdockside/internal/updates"
 	"k8s.io/apimachinery/pkg/labels"
 )
 

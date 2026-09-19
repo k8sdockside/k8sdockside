@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import ContextTree from './ContextTree.svelte';
 import { DEFINITIONS_GROUP, NAV_GROUPS } from '../catalogue';
-import { ResourceService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
+import { ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
 import { workspace } from '../state/workspace.svelte';
 
-vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services')>();
+vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services')>();
     return { ...actual, ResourceService: { ...actual.ResourceService, CustomResourceKinds: vi.fn().mockResolvedValue([]) } };
 });
 

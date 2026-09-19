@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/addons"
-	"github.com/rogerwesterbo/k8sdockside/internal/kube"
+	"github.com/k8sdockside/k8sdockside/internal/addons"
+	"github.com/k8sdockside/k8sdockside/internal/kube"
 )
 
 // Plugins that are not built in are found somewhere. Most people will not go

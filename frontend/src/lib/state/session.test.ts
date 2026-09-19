@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const Info = vi.fn();
 
-vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services', () => ({
+vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => ({
     SessionService: { Info },
 }));
 

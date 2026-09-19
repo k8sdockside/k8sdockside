@@ -5,7 +5,7 @@
 **Please do not open a public issue for a security vulnerability.**
 
 Use GitHub's private reporting instead: **Security → Report a vulnerability** on
-[this repository](https://github.com/rogerwesterbo/k8sdockside/security/advisories/new).
+[this repository](https://github.com/k8sdockside/k8sdockside/security/advisories/new).
 That opens a private advisory only the maintainers can see.
 
 Include what you found, how to reproduce it, what an attacker gets out of it,
@@ -41,7 +41,7 @@ and no account.
 - **The update check is the one outbound request.** Shortly after launch, and
   every six hours after, the app asks GitHub's public releases API which
   release is newest: one unauthenticated `GET` of
-  `api.github.com/repos/rogerwesterbo/k8sdockside/releases/latest`, carrying
+  `api.github.com/repos/k8sdockside/k8sdockside/releases/latest`, carrying
   nothing but the app's name and version in its `User-Agent`. No cluster,
   kubeconfig or settings data is sent. It can be switched off under
   *Settings → Behaviour*; the button under *About* checks only when pressed.
@@ -126,14 +126,14 @@ cosign verify-blob \
   --certificate checksums.txt.pem \
   --signature checksums.txt.sig \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp '^https://github\.com/rogerwesterbo/k8sdockside/\.github/workflows/release\.yml@refs/tags/' \
+  --certificate-identity-regexp '^https://github\.com/k8sdockside/k8sdockside/\.github/workflows/release\.yml@refs/tags/' \
   checksums.txt
 ```
 
 Build provenance for an individual file:
 
 ```sh
-gh attestation verify <file> --repo rogerwesterbo/k8sdockside
+gh attestation verify <file> --repo k8sdockside/k8sdockside
 ```
 
 ### What this does not cover

@@ -11,8 +11,8 @@
 // it. So there nothing is asked for, and nothing is ever unread.
 
 import { Events } from '@wailsio/runtime';
-import { UpdateService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
-import type * as main from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services/models.js';
+import { UpdateService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
+import type * as main from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services/models.js';
 import { session } from './session.svelte';
 
 /** What the backend knows about releases. */

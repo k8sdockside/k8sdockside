@@ -15,7 +15,7 @@
   object is what they scroll to when the summary does not answer it.
 -->
 <script lang="ts">
-    import { ResourceService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
+    import { ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import { adoptKubeVirtDetail, type Fact, type KubeVirtDetail } from './adopt';
     import { workspace } from '../state/workspace.svelte';
     import Icon from '../components/Icon.svelte';

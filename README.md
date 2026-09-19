@@ -4,8 +4,8 @@
 
 **Every cluster in your kubeconfig, in one window.**
 
-[![CI](https://github.com/rogerwesterbo/k8sdockside/actions/workflows/ci.yml/badge.svg)](https://github.com/rogerwesterbo/k8sdockside/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/rogerwesterbo/k8sdockside?sort=semver)](https://github.com/rogerwesterbo/k8sdockside/releases/latest)
+[![CI](https://github.com/k8sdockside/k8sdockside/actions/workflows/ci.yml/badge.svg)](https://github.com/k8sdockside/k8sdockside/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/k8sdockside/k8sdockside?sort=semver)](https://github.com/k8sdockside/k8sdockside/releases/latest)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 
@@ -73,7 +73,7 @@ sign-in of its own. Free and open source under Apache 2.0.
 ## Install
 
 Grab the build for your platform from the
-[latest release](https://github.com/rogerwesterbo/k8sdockside/releases/latest).
+[latest release](https://github.com/k8sdockside/k8sdockside/releases/latest).
 
 ### macOS
 
@@ -120,7 +120,7 @@ provenance for each asset:
 
 ```sh
 sha256sum -c --ignore-missing checksums.txt
-gh attestation verify <file> --repo rogerwesterbo/k8sdockside
+gh attestation verify <file> --repo k8sdockside/k8sdockside
 ```
 
 The full recipe, including `cosign verify-blob`, is in
@@ -213,13 +213,13 @@ See [docs/development.md](docs/development.md).
   its own views instead of scattering custom resources through the definitions
   tree, with an overview of whether the cluster actually has it
 - More a button away in *Settings → Plugins*:
-  [cert-manager](https://github.com/rogerwesterbo/k8sdockside-certmanager),
-  [MetalLB](https://github.com/rogerwesterbo/k8sdockside-metallb),
-  [Cilium](https://github.com/rogerwesterbo/k8sdockside-cilium),
-  [Calico](https://github.com/rogerwesterbo/k8sdockside-calico),
-  [KubeVirt](https://github.com/rogerwesterbo/k8sdockside-kubevirt),
-  [Vitistack](https://github.com/rogerwesterbo/k8sdockside-vitistack) and an
-  [image inventory](https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript),
+  [cert-manager](https://github.com/k8sdockside/certmanager),
+  [MetalLB](https://github.com/k8sdockside/metallb),
+  [Cilium](https://github.com/k8sdockside/cilium),
+  [Calico](https://github.com/k8sdockside/calico),
+  [KubeVirt](https://github.com/k8sdockside/kubevirt),
+  [Vitistack](https://github.com/k8sdockside/vitistack) and an
+  [image inventory](https://github.com/k8sdockside/image-inventory),
   each kept in its own repository, and suggested in the sidebar for a cluster
   running what it is about
 - A plugin is a JSON file naming kinds the app already knows how to show, so
@@ -272,7 +272,7 @@ OIDC provider — and reaches clusters through the pod's ServiceAccount, through
 kubeconfig Secrets you mount, or through kubeconfigs an admin uploads.
 
 ```sh
-helm install k8sdockside oci://ghcr.io/rogerwesterbo/helm/k8sdockside \
+helm install k8sdockside oci://ghcr.io/k8sdockside/helm/k8sdockside \
   --namespace k8sdockside --create-namespace
 kubectl -n k8sdockside port-forward svc/k8sdockside 8080:80
 ```

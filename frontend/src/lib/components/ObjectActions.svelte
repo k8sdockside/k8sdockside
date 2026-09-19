@@ -21,7 +21,7 @@
     import Icon from './Icon.svelte';
     import { notices } from '../state/notices.svelte';
     import { detail } from '../state/detail.svelte';
-    import { PluginService } from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services';
+    import { PluginService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import type { OfferedAction } from '../plugins/types';
 
     // Named `object` rather than `target`: `target` is one of Svelte's own

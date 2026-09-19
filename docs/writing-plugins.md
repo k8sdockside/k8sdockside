@@ -38,7 +38,7 @@ plugins folder. Or start from this:
 
 ```json
 {
-    "$schema": "https://raw.githubusercontent.com/rogerwesterbo/k8sdockside/main/docs/plugin.schema.json",
+    "$schema": "https://raw.githubusercontent.com/k8sdockside/k8sdockside/main/docs/plugin.schema.json",
     "id": "acme",
     "name": "Acme Mesh",
     "version": "1.0.0",
@@ -83,7 +83,7 @@ plugins folder. Or start from this:
 The same checks run outside the app, which is what CI uses:
 
 ```sh
-go run github.com/rogerwesterbo/k8sdockside/cmd/plugincheck@main .
+go run github.com/k8sdockside/k8sdockside/cmd/plugincheck@main .
 ```
 
 A page you change is picked up when you reopen its tab; the manifest when you
@@ -178,7 +178,7 @@ they are useful from plain JavaScript too, as your editor's hints.
 
 ## 5. TypeScript, or a framework
 
-Copy [k8sdockside-example-plugin-typescript](https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript):
+Copy [k8sdockside/image-inventory](https://github.com/k8sdockside/image-inventory):
 an overview, a view and a panel over core kinds, built with esbuild, with
 tests, a build that checks `ui/` is up to date, and CI that runs `plugincheck`.
 Its `src/k8sdockside.d.ts` types `k8sdockside` everywhere; refresh it from
@@ -276,7 +276,7 @@ repository**, and updates with the card's **Update from repository** button.
                - uses: actions/setup-go@v7
                  with:
                      go-version: stable
-               - run: go run github.com/rogerwesterbo/k8sdockside/cmd/plugincheck@main .
+               - run: go run github.com/k8sdockside/k8sdockside/cmd/plugincheck@main .
    ```
 
    A TypeScript plugin also type-checks, tests and checks `ui/` matches a fresh
@@ -345,9 +345,9 @@ from repository**, with no change needed here unless its address moves.
 
 | Plugin | Shows how to |
 | --- | --- |
-| [k8sdockside-example-plugin-typescript](https://github.com/rogerwesterbo/k8sdockside-example-plugin-typescript) | TypeScript with esbuild, tests and CI: an overview, a view and a panel over core kinds, a patch. The one to copy. |
-| [k8sdockside-optimization](https://github.com/rogerwesterbo/k8sdockside-optimization) | TypeScript: rules with tests, a score, Prometheus data through `charts()`, `create` and `patch`. |
-| [k8sdockside-vitistack](https://github.com/rogerwesterbo/k8sdockside-vitistack) | TypeScript: an SVG node graph with a layout of its own, several views that hand each other an object through `storage`, panels on its own kinds and on another plugin's, actions, and `patch` behind buttons. |
-| [k8sdockside-metallb](https://github.com/rogerwesterbo/k8sdockside-metallb) | Plain JavaScript: an overview of its own, views and panels. |
-| [k8sdockside-certmanager](https://github.com/rogerwesterbo/k8sdockside-certmanager) | Plain JavaScript: panels on built-in kinds (Ingresses, Gateways), charts on objects. |
+| [k8sdockside/image-inventory](https://github.com/k8sdockside/image-inventory) | TypeScript with esbuild, tests and CI: an overview, a view and a panel over core kinds, a patch. The one to copy. |
+| [k8sdockside/optimization](https://github.com/k8sdockside/optimization) | TypeScript: rules with tests, a score, Prometheus data through `charts()`, `create` and `patch`. |
+| [k8sdockside/vitistack](https://github.com/k8sdockside/vitistack) | TypeScript: an SVG node graph with a layout of its own, several views that hand each other an object through `storage`, panels on its own kinds and on another plugin's, actions, and `patch` behind buttons. |
+| [k8sdockside/metallb](https://github.com/k8sdockside/metallb) | Plain JavaScript: an overview of its own, views and panels. |
+| [k8sdockside/certmanager](https://github.com/k8sdockside/certmanager) | Plain JavaScript: panels on built-in kinds (Ingresses, Gateways), charts on objects. |
 | [`internal/plugins/builtin/`](../internal/plugins/builtin/) | The built-ins, in the same format: `flux.json` is JSON only; `argocd.json` has actions, a board and a panel; `prometheus.json` has every kind of chart. |

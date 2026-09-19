@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/kube"
+	"github.com/k8sdockside/k8sdockside/internal/kube"
 )
 
 // clearPrepareEnv makes every variable Prepare may set go back to how it was

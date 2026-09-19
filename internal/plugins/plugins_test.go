@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/kube"
+	"github.com/k8sdockside/k8sdockside/internal/kube"
 )
 
 func write(t *testing.T, dir, name, body string) string {

@@ -45,7 +45,7 @@ const settingsFile = vi.hoisted(() => {
             }),
     };
 });
-vi.mock('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services', () => ({
+vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => ({
     HelmService: {
         Releases: vi.fn().mockResolvedValue({ kind: 'helmreleases', columns: [], rows: [], namespaced: true, error: '' }),
         Detail: vi.fn().mockResolvedValue({
@@ -292,7 +292,7 @@ test('choosing namespaces moves the filter on the open subscription', async () =
         pushed.send = onTable as (t: unknown) => void;
         return { setNamespaces: moved, close: vi.fn() };
     });
-    const { ResourceService } = await import('../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/services');
+    const { ResourceService } = await import('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services');
     vi.mocked(ResourceService.Namespaces).mockResolvedValueOnce(['default', 'kube-system']);
 
     render(ResourceTable, { contextId: PROD, kind: 'pods' });

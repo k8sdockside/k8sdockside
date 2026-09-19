@@ -2,7 +2,7 @@
 // would once it is installed, and says whether it loads -- and if not, every
 // reason why. It is meant for a plugin's own repository, run by hand or in CI:
 //
-//	go run github.com/rogerwesterbo/k8sdockside/cmd/plugincheck@latest .
+//	go run github.com/k8sdockside/k8sdockside/cmd/plugincheck@latest .
 //
 // It checks what the app checks on load and nothing less: the JSON, every
 // field's name and type, the kinds, the queries, the actions' requests, the
@@ -18,7 +18,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/rogerwesterbo/k8sdockside/internal/plugins"
+	"github.com/k8sdockside/k8sdockside/internal/plugins"
 )
 
 func main() {

@@ -70,7 +70,7 @@ test('a cluster running a known product suggests its plugin', async () => {
     workspace.knownPlugins = [
         {
             id: 'cert-manager', name: 'cert-manager', tagline: '', icon: 'lock', description: '',
-            repo: 'https://github.com/rogerwesterbo/k8sdockside-certmanager.git',
+            repo: 'https://github.com/k8sdockside/certmanager.git',
             detect: ['crd:certificates.cert-manager.io'], links: [], official: true, installed: false,
         },
     ];

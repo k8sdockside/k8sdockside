@@ -9,8 +9,8 @@
 // with some flags the models arrive as class instances, which Svelte's $state
 // does not deep-proxy, so nested writes to them would never reach the UI.
 
-import type * as kube from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/kube/models.js';
-import type * as appconfig from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/appconfig/models.js';
+import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
+import type * as appconfig from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/appconfig/models.js';
 import { DEFAULT_THEME_ID } from '../theme/apply';
 import type { ColumnPrefs } from '../columns';
 import type { PaneId } from './panes';

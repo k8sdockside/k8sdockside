@@ -4,7 +4,7 @@
 // Go slice and map as nullable, and resolving that once here is what keeps the
 // component free of `?? []`.
 
-import type * as kube from '../../../bindings/github.com/rogerwesterbo/k8sdockside/internal/kube/models.js';
+import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
 
 /** Another object a value leads to, which the panel offers as a link. */
 export interface Ref {
