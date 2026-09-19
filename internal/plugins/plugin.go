@@ -292,6 +292,13 @@ type Plugin struct {
 	Name    string `json:"name"`
 	Tagline string `json:"tagline,omitzero"`
 	Icon    string `json:"icon,omitzero"`
+	// Logo is the plugin's own mark -- a file in its ui folder -- shown
+	// wherever the app names the plugin, in place of Icon. A plugin for a
+	// product is recognised by that product's mark long before its name is
+	// read, which a shared icon set cannot do. Checked on load like the pages
+	// are, so a manifest naming a file that is not there is refused rather
+	// than leaving a broken image in the sidebar.
+	Logo string `json:"logo,omitzero"`
 	// Author is who wrote the plugin -- a person or a company -- and AuthorURL
 	// where to find them. The app credits them wherever it shows the plugin:
 	// its card in settings, its overview, and a strip under an overview page of
@@ -565,6 +572,14 @@ func validate(p Plugin) (Plugin, error) {
 	fail(checkIcon(p.ID, "itself", p.Icon))
 	if p.Icon == "" {
 		p.Icon = "puzzle"
+	}
+	p.Logo = strings.TrimSpace(p.Logo)
+	fail(checkLogo(p.ID, p.Logo))
+	// The logo is served from the ui folder by the same handler that serves the
+	// views, so a plugin naming one without shipping that folder has named a
+	// file nothing can reach.
+	if p.Logo != "" && p.UI == nil {
+		fail(fmt.Errorf("plugin %q names a logo but ships no ui folder for it to be served from", p.ID))
 	}
 
 	for i, req := range p.Requires {

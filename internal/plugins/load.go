@@ -352,6 +352,15 @@ func checkEntries(p Plugin, files fs.FS, dir string) error {
 	if p.Overview != nil {
 		check("its overview", p.Overview.Entry)
 	}
+	if p.Logo != "" {
+		info, err := fs.Stat(files, p.Logo)
+		switch {
+		case err != nil:
+			errs = append(errs, fmt.Errorf("plugin %q: its logo %s is not in %s", p.ID, p.Logo, dir))
+		case info.IsDir():
+			errs = append(errs, fmt.Errorf("plugin %q: its logo %s is a folder, not an image", p.ID, p.Logo))
+		}
+	}
 	return errors.Join(errs...)
 }
 

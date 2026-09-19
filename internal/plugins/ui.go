@@ -146,7 +146,15 @@ func serveUI(w http.ResponseWriter, r *http.Request, catalogue func() Catalogue)
 		return
 	}
 
-	setUIHeaders(w, host, plugin.ID)
+	// A logo is an image the *app* draws in its own sidebar, not a page drawn
+	// in a frame. Sending it the sandbox policy the views get would be asking
+	// the browser to treat a picture as an untrusted document, so it gets a
+	// policy that fits what it is.
+	if plugin.Logo != "" && file == plugin.Logo {
+		setLogoHeaders(w)
+	} else {
+		setUIHeaders(w, host, plugin.ID)
+	}
 	http.ServeContent(w, r, path.Base(file), info.ModTime(), content)
 }
 
@@ -166,6 +174,18 @@ func webviewHost(r *http.Request) string {
 		}
 	}
 	return host
+}
+
+// setLogoHeaders writes the headers a plugin's logo carries. An SVG is markup,
+// and markup from a plugin is not trusted any further here than anywhere else:
+// the policy leaves it nothing it could reach even if something did run it,
+// and nosniff keeps it being drawn as the image type it was served as.
+func setLogoHeaders(w http.ResponseWriter) {
+	h := w.Header()
+	h.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+	h.Set("Access-Control-Allow-Origin", "*")
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Cache-Control", "no-store")
 }
 
 // setUIHeaders writes the headers every file served to a plugin view carries.

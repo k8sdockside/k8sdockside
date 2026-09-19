@@ -23,6 +23,7 @@ export function adoptPlugin(plugin: bindings.Plugin): Plugin {
         name: plugin.name,
         tagline: plugin.tagline ?? '',
         icon: plugin.icon || 'puzzle',
+        logo: plugin.logo ?? '',
         author: plugin.author ?? '',
         authorUrl: plugin.authorUrl ?? '',
         official: plugin.official ?? false,

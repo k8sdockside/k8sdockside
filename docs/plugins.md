@@ -155,6 +155,7 @@ working file you can edit a line at a time.
 | `tagline` | optional | One short line, shown under the name on the overview. |
 | `description` | optional | A paragraph on the overview. Worth writing: it is where you say what to look at first. |
 | `icon` | optional | See [icons](#icons). Defaults to `puzzle`. |
+| `logo` | optional | The plugin's own mark, drawn in place of `icon` wherever the app names it. See [A mark of its own](#a-mark-of-its-own). Needs a `ui/` folder, and K8s Dockside 0.0.30 or newer. |
 | `docs` | optional | A link on the overview. `http(s)` only. |
 | `links` | optional | What the plugin is about — the product's own site, its source, its documentation: `[{ "label", "url" }]`, `http(s)` only, at most eight. The label defaults to the address's host. Shown on the plugin's card in Settings, in the generated overview's foot, and handed to a page of its own through `ready()`. |
 | `version` | optional | The plugin's own version, `1.2.0` or `v1.2.0`. Shown on its card. |
@@ -392,6 +393,42 @@ Any of: `alert`, `bell`, `book`, `box`, `certificate`, `check`, `chevron-down`,
 The same names go for views and actions. Any other name is refused when the
 file is read, with the nearest real one suggested, rather than drawing an
 empty square.
+
+### A mark of its own
+
+An icon from that list says what kind of thing a plugin is about. A plugin for
+a real product can do better: `logo` points at a file in its `ui/` folder, and
+the app draws that instead — in the sidebar, on the plugin's overview, and on
+its card in Settings.
+
+```json
+"logo": "logo.svg"
+```
+
+It is served from the same place the plugin's pages are, at
+`/plugin-ui/<id>/<logo>`, as an image rather than as a page: a logo never gets
+the sandbox a view gets, and nothing in it runs. The file has to be there when
+the manifest is read, or the plugin is refused rather than leaving a broken
+image in the sidebar.
+
+Worth knowing before you draw one:
+
+- **It is shown at 14 px** in the sidebar, 16–18 px on a card and 22 px on the
+  overview. A detailed mark turns to mush at the small end; the app's own
+  plugins use each project's icon or glyph, never its horizontal lock-up, and a
+  wordmark is wasted because the plugin's name is already beside it.
+- **It is never stretched.** A drawing that is not square is fitted inside the
+  box and centred, so a tall glyph simply draws narrow.
+- **An SVG is parsed as XML**, not as HTML. Anything unbalanced does not draw
+  at all.
+- **It has to work on both themes.** The app does not put a backdrop behind it,
+  so a mark drawn only in near-black or near-white disappears on one of them.
+
+If your plugin is about someone else's product, the mark is that project's
+trademark: use the one it publishes, unchanged, and only to say which product
+your plugin is for. The plugins shipped alongside this app take theirs from the
+CNCF's artwork repository, from the project's own repository, or from its
+website, and each `logo.svg` names its source in a comment at the top.
 
 ## Views of its own
 

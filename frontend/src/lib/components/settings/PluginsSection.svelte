@@ -20,6 +20,7 @@
     import { session } from '../../state/session.svelte';
     import { workspace } from '../../state/workspace.svelte';
     import Icon from '../Icon.svelte';
+    import PluginMark from '../PluginMark.svelte';
     import PluginCredit from '../PluginCredit.svelte';
     import SettingsSection from './SettingsSection.svelte';
 
@@ -364,7 +365,7 @@
 {#snippet card(plugin: import('../../plugins/types').Plugin)}
     <article class="plugin" class:off={plugin.disabled}>
         <header>
-            <Icon name={plugin.icon} size={16} />
+            <PluginMark id={plugin.id} icon={plugin.icon} logo={plugin.logo} size={16} />
             <div class="naming">
                 <p class="name">{plugin.name}</p>
                 <p class="tagline">{plugin.tagline || plugin.id}</p>
@@ -509,7 +510,7 @@
     {@const watchedCopy = watched.find((p) => p.id === offer.id)}
     <article class="plugin known">
         <header>
-            <Icon name={offer.icon} size={18} />
+            <PluginMark id={offer.id} icon={offer.icon} size={18} />
             <div class="naming">
                 <p class="name">{offer.name}</p>
                 <p class="tagline">{offer.tagline}</p>

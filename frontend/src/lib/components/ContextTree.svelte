@@ -24,6 +24,7 @@
     import { workspace, type Health } from '../state/workspace.svelte';
     import { clusters } from '../state/health.svelte';
     import Icon from './Icon.svelte';
+    import PluginMark from './PluginMark.svelte';
     import { notices } from '../state/notices.svelte';
 
     interface Props {
@@ -525,7 +526,7 @@
                                     title={presenceTitle(plugin.name, state)}
                                 >
                                     <Icon name={open ? 'chevron-down' : 'chevron-right'} size={11} />
-                                    <Icon name={plugin.icon} size={14} />
+                                    <PluginMark id={plugin.id} icon={plugin.icon} logo={plugin.logo} size={14} />
                                     <span>{plugin.name}</span>
                                     {#if state === 'absent'}
                                         <span class="missing">not installed</span>
@@ -581,7 +582,7 @@
                                         title="{offer.name} runs in this cluster, and there is a plugin for it — open Settings to install it"
                                     >
                                         <Icon name="plus" size={11} />
-                                        <Icon name={offer.icon} size={14} />
+                                        <PluginMark id={offer.id} icon={offer.icon} size={14} />
                                         <span>{offer.name}</span>
                                         <span class="missing get">get plugin</span>
                                     </button>

@@ -23,6 +23,7 @@
     import MetricsPanel from '../charts/MetricsPanel.svelte';
     import ErrorState from './ErrorState.svelte';
     import Icon from './Icon.svelte';
+    import PluginMark from './PluginMark.svelte';
     import { onExternalClick } from '../links';
 
     interface Props {
@@ -135,7 +136,7 @@
     {:else if summary}
         <header class="head" style:--ctx-color={color}>
             <div class="title">
-                <Icon name={plugin.icon} size={22} />
+                <PluginMark id={plugin.id} icon={plugin.icon} logo={plugin.logo} size={22} />
                 <div>
                     <h1>{plugin.name}</h1>
                     {#if plugin.tagline}<p class="tagline">{plugin.tagline}</p>{/if}

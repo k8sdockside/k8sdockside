@@ -165,6 +165,11 @@
                     ],
                     "description": "One of the app's icons."
                 },
+                "logo": {
+                    "type": "string",
+                    "description": "The plugin's own mark, a file in its ui folder (e.g. \"logo.svg\"). Shown wherever the app names the plugin, in place of `icon`. SVG, PNG or WebP.",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*\\.(svg|png|webp)$"
+                },
                 "author": {
                     "type": "string",
                     "maxLength": 80,

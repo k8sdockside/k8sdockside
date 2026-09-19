@@ -118,6 +118,12 @@ export interface Plugin {
     name: string;
     tagline: string;
     icon: string;
+    /**
+     * The plugin's own mark, a file in its ui folder, served at
+     * `/plugin-ui/<id>/<logo>`. Empty for a plugin that ships none, which
+     * falls back to a bundled mark and then to `icon`; see PluginMark.
+     */
+    logo?: string;
     author: string;
     /** Where to find the author, http(s) only. Optional so fixtures need not spell it out. */
     authorUrl?: string;

@@ -16,6 +16,7 @@ const customPlugin = `{
     "id": "acme",
     "name": "Acme",
     "requires": [{ "kind": "crd:meshes.acme.io" }],
+    "logo": "logo.svg",
     "ui": { "kinds": ["pods"], "write": true },
     "views": [
         { "id": "map", "label": "Map", "type": "custom" },
@@ -32,6 +33,7 @@ func installCustom(t *testing.T) (Catalogue, string) {
 	pluginDir := filepath.Join(dir, "acme")
 	write(t, pluginDir, "plugin.json", customPlugin)
 	write(t, filepath.Join(pluginDir, "ui"), "index.html", "<p>map</p>")
+	write(t, filepath.Join(pluginDir, "ui"), "logo.svg", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg>`)
 	write(t, filepath.Join(pluginDir, "ui", "pages"), "second.html", "<p>second</p>")
 	write(t, pluginDir, "secret.txt", "not for the frame")
 
@@ -235,6 +237,53 @@ func TestMiddlewareServesAViewWithItsSandbox(t *testing.T) {
 	}
 	if strings.Contains(csp, "allow-same-origin") {
 		t.Errorf("policy %q gives the frame the app's origin", csp)
+	}
+}
+
+func TestMiddlewareServesALogoAsAnImageNotAPage(t *testing.T) {
+	cat, _ := installCustom(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/plugin-ui/acme/logo.svg", nil)
+	req.Host = "localhost"
+	rec := serve(t, cat, req)
+
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "<svg") {
+		t.Fatalf("got %d %q", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "image/svg+xml") {
+		t.Errorf("logo served as %q, which the app will not draw as an image", ct)
+	}
+	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Error("logo served without nosniff")
+	}
+	// The views' policy sandboxes the response as a document and names the
+	// plugin's folder as a source. Neither belongs on a picture, and the
+	// sandbox in particular is what a browser may refuse to draw.
+	csp := rec.Header().Get("Content-Security-Policy")
+	if strings.Contains(csp, "allow-scripts") {
+		t.Errorf("logo carries the page sandbox: %q", csp)
+	}
+	if !strings.Contains(csp, "default-src 'none'") {
+		t.Errorf("logo policy %q does not shut everything out", csp)
+	}
+}
+
+// A file that is not the declared logo keeps the page policy, whatever it is
+// named: the exemption is for the one file the manifest points at, not for
+// every image in the folder.
+func TestOnlyTheDeclaredLogoEscapesThePageSandbox(t *testing.T) {
+	cat, dir := installCustom(t)
+	write(t, filepath.Join(dir, "acme", "ui"), "other.svg", `<svg xmlns="http://www.w3.org/2000/svg"></svg>`)
+
+	req := httptest.NewRequest(http.MethodGet, "/plugin-ui/acme/other.svg", nil)
+	req.Host = "localhost"
+	rec := serve(t, cat, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d", rec.Code)
+	}
+	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "sandbox allow-scripts") {
+		t.Errorf("policy %q is not the page sandbox", csp)
 	}
 }
 
