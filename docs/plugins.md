@@ -89,6 +89,7 @@ definitions.
 | Vitistack | Platform | K8s Dockside | [k8sdockside/vitistack](https://github.com/k8sdockside/vitistack) | `crd:kubernetesclusters.vitistack.io` |
 | Image inventory | Images | K8s Dockside | [k8sdockside/image-inventory](https://github.com/k8sdockside/image-inventory) | — works on any cluster |
 | Optimization advisor | Cost & efficiency | K8s Dockside | [k8sdockside/optimization](https://github.com/k8sdockside/optimization) | — works on any cluster |
+| Descheduler | Cost & efficiency | K8s Dockside | [k8sdockside/descheduler](https://github.com/k8sdockside/descheduler) | its descheduler CronJob or Deployment — it has no custom resources |
 
 Every card credits its author, and says whether the plugin is **Official** —
 kept alongside the app by its author — or from the **Community**. Yours can be

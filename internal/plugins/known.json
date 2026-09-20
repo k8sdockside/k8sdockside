@@ -190,6 +190,26 @@
         "official": true
     },
     {
+        "id": "descheduler",
+        "name": "Descheduler",
+        "tagline": "evicts pods that should be running somewhere else",
+        "category": "cost",
+        "icon": "scale",
+        "description": "Whether anything is rebalancing this cluster, and what it moved. Every eviction the descheduler recorded, live, with the plugin that asked for it and the node the pod left \u2014 refusals beside the successes, because an eviction a PodDisruptionBudget turned down is the one worth reading. Its policy as forms rather than YAML: every plugin with a sentence on what it does, thresholds and limits as fields, checked against what the descheduler refuses at startup, and the file shown before it is applied. Panels on Pods saying whether this pod could be evicted at all, and on Nodes for what has left them.",
+        "repo": "https://github.com/k8sdockside/descheduler.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
+        "detectWorkloads": [
+            { "kind": "cronjobs", "selector": "app.kubernetes.io/name=descheduler" },
+            { "kind": "deployments", "selector": "app.kubernetes.io/name=descheduler" }
+        ],
+        "links": [
+            { "label": "GitHub", "url": "https://github.com/kubernetes-sigs/descheduler" },
+            { "label": "Policy and plugins", "url": "https://github.com/kubernetes-sigs/descheduler#policy-default-evictor-and-strategy-plugins" }
+        ],
+        "official": true
+    },
+    {
         "id": "vitistack",
         "name": "Vitistack",
         "tagline": "a supervisor cluster -- networks, clusters, machines and their VMs -- as one picture",
