@@ -254,7 +254,7 @@
             <!-- Panels plugins bring for this kind: a page of the plugin's own
                  in a sandboxed frame, told which object it is drawn for. After
                  the app's own summary, before the report. -->
-            {#each workspace.pluginSectionsFor(target.kind) as entry (entry.plugin.id + '/' + entry.section.id)}
+            {#each workspace.pluginSectionsFor(target.contextId, target.kind) as entry (entry.plugin.id + '/' + entry.section.id)}
                 <div class="plugin-section">
                     <h3>{entry.section.label} <span>· {entry.plugin.name}</span></h3>
                     <PluginFrame

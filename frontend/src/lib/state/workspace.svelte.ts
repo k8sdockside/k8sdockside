@@ -2220,22 +2220,45 @@ class Workspace {
     }
 
     /**
-     * The panels enabled plugins draw in the detail view of an object of this
-     * kind, each with the plugin it belongs to.
+     * The enabled plugins worth drawing for one cluster: all of them, less any
+     * this cluster has said it does not have.
+     *
+     * A plugin is installed on this machine, not in a cluster, and its rows in
+     * the sidebar say so -- they are listed for every context with "not
+     * installed" in the margin where it is missing, because that row is how
+     * you find out. What a plugin draws *onto the cluster's own objects* is a
+     * different matter: a Descheduler panel on every pod of a cluster with no
+     * descheduler in it, and an "Allow descheduling" button beside it, are a
+     * feature of a product that is not there.
+     *
+     * `false` is the only answer that hides anything. A cluster that has not
+     * been asked yet, or would not answer, leaves the plugin drawn -- the same
+     * way round as everywhere else here, because a panel that briefly should
+     * not be there costs less than one that never appears.
      */
-    pluginSectionsFor(kind: string): { plugin: Plugin; section: PluginSectionSpec }[] {
-        return this.enabledPlugins.flatMap((plugin) =>
+    pluginsHereFor(contextId: string): Plugin[] {
+        return this.enabledPlugins.filter((plugin) => this.pluginInstalledIn(contextId, plugin) !== false);
+    }
+
+    /**
+     * The panels enabled plugins draw in the detail view of an object of this
+     * kind, each with the plugin it belongs to. Only the plugins whose product
+     * this cluster has -- see pluginsHereFor.
+     */
+    pluginSectionsFor(contextId: string, kind: string): { plugin: Plugin; section: PluginSectionSpec }[] {
+        return this.pluginsHereFor(contextId).flatMap((plugin) =>
             (plugin.sections ?? []).filter((s) => s.kind === kind).map((section) => ({ plugin, section })),
         );
     }
 
     /**
-     * Whether an enabled plugin from outside the app puts buttons on this kind.
-     * One that does takes over from the app's own product-specific buttons for
-     * it -- a VM's lifecycle bar -- rather than drawing a second set beside them.
+     * Whether an enabled plugin from outside the app puts buttons on this kind
+     * in this cluster. One that does takes over from the app's own
+     * product-specific buttons for it -- a VM's lifecycle bar -- rather than
+     * drawing a second set beside them.
      */
-    pluginActsOn(kind: string, opts: { external?: boolean } = {}): boolean {
-        return this.enabledPlugins.some(
+    pluginActsOn(contextId: string, kind: string, opts: { external?: boolean } = {}): boolean {
+        return this.pluginsHereFor(contextId).some(
             (p) => (!opts.external || p.origin !== 'builtin') && (p.actions ?? []).some((a) => a.kind === kind),
         );
     }

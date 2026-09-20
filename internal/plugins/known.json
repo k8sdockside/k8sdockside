@@ -201,7 +201,9 @@
         "authorUrl": "https://github.com/k8sdockside",
         "detectWorkloads": [
             { "kind": "cronjobs", "selector": "app.kubernetes.io/name=descheduler" },
-            { "kind": "deployments", "selector": "app.kubernetes.io/name=descheduler" }
+            { "kind": "deployments", "selector": "app.kubernetes.io/name=descheduler" },
+            { "kind": "pods", "selector": "app.kubernetes.io/name=descheduler" },
+            { "kind": "secrets", "selector": "owner=helm,name=descheduler" }
         ],
         "links": [
             { "label": "GitHub", "url": "https://github.com/kubernetes-sigs/descheduler" },

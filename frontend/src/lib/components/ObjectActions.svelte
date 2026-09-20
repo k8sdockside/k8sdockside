@@ -58,7 +58,7 @@
      * takes over from the app's built-in product buttons for it, rather than
      * the bar carrying two Starts.
      */
-    let pluginOwnsKind = $derived(workspace.pluginActsOn(object.kind, { external: true }));
+    let pluginOwnsKind = $derived(workspace.pluginActsOn(object.contextId, object.kind, { external: true }));
     /**
      * Forward is left out of the web version, where the port it opens would be
      * one on the server rather than on the machine the user is sitting at. A
@@ -86,7 +86,7 @@
     let offered = $state<OfferedAction[]>([]);
     /** The plugin action waiting on its confirmation, if any. */
     let askingPlugin = $state<OfferedAction | null>(null);
-    let hasPluginActions = $derived(workspace.pluginActsOn(object.kind));
+    let hasPluginActions = $derived(workspace.pluginActsOn(object.contextId, object.kind));
 
     async function loadOffered(ref: DetailTarget): Promise<void> {
         try {

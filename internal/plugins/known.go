@@ -133,8 +133,14 @@ func validateKnown(k Known) (Known, error) {
 // not. A probe is the other case: a product with no custom resources of its
 // own, which can only be recognised by finding the thing it runs. That is a
 // real query against the cluster, so probes are kept narrow (a selector, and
-// usually a kind that is cheap to list) and are only ever run for plugins that
-// are not installed yet.
+// usually a kind that is cheap to list).
+//
+// A Helm release is a probe like any other: Helm keeps each release as a
+// Secret labelled owner=helm,name=<release>, so `{"kind": "secrets",
+// "selector": "owner=helm,name=descheduler"}` finds a product installed from
+// its chart even when what the chart created has been renamed or scaled to
+// nothing. It goes last among a plugin's probes, because the workload itself
+// is both cheaper to list and the better answer to "is this running".
 type Probe struct {
 	// Kind is what to look for: a built-in name such as "daemonsets".
 	Kind string `json:"kind"`

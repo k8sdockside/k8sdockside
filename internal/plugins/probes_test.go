@@ -179,3 +179,46 @@ func TestAClusterThatCouldNotBeAskedIsNotCalledMissing(t *testing.T) {
 		t.Error("a plugin whose requirements are all kinds was sent to the cluster anyway")
 	}
 }
+
+// The descheduler is the other shape of undetectable product: no custom
+// resources, and it may be a CronJob or a Deployment depending on how the
+// chart was installed -- or, between runs, neither, with only the Helm release
+// left to say it is there at all.
+func TestTheDeschedulerIsFoundByItsWorkloadItsPodsOrItsHelmRelease(t *testing.T) {
+	d, ok := FindKnown("descheduler")
+	if !ok {
+		t.Fatal("descheduler is not on the known list")
+	}
+	if len(d.Detect) > 0 {
+		t.Errorf("descheduler detects kinds (%v) -- it installs no custom resources", d.Detect)
+	}
+
+	// Each of the four on its own is enough: how it was installed is not
+	// something the app gets to assume.
+	for _, selector := range []string{
+		"app.kubernetes.io/name=descheduler",
+		"owner=helm,name=descheduler",
+	} {
+		cluster := &probeCluster{counts: map[string]int{selector: 1}}
+		if here, told := d.RunsIn(cluster); !here || !told {
+			t.Errorf("a cluster matching %q was not recognised: here=%v told=%v", selector, here, told)
+		}
+	}
+
+	// A cluster with none of it is a plain no, and every probe was tried
+	// before saying so -- this is the answer that hides the plugin's panels.
+	empty := &probeCluster{counts: map[string]int{}}
+	if here, told := d.RunsIn(empty); here || !told {
+		t.Errorf("a cluster with no descheduler: here=%v told=%v, want a plain no", here, told)
+	}
+	if len(empty.asked) != len(d.DetectWorkloads) {
+		t.Errorf("asked %v, want every probe tried before giving up", empty.asked)
+	}
+
+	// The workload comes before the release record: it is cheaper to list, and
+	// a running descheduler is a better answer than a Helm release saying one
+	// ought to be running.
+	if first := d.DetectWorkloads[0].Kind; first == "secrets" {
+		t.Errorf("the Helm release is probed first; the workloads are cheaper and more telling")
+	}
+}

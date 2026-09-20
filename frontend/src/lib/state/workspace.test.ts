@@ -2152,6 +2152,55 @@ describe('solution plugins', () => {
         expect(workspace.pluginInstalledIn(PROD, flannel)).toBe(true);
     });
 
+    // The descheduler is the case this exists for: its plugin puts a panel on
+    // every Pod and a button beside it, and a cluster with no descheduler in it
+    // was getting both. A plugin is installed on this machine, but what it
+    // draws onto a cluster's own objects belongs to the cluster that has the
+    // product.
+    test('a plugin the cluster does not have draws nothing onto that cluster\'s objects', async () => {
+        const descheduler = {
+            ...plugin('descheduler', [{ kind: 'configmaps' }, { kind: 'events' }]),
+            sections: [{ id: 'pod', label: 'Descheduler', kind: 'pods', entry: 'pod.html', height: 260 }],
+            actions: [{ id: 'allow-eviction', label: 'Allow descheduling', icon: 'check', kind: 'pods' }],
+        };
+        workspace.pluginCatalogue = { plugins: [descheduler], dir: '', folders: [], problems: [] };
+        workspace.knownPlugins = [{ ...known('descheduler', []), probed: true }];
+        clusterServes(PROD, []);
+
+        // Before the cluster has answered the panel stays: a panel that should
+        // briefly not be there costs less than one that never appears.
+        expect(workspace.pluginSectionsFor(PROD, 'pods')).toHaveLength(1);
+        expect(workspace.pluginActsOn(PROD, 'pods')).toBe(true);
+
+        vi.mocked(PluginService.Probe).mockResolvedValueOnce({ known: [], absent: ['descheduler'] });
+        await workspace.loadCustomKinds(PROD, { force: true });
+
+        await vi.waitFor(() => expect(workspace.pluginSectionsFor(PROD, 'pods')).toHaveLength(0));
+        expect(workspace.pluginActsOn(PROD, 'pods')).toBe(false);
+        // And the plugin is still installed: its sidebar row stays, marked.
+        expect(workspace.enabledPlugins.map((p) => p.id)).toEqual(['descheduler']);
+        expect(workspace.pluginInstalledIn(PROD, descheduler)).toBe(false);
+    });
+
+    // The same cluster, with the descheduler in it, gets everything.
+    test('a plugin the cluster does have keeps its panels and its buttons', async () => {
+        const descheduler = {
+            ...plugin('descheduler', [{ kind: 'configmaps' }, { kind: 'events' }]),
+            sections: [{ id: 'pod', label: 'Descheduler', kind: 'pods', entry: 'pod.html', height: 260 }],
+            actions: [{ id: 'allow-eviction', label: 'Allow descheduling', icon: 'check', kind: 'pods' }],
+        };
+        workspace.pluginCatalogue = { plugins: [descheduler], dir: '', folders: [], problems: [] };
+        workspace.knownPlugins = [{ ...known('descheduler', []), probed: true }];
+        clusterServes(PROD, []);
+
+        vi.mocked(PluginService.Probe).mockResolvedValueOnce({ known: [], absent: [] });
+        await workspace.loadCustomKinds(PROD, { force: true });
+
+        await vi.waitFor(() => expect(workspace.pluginInstalledIn(PROD, descheduler)).toBe(true));
+        expect(workspace.pluginSectionsFor(PROD, 'pods')).toHaveLength(1);
+        expect(workspace.pluginActsOn(PROD, 'pods')).toBe(true);
+    });
+
     test('unfolding a plugin is per context', () => {
         workspace.togglePlugin(PROD, 'argocd');
 
