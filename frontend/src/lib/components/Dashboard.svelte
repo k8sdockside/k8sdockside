@@ -8,6 +8,7 @@
     import MetricsPanel from '../charts/MetricsPanel.svelte';
     import ResourceBudget from '../budget/ResourceBudget.svelte';
     import ErrorState from './ErrorState.svelte';
+    import Icon from './Icon.svelte';
     import SortableTable from './SortableTable.svelte';
     import { detail } from '../state/detail.svelte';
 
@@ -22,38 +23,105 @@
     let loading = $state(true);
     /** Bumped by the retry button; the loading effect reads it as a dependency. */
     let attempt = $state(0);
+    /** Whether a refresh is in flight, for the button and its spinner. */
+    let refreshing = $state(false);
+    /** When the counters last changed, for the line under them. */
+    let updated = $state<Date | null>(null);
+    /**
+     * A refresh that failed while a good dashboard is on screen. Kept apart
+     * from `error`, which replaces the whole page: a cluster that blinked is
+     * not a reason to throw away the numbers and make the reader press a
+     * button to get them back.
+     */
+    let stale = $state<string | null>(null);
+
+    /**
+     * How often the counters are read again.
+     *
+     * The same half-minute the budget and the metrics panels on this page use,
+     * so the whole dashboard moves at one speed rather than three. It is a
+     * poll rather than a watch because the counters are five list calls and
+     * holding five informers open for four numbers would cost far more than
+     * asking every thirty seconds does.
+     */
+    const REFRESH_MS = 30_000;
 
     let color = $derived(workspace.colorOf(contextId));
     let context = $derived(workspace.contexts.find((c) => c.id === contextId) ?? null);
 
+    // A different cluster starts from nothing rather than from the last one's
+    // numbers: keeping what is on screen is right for a refresh of the same
+    // context and wrong for a move to another. Deliberately not keyed on
+    // `attempt`, so pressing Refresh leaves the numbers up while it reads.
+    $effect(() => {
+        contextId;
+        overview = null;
+        updated = null;
+        stale = null;
+        loading = true;
+    });
+
     $effect(() => {
         const id = contextId;
         attempt;
-        let cancelled = false;
-        loading = true;
-        error = null;
 
-        ResourceService.Overview(id)
-            .then((result) => {
-                if (cancelled) return;
+        let live = true;
+
+        /**
+         * Reads the overview once. A refresh keeps what is on screen until the
+         * new numbers arrive -- clearing first would make the page flash empty
+         * twice a minute -- so only the first read of a context shows Loading.
+         */
+        async function load(): Promise<void> {
+            refreshing = true;
+            try {
+                const result = await ResourceService.Overview(id);
+                if (!live) return;
                 overview = adoptOverview(result);
+                updated = new Date();
+                error = null;
+                stale = null;
                 // A dashboard that loaded is better evidence than any ping, so
                 // it settles the sidebar indicator for this context.
                 clusters.report(id, 'connected');
-            })
-            .catch((err: unknown) => {
-                if (cancelled) return;
-                error = err instanceof Error ? err.message : String(err);
-                clusters.report(id, 'error', error);
-            })
-            .finally(() => {
-                if (!cancelled) loading = false;
-            });
+            } catch (err: unknown) {
+                if (!live) return;
+                const text = err instanceof Error ? err.message : String(err);
+                // Nothing on screen yet: the failure is the page. Otherwise it
+                // is a note over numbers that are still worth reading.
+                if (overview) stale = text;
+                else error = text;
+                clusters.report(id, 'error', text);
+            } finally {
+                if (live) {
+                    loading = false;
+                    refreshing = false;
+                }
+            }
+        }
+
+        void load();
+        const timer = setInterval(() => {
+            if (live) void load();
+        }, REFRESH_MS);
 
         return () => {
-            cancelled = true;
+            live = false;
+            clearInterval(timer);
         };
     });
+
+    /** Reads the counters again now, for the refresh button. */
+    function refresh(): void {
+        attempt++;
+    }
+
+    /** "just now", or the clock time the counters were last read. */
+    function updatedAt(at: Date): string {
+        const seconds = Math.round((Date.now() - at.getTime()) / 1000);
+        if (seconds < 45) return 'just now';
+        return `at ${at.toLocaleTimeString()}`;
+    }
 
     function statTone(stat: kube.Stat): string {
         if (stat.total === 0) return 'muted';
@@ -68,7 +136,13 @@
         <ErrorState message={error} {context} onRetry={() => attempt++} />
     {:else if overview}
         <header class="head" style:--ctx-color={color}>
-            <h1>{overview.context}</h1>
+            <div class="title">
+                <h1>{overview.context}</h1>
+                <button class="refresh" onclick={refresh} disabled={refreshing} title="Read the cluster again now">
+                    <Icon name="refresh" size={13} />
+                    {refreshing ? 'Reading…' : 'Refresh'}
+                </button>
+            </div>
             <dl>
                 {#if overview.server}<div><dt>Server</dt><dd class="selectable">{overview.server}</dd></div>{/if}
                 <div><dt>Version</dt><dd>{overview.version}</dd></div>
@@ -78,6 +152,13 @@
 
         <!-- Each counter is the way into the list it counts: the number says
              something is not ready, and the list is where to find out what. -->
+        {#if stale}
+            <p class="stale" title={stale}>
+                These numbers are from {updated ? updatedAt(updated) : 'the last read'} — the cluster did not answer the
+                last refresh.
+            </p>
+        {/if}
+
         <section class="stats">
             {#each overview.stats as stat (stat.label)}
                 <button
@@ -147,6 +228,46 @@
     .status.quiet {
         padding: 8px 0;
         font-size: 12px;
+    }
+
+    .title {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+    }
+
+    .refresh {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 24px;
+        padding: 0 9px;
+        font-size: 11px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--text-dim);
+        cursor: pointer;
+        flex: none;
+    }
+
+    .refresh:hover:not(:disabled) {
+        color: var(--text);
+        border-color: var(--ctx-color);
+    }
+
+    .refresh:disabled {
+        cursor: default;
+        opacity: 0.6;
+    }
+
+    /* Said over the numbers rather than instead of them: counters half a
+       minute old are worth far more than an empty page. */
+    .stale {
+        margin: 0 0 8px;
+        font-size: 11px;
+        color: var(--warn);
     }
 
     .head {

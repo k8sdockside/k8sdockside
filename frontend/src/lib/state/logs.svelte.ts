@@ -166,6 +166,48 @@ class Logs {
         await this.start(id, target);
     }
 
+    /**
+     * Opens the stream again from the beginning.
+     *
+     * The backend waits for a container that is still starting, so this is not
+     * how you get at a log that has not begun yet. It is for the stream that
+     * ended -- a pod that restarted, a rollout that replaced it -- where what
+     * is on screen is the log of something that is no longer running.
+     */
+    async reload(id: string, target: LogTarget): Promise<void> {
+        const doc = this.docs[id];
+        if (!doc) {
+            await this.open(id, target);
+            return;
+        }
+        // The containers are read again too: a pod that restarted may have a
+        // different set, and the picker would otherwise name the old one.
+        try {
+            const containers = await LogService.Containers(
+                target.contextId,
+                target.kind,
+                target.namespace,
+                target.name,
+            );
+            const current = this.docs[id];
+            if (!current) return;
+            const found = containers ?? [];
+            if (found.length > 0) {
+                const names = [...new Set(found.map((c) => c.container))];
+                current.containers = found;
+                // Whatever was being followed and is still there stays being
+                // followed; a view reloaded onto a new container set follows
+                // all of it rather than nothing.
+                const kept = current.selected.filter((c) => names.includes(c));
+                current.selected = kept.length > 0 ? kept : names;
+            }
+        } catch {
+            // Not fatal: the stream below says why far better than this can,
+            // and the containers already named are still worth trying.
+        }
+        await this.start(id, target);
+    }
+
     /** Empties the view. The stream stays open. */
     clear(id: string): void {
         const doc = this.docs[id];
@@ -216,8 +258,11 @@ class Logs {
             );
             const current = this.docs[id];
             // Another change landed while this was opening; its own stream is
-            // the one that matters, and this one has already been closed.
-            if (!current || this.streams.get(id) !== undefined) {
+            // the one that matters, whichever of the two the backend answered
+            // first. Keyed on the attempt rather than on whether a stream is
+            // already set, which would have let the older one win by being
+            // quicker to open.
+            if (!current || this.starts.get(id) !== attempt) {
                 LogService.Close(stream);
                 return;
             }
@@ -226,7 +271,7 @@ class Logs {
             current.status = 'streaming';
         } catch (err) {
             const current = this.docs[id];
-            if (current) {
+            if (current && this.starts.get(id) === attempt) {
                 current.status = 'error';
                 current.error = message(err);
             }

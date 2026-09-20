@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -204,24 +205,107 @@ func (c *clusterClient) logTargets(ctx context.Context, kind, namespace, name st
 	return out, nil
 }
 
+// notYetRunning reports whether the API server refused a log stream because
+// the container has not started yet, rather than because something is wrong.
+//
+// There is no typed error for it: the API server phrases it in the message,
+// always as "is waiting to start: <reason>", where the reason is whatever the
+// kubelet is doing -- pulling the image, running the init containers, backing
+// off after a crash. Every one of those ends by itself, which is what makes
+// this worth waiting through rather than reporting.
+func notYetRunning(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := err.Error()
+	return strings.Contains(text, "is waiting to start") ||
+		strings.Contains(text, "ContainerCreating") ||
+		strings.Contains(text, "PodInitializing")
+}
+
+// startingReason is the kubelet's word for what a container is waiting on --
+// "ContainerCreating", "PodInitializing" -- pulled out of the message so the
+// view can say what it is waiting for, and say it again only when it changes.
+func startingReason(err error) string {
+	_, reason, found := strings.Cut(err.Error(), "is waiting to start: ")
+	if !found {
+		return "starting"
+	}
+	return strings.TrimSpace(reason)
+}
+
+// retryFirst and retryMax bound the wait between attempts at a container that
+// is not up yet. Short to begin with, because most containers are a second or
+// two away; capped, because a pod stuck on a bad image would otherwise be
+// asked about forever at that rate.
+const retryFirst = 500 * time.Millisecond
+const retryMax = 5 * time.Second
+
 // follow streams one container into the batcher until the context ends.
 //
-// A stream that fails is reported and dropped rather than taking the view down
+// A container that is not running yet is waited for rather than reported: a
+// log opened the moment a pod is created -- which is exactly when someone
+// opens one -- would otherwise come back empty and stay empty, and the only
+// way on was to ask for it again. Waiting is for a view that follows; one
+// asking for what is there now is answered with what is there now.
+//
+// Any other failure is reported and dropped rather than taking the view down
 // with it: one container of twenty going away -- a pod finishing a rollout, a
 // container restarting -- is the ordinary case, and the other nineteen are
 // still worth reading.
 func (c *clusterClient) follow(ctx context.Context, namespace string, ref ContainerRef, follow bool, into *batcher) {
-	stream, err := c.typed.CoreV1().Pods(namespace).GetLogs(ref.Pod, &corev1.PodLogOptions{
-		Container: ref.Container,
-		Follow:    follow,
-		TailLines: ptr(tailLines),
-	}).Stream(ctx)
-	if err != nil {
-		into.add(LogLine{Pod: ref.Pod, Container: ref.Container, Text: "— cannot read: " + err.Error()})
-		return
+	open := func(ctx context.Context) (io.ReadCloser, error) {
+		return c.typed.CoreV1().Pods(namespace).GetLogs(ref.Pod, &corev1.PodLogOptions{
+			Container: ref.Container,
+			Follow:    follow,
+			TailLines: ptr(tailLines),
+		}).Stream(ctx)
 	}
-	defer func() { _ = stream.Close() }()
+	streamContainer(ctx, ref, follow, open, into)
+}
 
+// logOpener asks the cluster for one container's stream. Named so the waiting
+// around it can be tested without one.
+type logOpener func(context.Context) (io.ReadCloser, error)
+
+// streamContainer is follow without the cluster: open, and if the container is
+// not up yet, wait and open again.
+func streamContainer(ctx context.Context, ref ContainerRef, follow bool, open logOpener, into *batcher) {
+	wait := retryFirst
+	said := ""
+	for {
+		stream, err := open(ctx)
+		if err == nil {
+			readLog(ctx, stream, ref, into)
+			_ = stream.Close()
+			return
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		if !follow || !notYetRunning(err) {
+			into.add(LogLine{Pod: ref.Pod, Container: ref.Container, Text: "— cannot read: " + err.Error()})
+			return
+		}
+		// Said once per reason, not once per attempt: the view is meant to
+		// show why it is empty, not to fill with the same line every second.
+		if reason := startingReason(err); reason != said {
+			said = reason
+			into.add(LogLine{Pod: ref.Pod, Container: ref.Container, Text: "— waiting for the container to start: " + reason})
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		if wait *= 2; wait > retryMax {
+			wait = retryMax
+		}
+	}
+}
+
+// readLog turns one open stream into lines until it ends.
+func readLog(ctx context.Context, stream io.ReadCloser, ref ContainerRef, into *batcher) {
 	reader := bufio.NewScanner(stream)
 	// A single log line can be far longer than bufio's default 64K -- a stack
 	// trace on one line, or JSON logging -- and the default would end the

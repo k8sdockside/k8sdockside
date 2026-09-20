@@ -2,8 +2,11 @@ package kube
 
 import (
 	"context"
+	"errors"
+	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -238,4 +241,149 @@ func textsOf(lines []LogLine) []string {
 		out = append(out, l.Text)
 	}
 	return out
+}
+
+// ---- waiting for a container that is not up yet ----------------------------
+
+func TestNotYetRunningTellsStartingApartFromBroken(t *testing.T) {
+	starting := []string{
+		`container "app" in pod "web-0" is waiting to start: ContainerCreating`,
+		`container "app" in pod "web-0" is waiting to start: PodInitializing`,
+		`container "app" in pod "web-0" is waiting to start: trying and failing to pull image`,
+	}
+	for _, text := range starting {
+		if !notYetRunning(errors.New(text)) {
+			t.Errorf("%q was not taken for a container that is still starting", text)
+		}
+	}
+	broken := []string{
+		`pods "web-0" not found`,
+		`pods "web-0" is forbidden: User "me" cannot get resource "pods/log"`,
+		`the server could not find the requested resource`,
+	}
+	for _, text := range broken {
+		if notYetRunning(errors.New(text)) {
+			t.Errorf("%q was taken for a container that is still starting", text)
+		}
+	}
+	if notYetRunning(nil) {
+		t.Error("no error at all was taken for a container that is still starting")
+	}
+}
+
+func TestStartingReasonIsTheKubeletsOwnWord(t *testing.T) {
+	got := startingReason(errors.New(`container "app" in pod "web-0" is waiting to start: ContainerCreating`))
+	if got != "ContainerCreating" {
+		t.Errorf("startingReason gave %q, want ContainerCreating", got)
+	}
+	if got := startingReason(errors.New("something else entirely")); got != "starting" {
+		t.Errorf("an unphrased error gave %q, want starting", got)
+	}
+}
+
+// The bug this covers: a log opened on a pod that was still being created came
+// back with one "cannot read" line and ended, and the only way to the log was
+// to ask for it again -- and again, until the container happened to be up.
+func TestAViewThatFollowsWaitsForAContainerThatIsStillStarting(t *testing.T) {
+	var attempts atomic.Int32
+	open := func(context.Context) (io.ReadCloser, error) {
+		if attempts.Add(1) < 3 {
+			return nil, errors.New(`container "app" in pod "web-0" is waiting to start: ContainerCreating`)
+		}
+		return io.NopCloser(strings.NewReader("first\nsecond\n")), nil
+	}
+
+	var got []LogLine
+	var mu sync.Mutex
+	into := newBatcher(1000, func(lines []LogLine) {
+		mu.Lock()
+		defer mu.Unlock()
+		got = append(got, lines...)
+	})
+
+	streamContainer(t.Context(), ContainerRef{Pod: "web-0", Container: "app"}, true, open, into)
+	into.flush()
+
+	if n := attempts.Load(); n != 3 {
+		t.Errorf("the stream was opened %d times, want it tried again until the container was up", n)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 3 {
+		t.Fatalf("lines: %v", got)
+	}
+	// One waiting line, said once for the one reason, and then the log.
+	if !strings.Contains(got[0].Text, "waiting for the container to start: ContainerCreating") {
+		t.Errorf("the first line was %q, want it to say what it is waiting for", got[0].Text)
+	}
+	if got[1].Text != "first" || got[2].Text != "second" {
+		t.Errorf("the log itself did not arrive: %v", got[1:])
+	}
+}
+
+// A view showing what is there now rather than following is answered now: it
+// has no tail to wait for, and a reader waiting on a spinner is worse than a
+// reader told the container has not started.
+func TestAViewThatDoesNotFollowSaysSoRatherThanWaiting(t *testing.T) {
+	var attempts atomic.Int32
+	open := func(context.Context) (io.ReadCloser, error) {
+		attempts.Add(1)
+		return nil, errors.New(`container "app" in pod "web-0" is waiting to start: ContainerCreating`)
+	}
+
+	var got []LogLine
+	into := newBatcher(1000, func(lines []LogLine) { got = append(got, lines...) })
+	streamContainer(t.Context(), ContainerRef{Pod: "web-0", Container: "app"}, false, open, into)
+	into.flush()
+
+	if n := attempts.Load(); n != 1 {
+		t.Errorf("the stream was opened %d times, want once", n)
+	}
+	if len(got) != 1 || !strings.Contains(got[0].Text, "cannot read") {
+		t.Errorf("lines: %v, want the one line saying it could not be read", got)
+	}
+}
+
+// Anything that is not a container starting is still reported at once: waiting
+// for a pod that does not exist, or that this user may not read, would be
+// waiting forever.
+func TestAFailureThatIsNotStartingIsReportedAtOnce(t *testing.T) {
+	var attempts atomic.Int32
+	open := func(context.Context) (io.ReadCloser, error) {
+		attempts.Add(1)
+		return nil, errors.New(`pods "web-0" is forbidden`)
+	}
+	var got []LogLine
+	into := newBatcher(1000, func(lines []LogLine) { got = append(got, lines...) })
+	streamContainer(t.Context(), ContainerRef{Pod: "web-0", Container: "app"}, true, open, into)
+	into.flush()
+
+	if n := attempts.Load(); n != 1 {
+		t.Errorf("the stream was opened %d times, want once", n)
+	}
+	if len(got) != 1 || !strings.Contains(got[0].Text, "forbidden") {
+		t.Errorf("lines: %v, want the refusal", got)
+	}
+}
+
+// Closing the view stops the waiting: the goroutine has to go with the tab.
+func TestClosingTheViewStopsWaiting(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	open := func(context.Context) (io.ReadCloser, error) {
+		return nil, errors.New(`container "app" in pod "web-0" is waiting to start: ContainerCreating`)
+	}
+	into := newBatcher(1000, func([]LogLine) {})
+
+	done := make(chan struct{})
+	go func() {
+		streamContainer(ctx, ContainerRef{Pod: "web-0", Container: "app"}, true, open, into)
+		close(done)
+	}()
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stream went on waiting after the view was closed")
+	}
 }

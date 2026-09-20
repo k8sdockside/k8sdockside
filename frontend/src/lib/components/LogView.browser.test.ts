@@ -282,3 +282,41 @@ test('a truncated view says so', async () => {
 
     await expect.element(page.getByText(/Earlier lines have been dropped/)).toBeVisible();
 });
+
+// A stream that ended -- the pod restarted, the rollout replaced it -- used to
+// leave the view showing the log of something that is no longer running, with
+// no way on but closing the tab. Turning Follow off and on again was the trick
+// people found, which is two clicks for a reload and turns the stream off on
+// the way.
+test('a stream that ended can be opened again without closing the tab', async () => {
+    render(LogView, { tab: TAB });
+    await vi.waitFor(() => expect(LogService.Open).toHaveBeenCalled());
+    deliver([{ pod: 'web', container: 'app', text: 'from the old pod' }], true);
+    await expect.element(page.getByText('from the old pod')).toBeVisible();
+
+    vi.mocked(LogService.Open).mockResolvedValue('logs-2');
+    await page.getByRole('button', { name: 'Reload' }).click();
+    await vi.waitFor(() => expect(LogService.Open).toHaveBeenCalledTimes(2));
+
+    // The new stream's lines land, and the old ones went with the old stream.
+    events.handler({ data: { streamId: 'logs-2', lines: [{ pod: 'web', container: 'app', text: 'from the new pod' }], error: '', done: false } });
+    await expect.element(page.getByText('from the new pod')).toBeVisible();
+    await expect.poll(() => page.getByText('from the old pod').elements()).toHaveLength(0);
+
+    // Following is still on: reloading is not a way to turn it off.
+    await expect.element(page.getByRole('button', { name: 'Follow' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+// A view whose containers could not even be read has the same way back.
+test('a view that would not open can be retried from where it failed', async () => {
+    vi.mocked(LogService.Containers).mockRejectedValue(new Error('pods "web" is forbidden'));
+    render(LogView, { tab: TAB });
+    await expect.element(page.getByText(/forbidden/)).toBeVisible();
+
+    vi.mocked(LogService.Containers).mockResolvedValue(ONE_POD);
+    await page.getByRole('button', { name: 'Try again' }).click();
+
+    await vi.waitFor(() => expect(LogService.Open).toHaveBeenCalled());
+    deliver([{ pod: 'web', container: 'app', text: 'readable after all' }]);
+    await expect.element(page.getByText('readable after all')).toBeVisible();
+});

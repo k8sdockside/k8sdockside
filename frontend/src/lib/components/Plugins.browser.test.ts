@@ -76,6 +76,8 @@ vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services'
         Reload: vi.fn().mockResolvedValue({ plugins: [], dir: '', folders: [], problems: [] }),
         Summary,
         ServiceGet: vi.fn().mockResolvedValue({ service: 'calico-system/whisker:8081', status: 200, contentType: 'application/json', body: '{}' }),
+        InstallKnown: vi.fn().mockResolvedValue({ plugins: [], dir: '', folders: [], problems: [] }),
+        HideSuggestion: vi.fn().mockResolvedValue({}),
     },
     TerminalService: {
         Containers: vi.fn().mockResolvedValue([]),
@@ -508,4 +510,53 @@ test("a plugin's frame follows the app's zoom by scaling, not by zooming", async
     } finally {
         workspace.settings.layout.zoom = 1;
     }
+});
+
+// An install that fails used to say so in the status bar, on one line, for a
+// moment: the first line of git's output, which is "Cloning into 'x'...". The
+// whole message belongs on the card that was pressed, and stays there.
+test('an install that failed marks its card and keeps the whole reason on it', async () => {
+    const { PluginService } = await import('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services');
+    const reason =
+        'the repository is private, or is not there -- a host answers both the same way.\n' +
+        "Cloning into 'descheduler'...\n" +
+        "fatal: could not read Username for 'https://github.com': terminal prompts disabled";
+    vi.mocked(PluginService.InstallKnown).mockRejectedValueOnce(new Error(reason));
+
+    const PluginsSection = (await import('./settings/PluginsSection.svelte')).default;
+    workspace.knownPlugins = [
+        {
+            id: 'descheduler',
+            name: 'Descheduler',
+            tagline: 'evicts pods that should be running somewhere else',
+            icon: 'shuffle',
+            description: 'Whether anything is rebalancing this cluster.',
+            repo: 'https://github.com/k8sdockside/descheduler.git',
+            detect: [],
+            links: [],
+            official: true,
+            installed: false,
+        },
+    ];
+    workspace.pluginCatalogue = { plugins: [], dir: '/plugins', folders: [], problems: [] };
+
+    render(PluginsSection);
+    await page.getByTitle('git clone https://github.com/k8sdockside/descheduler.git').click();
+
+    // The whole of it, on the card: the line that says what to do and the
+    // lines git printed, which are the part someone pastes elsewhere.
+    const failure = page.getByRole('alert');
+    await expect.element(failure).toBeVisible();
+    await expect.element(failure).toHaveTextContent('the repository is private, or is not there');
+    await expect.element(failure).toHaveTextContent('terminal prompts disabled');
+
+    // And the card itself is marked, so it is findable in a list of a dozen.
+    expect(document.querySelectorAll('.plugin.failed')).toHaveLength(1);
+
+    // Dismissing puts it back.
+    await page.getByTitle('Dismiss').click();
+    expect(page.getByRole('alert').elements()).toHaveLength(0);
+    expect(document.querySelectorAll('.plugin.failed')).toHaveLength(0);
+
+    workspace.knownPlugins = [];
 });

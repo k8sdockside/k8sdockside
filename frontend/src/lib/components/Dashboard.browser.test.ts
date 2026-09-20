@@ -186,3 +186,67 @@ test('an event opens its own report', async () => {
 
     expect(detail.target).toEqual({ contextId: PROD, kind: 'events', namespace: 'default', name: 'web.1' });
 });
+
+// The dashboard used to read the cluster once, when the tab opened, and never
+// again: deleting a finished job left its pod in the count until the tab was
+// closed and opened. It reads again on a timer now, and on the button.
+test('the counters keep up with the cluster instead of freezing at what they were', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+        render(Dashboard, { contextId: PROD });
+        await expect.element(page.getByRole('button', { name: /Pods/ })).toHaveTextContent('87/88');
+
+        // A job's pod is deleted out there.
+        const fewer = {
+            ...OVERVIEW,
+            stats: OVERVIEW.stats.map((s) => (s.kind === 'pods' ? { ...s, ready: 86, total: 87 } : s)),
+        };
+        vi.mocked(ResourceService.Overview).mockResolvedValue(fewer as never);
+
+        await vi.advanceTimersByTimeAsync(30_000);
+
+        expect(vi.mocked(ResourceService.Overview).mock.calls.length).toBeGreaterThanOrEqual(2);
+        await expect.element(page.getByRole('button', { name: /Pods/ })).toHaveTextContent('86/87');
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+test('the refresh button reads the cluster again without waiting for the timer', async () => {
+    render(Dashboard, { contextId: PROD });
+    await expect.element(page.getByRole('button', { name: /Pods/ })).toHaveTextContent('87/88');
+    expect(vi.mocked(ResourceService.Overview)).toHaveBeenCalledTimes(1);
+
+    const fewer = {
+        ...OVERVIEW,
+        stats: OVERVIEW.stats.map((s) => (s.kind === 'pods' ? { ...s, ready: 2, total: 2 } : s)),
+    };
+    vi.mocked(ResourceService.Overview).mockResolvedValue(fewer as never);
+
+    await page.getByRole('button', { name: 'Refresh' }).click();
+
+    await expect.element(page.getByRole('button', { name: /Pods/ })).toHaveTextContent('2/2');
+});
+
+// A cluster that blinks must not take the page with it: numbers half a minute
+// old are worth far more than an empty page and a button to press.
+test('a refresh that fails keeps the numbers and says they are old', async () => {
+    render(Dashboard, { contextId: PROD });
+    await expect.element(page.getByRole('button', { name: /Pods/ })).toHaveTextContent('87/88');
+
+    vi.mocked(ResourceService.Overview).mockRejectedValue(new Error('dial tcp 10.0.0.1:6443: i/o timeout'));
+    await page.getByRole('button', { name: 'Refresh' }).click();
+
+    await expect.element(page.getByText('did not answer the last refresh', { exact: false })).toBeVisible();
+    await expect.element(page.getByRole('button', { name: /Pods/ })).toHaveTextContent('87/88');
+});
+
+// Nothing on screen yet is the other case: then the failure is the page, with
+// the retry that has always been there.
+test('a first read that fails is the page, not a note', async () => {
+    vi.mocked(ResourceService.Overview).mockRejectedValue(new Error('dial tcp 10.0.0.1:6443: i/o timeout'));
+    render(Dashboard, { contextId: PROD });
+
+    await expect.element(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+    expect(page.getByRole('button', { name: 'Refresh' }).elements()).toHaveLength(0);
+});

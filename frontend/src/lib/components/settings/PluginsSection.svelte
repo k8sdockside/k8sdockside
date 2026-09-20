@@ -369,6 +369,7 @@
                 {cloning ? 'Cloning…' : 'Install'}
             </button>
         </form>
+        {@render installFailure('')}
     {/if}
 
     {#if workspace.pluginFolders.length > 0}
@@ -618,10 +619,34 @@
     {/if}
 {/snippet}
 
+<!--
+  What an install that did not work says, where it was asked for.
+
+  The status bar carries the first line and is gone a moment later, and the
+  whole reason an install fails is usually something to go and do -- check an
+  address, make a repository public, add a key. So the card that was pressed
+  keeps the full message, and stays marked, until it is dismissed or the
+  install is tried again. Not a dialog: this webview answers window.confirm
+  with a silent no, and the card is where the reader already is.
+-->
+{#snippet installFailure(id: string)}
+    {@const failure = workspace.pluginInstallFailure}
+    {#if failure && failure.id === id}
+        <div class="failure" role="alert">
+            <Icon name="alert" size={13} />
+            <p class="why selectable">{failure.message}</p>
+            <button class="dismiss" title="Dismiss" onclick={() => workspace.clearPluginInstallFailure()}>
+                <Icon name="close" size={11} />
+            </button>
+        </div>
+    {/if}
+{/snippet}
+
 {#snippet knownCard(offer: KnownPlugin)}
     {@const running = workspace.clustersRunning(offer)}
     {@const watchedCopy = watched.find((p) => p.id === offer.id)}
-    <article class="plugin known">
+    {@const failed = workspace.pluginInstallFailure?.id === offer.id}
+    <article class="plugin known" class:failed>
         <header>
             <PluginMark id={offer.id} icon={offer.icon} size={18} />
             <div class="naming">
@@ -660,6 +685,7 @@
             </p>
         {/if}
         {@render links(offer.links)}
+        {@render installFailure(offer.id)}
         {#if hiddenSuggestion(offer.id)}
             <button class="suggest" onclick={() => void workspace.hidePluginSuggestion(offer.id, false)}>
                 Not suggested in the sidebar · suggest it again
@@ -669,6 +695,58 @@
 {/snippet}
 
 <style>
+    /* A card whose install failed is marked, so the eye lands on it from
+       anywhere in a list of a dozen. */
+    .plugin.failed {
+        border-color: var(--error);
+        box-shadow: 0 0 0 1px var(--error) inset;
+    }
+
+    .failure {
+        display: flex;
+        align-items: flex-start;
+        gap: 7px;
+        margin-top: 8px;
+        padding: 7px 8px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--error);
+        background: color-mix(in srgb, var(--error) 10%, transparent);
+        color: var(--error);
+    }
+
+    .failure :global(svg) {
+        flex: none;
+        margin-top: 1px;
+    }
+
+    /* The message is git's, newlines and all: the first line says what to do
+       and the rest is what the tool actually printed, which is the part
+       someone pastes into a search or an issue. */
+    .why {
+        margin: 0;
+        flex: 1;
+        min-width: 0;
+        font-size: 11px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        color: var(--text);
+    }
+
+    .dismiss {
+        flex: none;
+        padding: 2px;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        opacity: 0.7;
+    }
+
+    .dismiss:hover {
+        opacity: 1;
+    }
+
     /* A switched-off card is dimmed rather than hidden: this is the one place
        it still appears, because this is where it gets switched back on. */
     .plugin.off .naming,

@@ -122,13 +122,23 @@
             Follow
         </button>
 
+        <button
+            class="toggle"
+            class:nudge={doc.status === 'ended'}
+            title="Open the stream again, from the beginning"
+            onclick={() => void logs.reload(tab.id, tab)}
+        >
+            <Icon name="refresh" size={13} />
+            Reload
+        </button>
+
         <button class="toggle" title="Clear what is on screen" onclick={() => logs.clear(tab.id)}>
             Clear
         </button>
     </div>
 
     {#if doc.status === 'error'}
-        <ErrorState message={doc.error} compact />
+        <ErrorState message={doc.error} compact onRetry={() => void logs.reload(tab.id, tab)} />
     {:else}
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div class="body" bind:this={body} onscroll={onScroll} tabindex="0" role="log" aria-label="Log output">
@@ -149,7 +159,9 @@
                     {:else if query.trim() !== ''}
                         No lines match “{query}”.
                     {:else if doc.status === 'ended'}
-                        The stream ended, and nothing was logged.
+                        The stream ended, and nothing was logged. Reload to open it again.
+                    {:else if doc.follow}
+                        Nothing logged yet — this view is following, so lines appear as they are written.
                     {:else}
                         Nothing logged yet.
                     {/if}
@@ -167,9 +179,13 @@
         min-height: 0;
     }
 
+    /* Wraps rather than overlaps. The container picker is as wide as the pod
+       has containers, so on a narrow dock the buttons to its right were drawn
+       over the top of it and took the clicks meant for a container. */
     .bar {
         display: flex;
         align-items: center;
+        flex-wrap: wrap;
         gap: 8px;
         padding: 6px 10px;
         border-bottom: 1px solid var(--border);
@@ -185,6 +201,13 @@
         overflow: hidden;
         text-overflow: ellipsis;
         max-width: 220px;
+    }
+
+    /* A stream that has ended is the one moment Reload is the thing to press,
+       so it is lit then and plain the rest of the time. */
+    .toggle.nudge {
+        border-color: var(--ctx-color);
+        color: var(--ctx-color);
     }
 
     .picker {
@@ -216,6 +239,7 @@
         display: flex;
         align-items: center;
         gap: 5px;
+        flex: none;
         margin-left: auto;
         padding: 0 8px;
         height: 22px;
@@ -239,6 +263,7 @@
         display: flex;
         align-items: center;
         gap: 5px;
+        flex: none;
         height: 22px;
         padding: 0 8px;
         border-radius: var(--radius-sm);

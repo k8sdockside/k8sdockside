@@ -89,13 +89,66 @@ func gitOutput(dir string, args ...string) (string, error) {
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=")
 	out, err := cmd.CombinedOutput()
 	text := strings.TrimSpace(string(out))
+	if ctx.Err() != nil {
+		return "", fmt.Errorf("git %s gave up after %s -- the repository is slow to answer, or this machine cannot reach it\n%s", args[0], gitTimeout, text)
+	}
 	if err != nil {
 		if text == "" {
 			text = err.Error()
 		}
-		return "", fmt.Errorf("git %s: %s", args[0], text)
+		return "", fmt.Errorf("%s\n%s", gitReason(args[0], text), text)
 	}
 	return text, nil
+}
+
+// gitReason is the one line that says what went wrong and what to do about
+// it. The status bar has room for a single line and shows the first one, and
+// git's own first line is progress -- "Cloning into 'descheduler'..." -- with
+// the reason several lines below it. So the explanation goes first here and
+// git's whole output follows underneath, where Settings shows it.
+func gitReason(verb, text string) string {
+	low := strings.ToLower(text)
+	has := func(s string) bool { return strings.Contains(low, s) }
+	switch {
+	// A repository that is private and one that is not there answer the same
+	// way: the host asks who is asking, and there is nobody here to ask. Worth
+	// saying both, because the address looking right proves nothing.
+	case has("could not read username"), has("could not read password"),
+		has("terminal prompts disabled"), has("authentication failed"),
+		has("repository not found"), has("access rights"):
+		return "the repository is private, or is not there -- a host answers both the same way. For a private one you have a key for, install it from its ssh address instead (git@github.com:owner/repo.git)"
+	case has("permission denied (publickey"), has("host key verification failed"):
+		return "the repository refused this machine's ssh key -- add the key to the account that can read it, or use the https address if the repository is public"
+	case has("could not resolve host"), has("name or service not known"):
+		return "could not look up the host -- this machine looks to be offline, or behind a proxy git does not know about"
+	case has("connection timed out"), has("connection refused"), has("failed to connect"), has("network is unreachable"):
+		return "could not reach the host -- this machine looks to be offline, or behind a proxy git does not know about"
+	case has("ssl certificate problem"), has("certificate verify failed"):
+		return "the connection was refused over its certificate -- a proxy in the way is the usual cause"
+	case has("not possible to fast-forward"), has("divergent branches"), has("local changes"), has("would be overwritten"):
+		return "this clone has changes of its own, so it cannot be fast-forwarded -- yours to keep or to throw away with git reset --hard in its folder"
+	case has("already exists and is not an empty directory"):
+		return "the folder it clones into is already there with something else in it -- remove it first"
+	}
+	return fmt.Sprintf("git %s: %s", verb, gitSaid(text))
+}
+
+// gitSaid picks the telling line out of git's output: the last of the lines it
+// marks as the trouble, or failing that the last line at all.
+func gitSaid(text string) string {
+	lines := strings.Split(text, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(line, "fatal:") || strings.HasPrefix(line, "error:") || strings.HasPrefix(line, "remote:") {
+			return line
+		}
+	}
+	for i := len(lines) - 1; i >= 0; i-- {
+		if line := strings.TrimSpace(lines[i]); line != "" {
+			return line
+		}
+	}
+	return text
 }
 
 // Clone installs a plugin repository into dir and returns the folder it made.

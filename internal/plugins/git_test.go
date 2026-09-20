@@ -147,3 +147,81 @@ func TestInstallLeavesAFolderFromAnotherRepositoryAlone(t *testing.T) {
 		t.Error("the other repository's clone was changed")
 	}
 }
+
+// The status bar has room for one line and shows the first, so the first line
+// of a failed clone has to be the reason rather than git's progress.
+func TestAFailedCloneLeadsWithTheReasonNotWithGitsProgress(t *testing.T) {
+	cases := []struct {
+		name string
+		out  string
+		want string
+	}{
+		{
+			// What github answers for a private repository and for one that
+			// is not there at all: the same thing, on purpose.
+			name: "private or missing",
+			out:  "Cloning into 'descheduler'...\nfatal: could not read Username for 'https://github.com': terminal prompts disabled",
+			want: "private",
+		},
+		{
+			name: "repository not found",
+			out:  "Cloning into 'acme'...\nremote: Repository not found.\nfatal: repository 'https://github.com/acme/acme.git/' not found",
+			want: "private",
+		},
+		{
+			name: "no ssh key it accepts",
+			out:  "Cloning into 'acme'...\ngit@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.",
+			want: "ssh key",
+		},
+		{
+			name: "offline",
+			out:  "fatal: unable to access 'https://github.com/acme/acme.git/': Could not resolve host: github.com",
+			want: "offline",
+		},
+		{
+			name: "a clone with edits of its own",
+			out:  "fatal: Not possible to fast-forward, aborting.",
+			want: "changes of its own",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := gitReason("clone", c.out)
+			if !strings.Contains(strings.ToLower(got), c.want) {
+				t.Errorf("the first line was %q, want it to say %q", got, c.want)
+			}
+			if strings.HasPrefix(got, "Cloning into") {
+				t.Errorf("the first line was git's progress: %q", got)
+			}
+			if strings.Contains(got, "\n") {
+				t.Errorf("the reason is more than one line: %q", got)
+			}
+		})
+	}
+}
+
+// Anything git says that the app has no words of its own for still has to lead
+// with the telling line rather than the progress above it.
+func TestAnUnrecognisedFailureLeadsWithGitsTellingLine(t *testing.T) {
+	out := "Cloning into 'acme'...\nremote: Enumerating objects: 3, done.\nfatal: the remote end hung up unexpectedly"
+	got := gitReason("clone", out)
+	if got != "git clone: fatal: the remote end hung up unexpectedly" {
+		t.Errorf("gitReason gave %q", got)
+	}
+}
+
+// The whole of git's output is kept under the reason, for Settings to show.
+func TestAFailedCloneKeepsGitsOwnWordsUnderTheReason(t *testing.T) {
+	dir := t.TempDir()
+	err := runGit(dir, "clone", "--depth", "1", "--", "https://github.invalid/acme/acme.git", "acme")
+	if err == nil {
+		t.Fatal("cloning from a host that cannot exist worked")
+	}
+	first, rest, found := strings.Cut(err.Error(), "\n")
+	if !found || rest == "" {
+		t.Fatalf("no git output under the reason: %q", err)
+	}
+	if strings.Contains(first, "Cloning into") {
+		t.Errorf("the message leads with progress: %q", first)
+	}
+}

@@ -2575,11 +2575,28 @@ class Workspace {
     }
 
     /**
+     * The install that failed, and why, in full.
+     *
+     * The status bar gets the first line of it and is gone a moment later,
+     * which is the wrong place for a message whose whole point is what to do
+     * next -- an address to check, a repository to make public. So the card
+     * that was pressed keeps it until it is dismissed or tried again. Keyed by
+     * plugin id, with '' for the address typed into the form.
+     */
+    pluginInstallFailure = $state<{ id: string; message: string } | null>(null);
+
+    /** Puts a card back to normal: pressing Install again, or dismissing. */
+    clearPluginInstallFailure(): void {
+        this.pluginInstallFailure = null;
+    }
+
+    /**
      * Installs one of the known plugins from the repository the app has for
      * it. Returns whether it worked.
      */
     async installKnownPlugin(id: string): Promise<boolean> {
         const name = this.knownPlugins.find((k) => k.id === id)?.name ?? id;
+        this.pluginInstallFailure = null;
         try {
             this.pluginCatalogue = adoptPluginCatalogue(await PluginService.InstallKnown(id));
             this.metricsAttachments = (await MetricsService.Attachments()) ?? [];
@@ -2590,6 +2607,7 @@ class Workspace {
             // A clone that would not load still left its folder behind, and
             // Settings should list it with the reason.
             await this.loadPlugins();
+            this.pluginInstallFailure = { id, message: message(err) };
             notices.fail(`Could not install ${name}: ${firstLine(message(err))}`);
             return false;
         }
@@ -2699,6 +2717,7 @@ class Workspace {
      * whether it worked, so the form can clear itself only then.
      */
     async installPluginFromGit(url: string): Promise<boolean> {
+        this.pluginInstallFailure = null;
         try {
             this.pluginCatalogue = adoptPluginCatalogue(await PluginService.InstallFromGit(url));
             this.metricsAttachments = (await MetricsService.Attachments()) ?? [];
@@ -2709,6 +2728,7 @@ class Workspace {
             // A clone that would not load still left its folder behind, and
             // Settings should list it with the reason.
             await this.loadPlugins();
+            this.pluginInstallFailure = { id: '', message: message(err) };
             notices.fail(`Could not install the plugin: ${firstLine(message(err))}`);
             return false;
         }
