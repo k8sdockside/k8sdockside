@@ -79,6 +79,7 @@ definitions.
 | --- | --- | --- | --- | --- |
 | cert-manager | Security | K8s Dockside | [k8sdockside/certmanager](https://github.com/k8sdockside/certmanager) | `crd:certificates.cert-manager.io` |
 | Longhorn | Storage | K8s Dockside | [k8sdockside/longhorn](https://github.com/k8sdockside/longhorn) | `crd:volumes.longhorn.io` |
+| Rook Ceph | Storage | K8s Dockside | [k8sdockside/rookceph](https://github.com/k8sdockside/rookceph) | `crd:cephclusters.ceph.rook.io` |
 | MetalLB | Networking | K8s Dockside | [k8sdockside/metallb](https://github.com/k8sdockside/metallb) | `crd:ipaddresspools.metallb.io` |
 | Cilium | CNI | K8s Dockside | [k8sdockside/cilium](https://github.com/k8sdockside/cilium) | `crd:ciliumnetworkpolicies.cilium.io` |
 | Calico | CNI | K8s Dockside | [k8sdockside/calico](https://github.com/k8sdockside/calico) | `crd:ippools.crd.projectcalico.org` |

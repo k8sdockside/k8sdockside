@@ -35,6 +35,24 @@
         "official": true
     },
     {
+        "id": "rookceph",
+        "name": "Rook Ceph",
+        "tagline": "Ceph in Kubernetes: health, capacity, pools and every storage class",
+        "category": "storage",
+        "icon": "database",
+        "description": "Ceph's own health checks written out in full, the raw capacity as one bar, and every mon, manager and OSD by the machine it runs on. A storage class map that groups every Ceph class by what it hands a workload — block, shared file, NFS, S3 bucket — and ties each to the pool, filesystem or object store behind it, with the redundancy of that pool: one keeping a single copy is called out even while Ceph reports HEALTH_OK. Works on a cluster that runs Ceph, on one that only consumes an external Ceph, and on a pure CSI client with no operator at all. Panels on PersistentVolumeClaims, StorageClasses, Nodes and CephClusters.",
+        "repo": "https://github.com/k8sdockside/rookceph.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
+        "detect": ["crd:cephclusters.ceph.rook.io"],
+        "links": [
+            { "label": "rook.io", "url": "https://rook.io" },
+            { "label": "Documentation", "url": "https://rook.io/docs/rook/latest/" },
+            { "label": "GitHub", "url": "https://github.com/rook/rook" }
+        ],
+        "official": true
+    },
+    {
         "id": "metallb",
         "name": "MetalLB",
         "tagline": "load balancer addresses for bare-metal clusters",

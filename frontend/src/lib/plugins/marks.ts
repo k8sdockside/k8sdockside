@@ -47,6 +47,8 @@ const MARKED = new Set([
     'optimization',
     // prometheus, built into the app
     'prometheus',
+    // Rook Ceph
+    'rookceph',
     // Vitistack
     'vitistack',
 ]);
