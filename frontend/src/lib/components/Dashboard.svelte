@@ -137,16 +137,21 @@
     {:else if overview}
         <header class="head" style:--ctx-color={color}>
             <div class="title">
-                <h1>{overview.context}</h1>
+                <!-- The name the user gave the context, as the tab and the
+                     sidebar show it; the kubeconfig's own name goes below. -->
+                <h1>{context ? workspace.displayName(context) : overview.context}</h1>
                 <button class="refresh" onclick={refresh} disabled={refreshing} title="Read the cluster again now">
                     <Icon name="refresh" size={13} />
                     {refreshing ? 'Reading…' : 'Refresh'}
                 </button>
             </div>
             <dl>
+                {#if context && workspace.displayName(context) !== overview.context}
+                    <div><dt>Context</dt><dd class="selectable">{overview.context}</dd></div>
+                {/if}
                 {#if overview.server}<div><dt>Server</dt><dd class="selectable">{overview.server}</dd></div>{/if}
                 <div><dt>Version</dt><dd>{overview.version}</dd></div>
-                <div><dt>Distribution</dt><dd>{overview.distribution}</dd></div>
+                {#if overview.distribution}<div><dt>Distribution</dt><dd>{overview.distribution}</dd></div>{/if}
             </dl>
         </header>
 

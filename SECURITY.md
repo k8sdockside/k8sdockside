@@ -26,19 +26,25 @@ no back-porting to older tags.
 
 ## What this app does with your credentials
 
-K8s Dockside is a desktop application. It has no server component, no telemetry
-and no account.
+K8s Dockside is a desktop application. It has no telemetry, no account, and no
+server of the project's own that it reports to. (An optional web version runs in
+your own cluster: see [docs/server-mode.md](docs/server-mode.md).) Every
+connection the app makes is listed in
+[docs/network-and-privacy.md](docs/network-and-privacy.md).
 
 - **Kubeconfigs are read, never written.** Context aliases and colours are
   stored in the app's own settings file; your kubeconfig files are not modified.
 - **Credentials stay in `clientcmd`.** Client certificates, bearer tokens and
   `exec` credential plugins are handled by the standard Kubernetes client
   libraries. The app does not copy secrets out of them or persist them.
-- **Nothing connects to a cluster at launch.** Contexts are listed from disk. A
-  connection is opened when you open a view, and closed when the last tab using
-  it closes. Port forwards remembered from a previous session are stored as
-  *requests*, not as live connections.
-- **The update check is the one outbound request.** Shortly after launch, and
+- **A cluster is contacted when you use it.** Contexts are listed from disk. At
+  launch the app checks that the selected context's cluster answers, and
+  reopens the tabs you left open (*Settings → Behaviour → Restore tabs at
+  launch*). Beyond that, a connection opens when you open a view, and closes a
+  couple of minutes after the last tab using it does. Port forwards remembered
+  from a previous session are stored as *requests*, not as live connections.
+- **The update check is the only automatic request beyond your clusters.**
+  Shortly after launch, and
   every six hours after, the app asks GitHub's public releases API which
   release is newest: one unauthenticated `GET` of
   `api.github.com/repos/k8sdockside/k8sdockside/releases/latest`, carrying
@@ -46,7 +52,10 @@ and no account.
   kubeconfig or settings data is sent. It can be switched off under
   *Settings → Behaviour*; the button under *About* checks only when pressed.
   The page it offers to open is built from the release tag, never taken from
-  the response.
+  the response. Everything else that leaves the machine happens only when you
+  ask for it: installing or updating a plugin, a Helm upgrade, the optional
+  image-inventory plugin's registry lookups, or a Prometheus address you typed
+  in.
 - **Secrets are redacted before caching.** An informer holds a whole collection
   in memory, so Secret values are stripped on the way in and the tables show key
   counts only. The YAML editor is the deliberate exception: it reads the object

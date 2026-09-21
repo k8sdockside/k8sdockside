@@ -1,104 +1,89 @@
 <div align="center">
 
-<img src="frontend/public/k8s_dockside_logo_concept.png" alt="K8s Dockside" width="560">
+# K8s Dockside
 
-**Every cluster in your kubeconfig, in one window.**
+**Every Kubernetes cluster you have, in one window: on your desktop, or in your browser.**
 
 [![CI](https://github.com/k8sdockside/k8sdockside/actions/workflows/ci.yml/badge.svg)](https://github.com/k8sdockside/k8sdockside/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/k8sdockside/k8sdockside?sort=semver)](https://github.com/k8sdockside/k8sdockside/releases/latest)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
+![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Kubernetes-lightgrey)
 
 </div>
 
-<!-- Screenshots go here. A dark-theme shot of the workspace with two coloured
-     contexts open, and one of the YAML editor in the dock, would carry this
-     README further than any paragraph below it. -->
+## What is it
 
-## What it is
+K8s Dockside is a workspace for the Kubernetes clusters you already have access
+to. It comes in two editions, built from the same code:
 
-K8s Dockside is a desktop app for the Kubernetes clusters you already have
-access to. It reads the kubeconfigs on your machine, lists every context in a
-sidebar, and opens each resource view as a tab.
+| 🖥️ **Desktop app** | 🌐 **Web app, in your cluster** |
+|---|---|
+| For macOS, Windows and Linux. It reads the kubeconfigs on your machine, and your credentials never leave it. | Installed with Helm, or as plain manifests. Your team opens it in a browser and signs in with a local account, GitHub, Google, Microsoft, GitLab, Facebook or any OIDC provider. |
 
-The point is knowing where you are. Every context gets a name and a colour you
-choose, and its tabs are painted in it — so the window tells you at a glance
-whether you are about to delete a pod in staging or in production. Nothing is
-polled: tables are backed by live watches, so a rollout repaints as it happens.
-
-It is a single native binary — no cluster-side agent, no browser tab, no
-credentials leaving your machine. The same app also runs as a
-[web app inside a cluster](#server-mode-kubernetes), for a team, behind a
-sign-in of its own. Free and open source under Apache 2.0.
-
-## Why you might want it
-
-- **Many clusters, one window.** Not one terminal per context and a mental note
-  about which is which.
-- **Colour as a safety rail.** Production is red because you made it red, and
-  every tab, dock and detail panel belonging to it stays red.
-- **Live, not refreshed.** Informer-backed tables. No refresh button, because
-  there is nothing to refresh.
-- **Your CRDs are first-class.** Everything goes through the dynamic client, so
-  a custom resource opens in a tab with the same columns `kubectl get` prints,
-  read from the CRD itself.
-- **It reads your kubeconfig, and only reads it.** Names and colours are stored
-  in the app's own settings; your kubeconfig files are never modified. Nothing
-  dials a cluster at launch. The one thing it does reach out to is GitHub's
-  releases page, to tell you when a newer version is out — and that can be
-  switched off.
+Either way, you get every cluster in one sidebar and each view as a tab. Every
+context has a name and a colour you choose, and its tabs wear that colour, so
+you can always see whether you're about to delete a pod in staging or in
+production. Tables update live, custom resources are first-class, and plugins
+add proper views for the tools you run. It's free and open source, under
+Apache 2.0.
 
 ## Screenshots
 
-<!-- ![Cluster dashboard with metrics](./docs/images/cluster_dashboard.png "Cluster dashboard with metrics")
+**The start page: every cluster at a glance**
 
-![Plugins in settings](./docs/images/settings_plugins.png "Plugins in settings")
+<img src="./docs/images/start_page.jpg" alt="Start page with a card for each cluster" width="1000">
 
-![Kubernetes help pages](./docs/images/kubernetes_help.png "Kubernetes help pages") -->
+**The cluster dashboard**
 
-### Cluster dashboard
+<img src="./docs/images/cluster_dashboard.png" alt="Cluster dashboard" width="1000">
 
-<img src="./docs/images/cluster_dashboard.png" alt="Cluster dashboard" width="1000" >
+**Pods, with each pod's metrics and live log**
 
-### List pods, view pod metrics, follow pod log
+<img src="./docs/images/list_pods_pod_metrics_pod_log.png" alt="List pods, view pod metrics, follow pod log" width="1000">
 
-<img src="./docs/images/list_pods_pod_metrics_pod_log.png" alt="List pods, view pod metrics, follow pod log" width="1000" >
+**Plugins: switch them on, or install your own**
 
-### Activate plugins, or install your own
+<img src="./docs/images/settings_plugins.png" alt="Plugins in settings" width="1000">
 
-<img src="./docs/images/settings_plugins.png" alt="Activate plugins, or install you own" width="1000" >
+[More screenshots →](./docs/images/)
 
-[See more screenshots](./docs/images/)
+## Why you might want it
+
+- 🧭 **Many clusters, one window.** No more one terminal per context and a
+  mental note of which is which.
+- 🎨 **Colour as a safety rail.** Production is red because you made it red,
+  and every tab, panel and editor that belongs to it stays red.
+- ⚡ **Live, not refreshed.** Tables are backed by watches, so a rollout
+  repaints as it happens. There's no refresh button, because there's nothing
+  to refresh.
+- 🧩 **Your CRDs and operators are first-class.** Custom resources open with
+  the columns `kubectl get` prints. Plugins turn Argo CD, Flux, cert-manager,
+  Cilium and friends into real views.
+- 🔒 **Nothing leaves your machine that you didn't ask for.** Your kubeconfig
+  is read, never written. There's no telemetry, and nothing to sign up for.
+- 👥 **One tool for you and your team.** Run the desktop app yourself, and the
+  same app in the cluster for everyone else.
 
 ## Install
 
-Grab the build for your platform from the
-[latest release](https://github.com/k8sdockside/k8sdockside/releases/latest).
+### 🖥️ Desktop app
 
-### macOS
+Download the build for your platform from the
+[latest release](https://github.com/k8sdockside/k8sdockside/releases/latest):
 
-Download the `.dmg` — `darwin-arm64` for Apple Silicon, `darwin-amd64` for
-Intel — and drag **K8s Dockside** into Applications.
+| Platform | Download | Good to know |
+|---|---|---|
+| **macOS** | `.dmg`: `darwin-arm64` for Apple Silicon, `darwin-amd64` for Intel | Not notarised yet. On first launch, right-click the app and choose **Open**. |
+| **Windows** | `-installer.exe`, or the `.zip` for a portable `.exe` | Unsigned. SmartScreen warns once: **More info → Run anyway**. |
+| **Linux** | `.deb`, `.rpm`, `.pkg.tar.zst` or `.AppImage` | Needs GTK 4 and WebKitGTK 6. The packages pull them in; the AppImage expects them installed. |
 
-The app is not yet notarised, so macOS will say it cannot be checked on first
-launch. Right-click it and choose **Open**, or:
+<details>
+<summary>Command-line install</summary>
 
 ```sh
+# macOS: clear the quarantine flag instead of right-clicking
 xattr -dr com.apple.quarantine "/Applications/k8sdockside.app"
-```
 
-### Windows
-
-Run the `-installer.exe`. It is unsigned, so SmartScreen warns once —
-**More info → Run anyway**. The `.zip` holds the bare `.exe` if you would rather
-not install anything.
-
-### Linux
-
-Needs GTK 4 and WebKitGTK 6 at runtime. The packages declare that dependency;
-the AppImage expects it present.
-
-```sh
 # Debian / Ubuntu
 sudo apt install ./k8sdockside-<version>-linux-amd64.deb
 
@@ -113,163 +98,15 @@ chmod +x k8sdockside-<version>-linux-amd64.AppImage
 ./k8sdockside-<version>-linux-amd64.AppImage
 ```
 
-### Verifying what you downloaded
+</details>
 
-Every release ships `checksums.txt`, a cosign signature over it, and SLSA build
-provenance for each asset:
+Every release is signed, and comes with checksums and build provenance you can
+check with `sha256sum -c --ignore-missing checksums.txt` and
+`gh attestation verify <file> --repo k8sdockside/k8sdockside`.
+[SECURITY.md](SECURITY.md#verifying-a-download) has the full recipe. To build it
+yourself, see [docs/development.md](docs/development.md).
 
-```sh
-sha256sum -c --ignore-missing checksums.txt
-gh attestation verify <file> --repo k8sdockside/k8sdockside
-```
-
-The full recipe, including `cosign verify-blob`, is in
-[SECURITY.md](SECURITY.md#verifying-a-download).
-
-### From source
-
-See [docs/development.md](docs/development.md).
-
-## Getting started
-
-1. **Launch it.** It finds `~/.kube/config`, everything in `$KUBECONFIG`, and
-   anything else under `~/.kube` that parses as a kubeconfig. Nothing connects
-   yet.
-2. **Add anything it missed.** Point it at a file, or at a whole folder — a
-   watched folder is scanned regardless of how the files in it are named, and
-   rescanned on **Sync**.
-3. **Name and colour your contexts.** Select one, then use the panel at the foot
-   of the sidebar. This is the step worth doing properly; it is what makes the
-   rest of the window readable.
-4. **Open a view.** Pick a kind under a context and it opens as a tab in that
-   context's colour. The watch starts here.
-5. **Click a row.** The describe panel slides in. From there: **Edit** for live
-   YAML, **Shell** for a terminal in the container, **Forward** for a port
-   forward, **Logs** for the log stream.
-
-## Features
-
-**Clusters and contexts**
-- Discovers kubeconfigs from `~/.kube/config`, `$KUBECONFIG` and `~/.kube`
-- Watched folders, scanned by content rather than by filename
-- Per-context alias and colour, carried through tabs, dock and panels
-- Hide a discovered file, or forget one you added, and bring it back later
-- Remove a single context from its row in the sidebar — the file and its
-  other contexts stay, the kubeconfig is not written, and the context comes
-  back the moment it is added again
-- A file that fails to parse is listed with the reason, not silently dropped
-
-**Resources**
-- Live informer-backed tables — no polling, no refresh button
-- One watch per kind per context, shared by every tab using it
-- Namespace filtering, any number of namespaces at once, applied to the cache
-  so it repaints instantly
-- Every kind Kubernetes 1.37 serves, from pods to dynamic resource allocation,
-  gang scheduling, certificates, CSI and the API server's own APIService and
-  flow-control objects — a kind the cluster has switched off says so rather
-  than failing
-- CRDs, the Gateway API and built-in kinds on one dynamic-client code path
-- Columns read from the CRD's `additionalPrinterColumns`, so tables match
-  `kubectl get`
-- Nodes carry the `kubectl get nodes -o wide` columns — internal and external
-  IP, OS image, kernel and container runtime — beside capacity and allocatable
-- A dashboard of cluster capacity, requests and workload health
-- Search in the title bar (`⌘K`): find an object by name in every kind every
-  open cluster serves — or every context in your kubeconfigs — with results
-  arriving cluster by cluster as they are found. Filters for kind, namespace
-  and label; only metadata is read, never a Secret's values. A hit opens in its
-  list and details panel, or in the plugin view that shows it — an Argo CD
-  Application opens selected on the application board
-
-**Working with objects**
-- A describe panel you can dock right, bottom or left, and resize
-- Above the report: the object's conditions, the objects it names — owner,
-  node, claims, config maps, secrets, a binding's role, a route's backends —
-  and the pods it selects, each opening in the same panel
-- YAML editing in the dock: live document, syntax checking, `⌘S` to save
-- Conflict-safe writes — a save against a moved object is refused, not forced,
-  and the API server's own words come back
-- Object actions: scale, restart, roll back to an earlier revision, pause a
-  rollout, run a CronJob now, suspend a Job or CronJob, evict a pod, approve or
-  deny a certificate signing request, cordon, drain, delete
-- Bulk delete: tick rows, or everything a filter matches, and delete them
-  together — refusals come back by name, in the API server's words
-- Bulk patch: set or remove a label, an annotation or a field by path on every
-  selected object, or write a whole merge patch as YAML for several fields at
-  once — either way shown as the JSON each object receives before it is sent
-- Log streaming, per container
-
-**Terminals and networking**
-- A shell in any container, in the dock or in your own terminal emulator
-- A shell on a *node*, via the same privileged pod `kubectl debug` would create,
-  cleaned up when the terminal closes
-- Port forwarding for pods and services, with the service-port-to-pod-port
-  resolution done for you
-- Forwards listed where you can stop them, and remembered between sessions as
-  requests rather than live connections
-
-**Extending it**
-- Built-in **Plugins** for Argo CD, Flux and Prometheus — each unfolds into
-  its own views instead of scattering custom resources through the definitions
-  tree, with an overview of whether the cluster actually has it
-- More a button away in *Settings → Plugins*:
-  [cert-manager](https://github.com/k8sdockside/certmanager),
-  [MetalLB](https://github.com/k8sdockside/metallb),
-  [Cilium](https://github.com/k8sdockside/cilium),
-  [Calico](https://github.com/k8sdockside/calico),
-  [KubeVirt](https://github.com/k8sdockside/kubevirt),
-  [Vitistack](https://github.com/k8sdockside/vitistack) and an
-  [image inventory](https://github.com/k8sdockside/image-inventory),
-  each kept in its own repository, and suggested in the sidebar for a cluster
-  running what it is about
-- A plugin is a JSON file naming kinds the app already knows how to show, so
-  supporting your own operator is a file, not a fork. One kept in its own
-  folder or repository can also bring views of its own: HTML drawn in a
-  sandboxed frame, reading the cluster through a narrow bridge — in plain
-  JavaScript, TypeScript or any framework that builds to static files.
-  **[Writing a plugin](docs/writing-plugins.md)** takes you from an empty
-  folder to a published plugin, and to getting it listed in the app;
-  [docs/plugins.md](docs/plugins.md) is the reference. Plugins are credited to
-  their authors wherever the app shows them
-- Graphs where the cluster can answer for them: Prometheus is found
-  automatically and reached *through the API server*, no port-forward and no
-  second credential. The queries live in the plugin file.
-- 14 built-in themes, from `K8s Dockside Dark` through `Deep Sea` and
-  `Lighthouse` to ports of Nord and Catppuccin Mocha. A theme is a JSON file of
-  colours — it cannot ship CSS or run code —
-  [docs/themes.md](docs/themes.md)
-
-**Details that matter**
-- A bell in the title bar says when a new release is out, and can be marked as
-  read — one request to GitHub shortly after launch and every six hours, off
-  under *Settings → Behaviour*, with a check-now button under *About*. It
-  offers the release page, and the download for the way this build was
-  installed (AppImage, `.deb`, `.rpm`, Arch package, `.dmg`, Windows
-  installer or portable) when the release has one
-- Secrets are redacted before they enter the informer cache; tables show key
-  counts only
-- Tabs and dock contents are restored next launch, and a tab with unsaved
-  changes wears a dot instead of its close button
-- Client certificates, tokens and `exec` credential plugins all work — it is
-  `clientcmd` underneath
-- A cluster's client outlives its last tab or poll by two minutes, so a tab
-  switch or the dashboard's next refresh finds it warm instead of rebuilding
-  it, and a kind the cluster lacks costs a rediscovery at most once a minute
-
-## Where your things live
-
-Settings go to `$XDG_CONFIG_HOME/k8sdockside/settings.json` (falling back to
-`~/.config/...`) on macOS and Linux, and `%AppData%` on Windows. The exact path
-is shown in the status bar. Themes and plugins you install sit in `themes/` and
-`plugins/` folders beside it.
-
-## Server mode (Kubernetes)
-
-The same app also builds as a web server, to run inside a cluster and open in a
-browser. It sits behind a sign-in of its own — local accounts, the first of
-which becomes the admin, and GitHub, Google, Facebook, GitLab, Microsoft or any
-OIDC provider — and reaches clusters through the pod's ServiceAccount, through
-kubeconfig Secrets you mount, or through kubeconfigs an admin uploads.
+### 🌐 Web app, in your cluster
 
 ```sh
 helm install k8sdockside oci://ghcr.io/k8sdockside/helm/k8sdockside \
@@ -277,41 +114,167 @@ helm install k8sdockside oci://ghcr.io/k8sdockside/helm/k8sdockside \
 kubectl -n k8sdockside port-forward svc/k8sdockside 8080:80
 ```
 
-The difference from the desktop app is whose credentials are used: everyone
-who signs in acts with the pod's, so choose its RBAC with care — the chart
-defaults to read-only. [docs/server-mode.md](docs/server-mode.md) covers OAuth
-setup, persistence and the security model; the chart's options are in
-[charts/k8sdockside](charts/k8sdockside/README.md).
+Open <http://127.0.0.1:8080> and create the first account, which becomes the
+admin. The cluster it runs in is already there, read-only.
+
+<details>
+<summary>No Helm in your cluster? Use plain manifests</summary>
+
+Render the chart once, then apply the result like any other manifests:
+
+```sh
+helm template k8sdockside oci://ghcr.io/k8sdockside/helm/k8sdockside \
+  --namespace k8sdockside > k8sdockside.yaml
+kubectl create namespace k8sdockside
+kubectl apply -n k8sdockside -f k8sdockside.yaml
+```
+
+</details>
+
+> **Keep in mind:** everyone who signs in acts with the pod's credentials, not
+> their own. The chart defaults to read-only. Sign-in, OAuth, exposing it and
+> the security model are all in [docs/server-mode.md](docs/server-mode.md).
+
+## Get started
+
+1. **Launch it.** It finds `~/.kube/config`, everything in `$KUBECONFIG`, and
+   any other kubeconfig under `~/.kube`. Point it at more files, or at a whole
+   folder, from the sidebar.
+2. **Name and colour your contexts.** Select one and use the panel at the foot
+   of the sidebar. This is the step worth doing properly: it's what makes the
+   rest of the window readable.
+3. **Open a cluster.** Click its card on the start page to see its dashboard,
+   or pick a view under it in the sidebar. Each one opens as a tab in the
+   context's colour.
+4. **Click a row.** The details panel opens. From there you can **Edit** the
+   live YAML, open a **Shell** in the container, **Forward** a port, or follow
+   the **Logs**.
+
+In the web app, you sign in and the clusters are already in the sidebar. The
+guide to everything else is in the app: press **F1**.
+
+## Security and network traffic
+
+- **No telemetry.** No analytics, no crash reports, and nothing to sign up
+  for. The project runs no servers, so there is nowhere for the app to report
+  to.
+- **It talks to your clusters,** using the credentials in your kubeconfigs, and
+  those credentials go only to the API server they belong to.
+- **One other automatic request:** an update check with GitHub that carries
+  nothing but the app's version. You can switch it off in *Settings →
+  Behaviour*.
+- **Everything else happens only when you ask for it:** installing a plugin,
+  upgrading a Helm release, opening a link.
+- **Your data goes to no one.** Beyond your clusters, the one fixed
+  destination is GitHub (a US company owned by Microsoft), and it receives only
+  the update check. The app contacts no server in China, or anywhere else.
+- **Plugins are fenced in.** Their pages run sandboxed with no network access,
+  and read only the resource kinds they declare, never Secrets.
+
+📄 **[Every connection the app makes, and how to switch it off](docs/network-and-privacy.md)**:
+one page, with pointers to the code. To report a vulnerability, see
+[SECURITY.md](SECURITY.md).
+
+## Features
+
+### 🗂️ All your clusters, sorted
+Kubeconfigs are found for you, and whole folders can be watched. Every context
+gets its own name and colour, and a start page shows each cluster as a card:
+whether it's connected, and which products it runs. A kubeconfig that won't
+parse is listed with the reason, not quietly dropped.
+
+### ⚡ Live, fast tables
+Watches instead of polling, with one watch per kind shared by every tab. Filter
+by any number of namespaces at once. Every kind Kubernetes 1.37 serves is here,
+along with the Gateway API and your own CRDs, with the same columns
+`kubectl get` shows.
+
+### 🔎 Search every cluster
+Press `⌘K` to find any object by name, across every kind in every cluster.
+Results arrive cluster by cluster, and a Secret's values are never read.
+
+### 🛠️ Change things safely
+- A details panel with an object's conditions, owners and related objects, one
+  click apart
+- Live YAML editing with conflict-safe saves: a save against an object that has
+  changed since is refused, not forced
+- Scale, restart, roll back, pause a rollout, run a CronJob now, cordon, drain,
+  evict, approve a CSR, and more
+- Bulk delete and bulk patch, showing exactly what each object will receive
+  before anything is sent
+
+### 💻 Shells, logs and port forwards
+A shell in any container, or on a node, in the app's dock or in your own
+terminal. Live logs per container. Port forwards that work out the pod's port
+from the service for you, and are remembered between sessions.
+
+### 📈 Metrics without setup
+A dashboard of capacity, requests and workload health. Prometheus is found
+automatically and reached through the API server: no port forward, no second
+credential.
+
+### ⎈ Helm releases
+Browse the Helm releases in every namespace, see their history and values, and
+upgrade, roll back or uninstall them.
+
+### 🧩 Plugins for the tools you run
+- **Built in:** Argo CD, Flux and Prometheus
+- **A click away** in *Settings → Plugins*: cert-manager, Longhorn, Rook Ceph,
+  MetalLB, Cilium, Calico, Kube-OVN, Flannel, KubeVirt, Descheduler, an
+  optimization advisor, an image inventory and Vitistack
+- **Only where they belong.** A plugin draws its panels and buttons only in
+  clusters that run its product, and the sidebar suggests one when a cluster
+  does
+- **Write your own.** A plugin is a JSON file, and can bring pages of its own in
+  plain JavaScript or TypeScript. Start with
+  [Writing a plugin](docs/writing-plugins.md)
+
+### 🎨 Make it yours
+14 themes, from K8s Dockside Dark to Nord and Catppuccin Mocha, and your own as
+simple JSON files. A start page with 25 generated backgrounds that change on a
+timer, dark or light to match your theme, or pictures from your own folder.
+Zoom, row density, and a layout that is remembered between launches.
+
+### 🔔 Always current
+A bell in the title bar says when a new release is out, and offers the download
+that matches how you installed it.
+
+## Where your things live
+
+Settings are stored in `$XDG_CONFIG_HOME/k8sdockside/settings.json` (or
+`~/.config/k8sdockside/`) on macOS and Linux, and in `%AppData%` on Windows. The
+exact path is shown in the status bar. Your themes and plugins go in `themes/`
+and `plugins/` folders beside it.
 
 ## Documentation
 
-In the app: **Help** (F1, or the question mark in the sidebar) is the guide to
-the app itself, including how to write and install themes and plugins, and
-**Kubernetes primer** under the Help menu explains the cluster and its terms
-for anyone new to it.
+Inside the app, **Help** (F1) is the guide to the app itself, and the
+**Kubernetes primer** in the Help menu explains the cluster and its terms for
+anyone new to them.
 
-- [Architecture](docs/architecture.md) — how the cluster data gets here, and the
+- [Network traffic and privacy](docs/network-and-privacy.md): every connection
+  the app makes, and how to switch it off
+- [Server mode](docs/server-mode.md): the web app, with sign-in, OAuth and the
+  Helm chart
+- [Writing a plugin](docs/writing-plugins.md): from an empty folder to a
+  published plugin
+- [Plugin reference](docs/plugins.md): every manifest field, and the bridge a
+  plugin's pages use
+- [Themes](docs/themes.md): the theme format
+- [Architecture](docs/architecture.md): how the cluster data gets here, and the
   code layout
-- [Development](docs/development.md) — building, testing, and cutting a release
-- [Server mode](docs/server-mode.md) — running it in Kubernetes as a web app,
-  with sign-in, OAuth and the Helm chart
-- [Themes](docs/themes.md) — the theme format
-- [Writing a plugin](docs/writing-plugins.md) — step by step: JSON only, pages
-  in plain JavaScript or TypeScript, publishing, credit, and getting listed
-- [Plugin reference](docs/plugins.md) — every manifest field and every call of
-  the bridge a plugin's pages talk to the app through
+- [Development](docs/development.md): building, testing and cutting a release
 
 ## Contributing
 
 Issues and pull requests are welcome. CI runs build, test, lint and security
-scans on every push. `make precheck` runs every one of those checks locally —
-worth doing before you push — and `make audit` just the security scans.
+scans on every push, and `make precheck` runs the same checks locally, which is
+worth doing before you push.
 
-Security issues: please see [SECURITY.md](SECURITY.md) rather than opening a
-public issue.
+To report a security issue, please see [SECURITY.md](SECURITY.md) rather than
+opening a public issue.
 
 ## License
 
-[Apache License 2.0](LICENSE).
-
-Built with [Wails v3](https://v3.wails.io/) and [Svelte 5](https://svelte.dev/).
+[Apache License 2.0](LICENSE). Built with [Wails v3](https://v3.wails.io/) and
+[Svelte 5](https://svelte.dev/).
