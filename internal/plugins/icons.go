@@ -24,7 +24,7 @@ var Icons = []string{
 	"sort-off", "plus", "minus", "folder-plus", "folder", "close", "dot", "edit", "save",
 	"chevron-up", "alert", "file", "search", "trash", "undo", "dock-right", "dock-bottom",
 	"dock-left", "pin", "settings", "sun", "moon", "monitor", "display", "rows",
-	"columns", "type", "restore", "info", "help", "book",
+	"columns", "type", "restore", "image", "info", "help", "book",
 }
 
 // LogoTypes are the image formats a plugin's own mark may be in. They are the

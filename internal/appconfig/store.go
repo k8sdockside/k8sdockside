@@ -465,6 +465,55 @@ type Preferences struct {
 	// Helm is where the helm binary is and how it is run, for the operations
 	// that change a release. See Helm.
 	Helm Helm `json:"helm"`
+	// Background is the picture behind the start page: which pictures, how
+	// often it changes, and whether one of them is kept. See Background.
+	Background Background `json:"background"`
+}
+
+// The places the start page's picture can come from.
+const (
+	// BackgroundBuiltin is the pictures the app draws itself, in the colours
+	// of the theme in use. The default.
+	BackgroundBuiltin = "builtin"
+	// BackgroundFolder is the images in Settings.BackgroundFolder.
+	BackgroundFolder = "folder"
+	// BackgroundNone is no picture at all: the theme's own ground.
+	BackgroundNone = "none"
+)
+
+// The colours the built-in pictures are drawn in.
+const (
+	// BackgroundPaletteVaried draws each picture in a colour scheme of its
+	// own, dark or light as the theme is. The default.
+	BackgroundPaletteVaried = "varied"
+	// BackgroundPaletteTheme draws every picture in the theme's own colours.
+	BackgroundPaletteTheme = "theme"
+)
+
+// DefaultBackgroundMinutes is how long one picture stays when nothing says
+// otherwise: long enough not to be a slideshow, short enough that the start
+// page is not the same every time it is looked at.
+const DefaultBackgroundMinutes = 15
+
+// MaxBackgroundMinutes bounds a hand-edited interval at a day.
+const MaxBackgroundMinutes = 24 * 60
+
+// Background is the start page's picture.
+type Background struct {
+	// Source is builtin, folder or none. Empty or unknown reads as builtin.
+	Source string `json:"source"`
+	// Pinned is the one picture to keep showing, by the id the frontend gives
+	// it -- a built-in scene or a file in the folder. Empty rotates through
+	// them all. Kept as written when nothing answers to it, for the reason
+	// Theme is: a file gone from the folder today may be back tomorrow.
+	Pinned string `json:"pinned,omitzero"`
+	// Minutes is how long one picture stays before the next. Zero means never
+	// chosen and resolves to DefaultBackgroundMinutes.
+	Minutes int `json:"minutes,omitzero"`
+	// Palette is varied or theme: whether the built-in pictures take turns
+	// through colour schemes of their own or all wear the theme's. Empty or
+	// unknown reads as varied. Either way the theme decides dark or light.
+	Palette string `json:"palette,omitzero"`
 }
 
 // Updates is what the app remembers about release checks, which is only what
@@ -513,6 +562,12 @@ type Settings struct {
 	// watched folder, is on the moment it appears, and a settings file written
 	// before this field existed reads as "nothing disabled".
 	DisabledPlugins []string `json:"disabledPlugins"`
+	// BackgroundFolder is a directory of the user's own images for the start
+	// page to show, when Preferences.Background says to. Here rather than in
+	// Preferences for the reason ThemeFolders is: it is where something comes
+	// from, and it is set through the folder picker rather than typed. Empty
+	// is none.
+	BackgroundFolder string `json:"backgroundFolder,omitzero"`
 	// HiddenPluginSuggestions are known plugins the user has told the sidebar
 	// to stop suggesting. One answer for every cluster: "not for me" is about
 	// the plugin, not about where it was offered.
@@ -586,6 +641,7 @@ func Defaults() Settings {
 			ContextSort: ContextSortName,
 			Terminal:    DefaultTerminal(),
 			Helm:        DefaultHelm(),
+			Background:  Background{Source: BackgroundBuiltin, Palette: BackgroundPaletteVaried},
 		},
 		PortForwards: []PortForward{},
 	}
@@ -1404,6 +1460,8 @@ func normalise(s Settings) Settings {
 	}
 	s.Preferences.Terminal = normaliseTerminal(s.Preferences.Terminal)
 	s.Preferences.Helm = normaliseHelm(s.Preferences.Helm)
+	s.Preferences.Background = normaliseBackground(s.Preferences.Background)
+	s.BackgroundFolder = strings.TrimSpace(s.BackgroundFolder)
 	if s.PortForwards == nil {
 		s.PortForwards = []PortForward{}
 	}
@@ -1708,6 +1766,43 @@ func normaliseHelm(h Helm) Helm {
 		h.Wait = true
 	}
 	return h
+}
+
+// normaliseBackground repairs a source nothing answers to and an interval
+// outside what anyone would choose. The pinned picture is kept as written --
+// see Background.Pinned.
+func normaliseBackground(b Background) Background {
+	switch b.Source {
+	case BackgroundBuiltin, BackgroundFolder, BackgroundNone:
+	default:
+		b.Source = BackgroundBuiltin
+	}
+	switch b.Palette {
+	case BackgroundPaletteVaried, BackgroundPaletteTheme:
+	default:
+		b.Palette = BackgroundPaletteVaried
+	}
+	if b.Minutes < 0 || b.Minutes > MaxBackgroundMinutes {
+		b.Minutes = 0
+	}
+	b.Pinned = strings.TrimSpace(b.Pinned)
+	return b
+}
+
+// BackgroundFolder is the directory the start page's own images are read
+// from, or empty when there is none.
+func (s *Store) BackgroundFolder() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.data.BackgroundFolder
+}
+
+// SetBackgroundFolder records the directory to read start page images from.
+// Empty clears it.
+func (s *Store) SetBackgroundFolder(path string) (Settings, error) {
+	return s.update(func(d *Settings) {
+		d.BackgroundFolder = path
+	})
 }
 
 func clone(s Settings) Settings {

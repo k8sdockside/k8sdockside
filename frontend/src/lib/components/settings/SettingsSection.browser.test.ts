@@ -106,6 +106,7 @@ test('the sections are ordered with the everyday ones first and About last', asy
     expect(labels).toEqual([
         'Appearance',
         'Themes',
+        'Start page',
         'Plugins',
         'Behaviour',
         'Terminal',

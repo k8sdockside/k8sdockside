@@ -1183,6 +1183,7 @@ describe('preferences', () => {
                 scrollback: 5000,
             },
             helm: { path: '', wait: false, atomic: false, timeoutSeconds: 300 },
+            background: { source: 'builtin', pinned: '', minutes: 15, palette: 'varied' },
         };
     });
 
@@ -2167,10 +2168,10 @@ describe('solution plugins', () => {
         workspace.knownPlugins = [{ ...known('descheduler', []), probed: true }];
         clusterServes(PROD, []);
 
-        // Before the cluster has answered the panel stays: a panel that should
-        // briefly not be there costs less than one that never appears.
-        expect(workspace.pluginSectionsFor(PROD, 'pods')).toHaveLength(1);
-        expect(workspace.pluginActsOn(PROD, 'pods')).toBe(true);
+        // Before the cluster has answered nothing is drawn: a panel that shows
+        // up and then vanishes is what this is here to stop.
+        expect(workspace.pluginSectionsFor(PROD, 'pods')).toHaveLength(0);
+        expect(workspace.pluginActsOn(PROD, 'pods')).toBe(false);
 
         vi.mocked(PluginService.Probe).mockResolvedValueOnce({ known: [], absent: ['descheduler'] });
         await workspace.loadCustomKinds(PROD, { force: true });
@@ -2199,6 +2200,115 @@ describe('solution plugins', () => {
         await vi.waitFor(() => expect(workspace.pluginInstalledIn(PROD, descheduler)).toBe(true));
         expect(workspace.pluginSectionsFor(PROD, 'pods')).toHaveLength(1);
         expect(workspace.pluginActsOn(PROD, 'pods')).toBe(true);
+    });
+
+    // A cluster that would not say what it serves cannot say which products
+    // it runs either, and taking every plugin away from it for that would be
+    // the wrong way round.
+    test('a cluster that would not answer keeps every plugin drawn', async () => {
+        const descheduler = {
+            ...plugin('descheduler', [{ kind: 'configmaps' }]),
+            sections: [{ id: 'pod', label: 'Descheduler', kind: 'pods', entry: 'pod.html', height: 260 }],
+        };
+        workspace.pluginCatalogue = { plugins: [descheduler], dir: '', folders: [], problems: [] };
+        workspace.knownPlugins = [{ ...known('descheduler', []), probed: true }];
+
+        vi.mocked(ResourceService.CustomResourceKinds).mockRejectedValueOnce(new Error('forbidden'));
+        await workspace.loadCustomKinds(PROD);
+
+        expect(workspace.customKindsFor(PROD).status).toBe('error');
+        expect(workspace.pluginSectionsFor(PROD, 'pods')).toHaveLength(1);
+    });
+
+    // Opening a context and looking at a pod is reason enough to ask: the
+    // sidebar's Plugins section may never be opened, and the pod's panel
+    // depends on the answer all the same.
+    test('a cluster that has answered is asked which plugins it has', async () => {
+        vi.mocked(ResourceService.CustomResourceKinds).mockResolvedValueOnce([] as never);
+        vi.mocked(PluginService.Probe).mockResolvedValueOnce({ known: [], absent: ['descheduler'] });
+
+        workspace.askAboutPlugins([PROD]);
+
+        await vi.waitFor(() => expect(workspace.pluginProbes[PROD]).toEqual({ known: [], absent: ['descheduler'] }));
+        expect(workspace.customKindsFor(PROD).status).toBe('ready');
+        expect(workspace.customKindsFor(STAGING).status).toBe('idle');
+    });
+
+    // The background recheck is how installing a product into an open
+    // cluster brings its plugin to life -- and it must not flicker the
+    // plugin out while it asks.
+    test('a recheck brings a plugin to life without taking it away in between', async () => {
+        const descheduler = {
+            ...plugin('descheduler', [{ kind: 'configmaps' }]),
+            sections: [{ id: 'pod', label: 'Descheduler', kind: 'pods', entry: 'pod.html', height: 260 }],
+        };
+        workspace.pluginCatalogue = { plugins: [descheduler], dir: '', folders: [], problems: [] };
+        workspace.knownPlugins = [{ ...known('descheduler', []), probed: true }];
+        clusterServes(PROD, []);
+        workspace.pluginProbes = { [PROD]: { known: [], absent: ['descheduler'] } };
+        clusters.report(PROD, 'connected');
+
+        let answer!: (value: { known: string[]; absent: string[] }) => void;
+        vi.mocked(ResourceService.CustomResourceKinds).mockResolvedValueOnce([] as never);
+        vi.mocked(PluginService.Probe).mockReturnValueOnce(new Promise((r) => (answer = r)) as never);
+
+        workspace.recheckPlugins();
+        // Still asking: the last answer stands.
+        await vi.waitFor(() => expect(PluginService.Probe).toHaveBeenCalledWith(PROD));
+        expect(workspace.customKindsFor(PROD).status).toBe('ready');
+        expect(workspace.pluginSectionsFor(PROD, 'pods')).toHaveLength(0);
+
+        answer({ known: [], absent: [] });
+        await vi.waitFor(() => expect(workspace.pluginSectionsFor(PROD, 'pods')).toHaveLength(1));
+        clusters.forget(PROD);
+    });
+
+    test('a recheck that cannot get through keeps the answer it had', async () => {
+        clusterServes(PROD, []);
+        workspace.pluginProbes = { [PROD]: { known: [], absent: ['descheduler'] } };
+        clusters.report(PROD, 'connected');
+
+        vi.mocked(ResourceService.CustomResourceKinds).mockRejectedValueOnce(new Error('timeout'));
+        workspace.recheckPlugins();
+        await vi.waitFor(() => expect(ResourceService.CustomResourceKinds).toHaveBeenCalledWith(PROD));
+        // Past the rejection, so what is checked is what it left behind.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(workspace.customKindsFor(PROD).status).toBe('ready');
+        expect(workspace.pluginProbes[PROD]).toEqual({ known: [], absent: ['descheduler'] });
+        clusters.forget(PROD);
+    });
+
+    test('a recheck leaves alone the clusters that are not connected', () => {
+        clusterServes(PROD, []);
+        vi.mocked(ResourceService.CustomResourceKinds).mockClear();
+
+        workspace.recheckPlugins();
+
+        expect(ResourceService.CustomResourceKinds).not.toHaveBeenCalled();
+    });
+
+    // A cluster opened again is asked again: that is how a product installed
+    // while it was let go of gets its plugin back.
+    test('disconnecting forgets which plugins the cluster had', async () => {
+        clusterServes(PROD, []);
+        workspace.pluginProbes = { [PROD]: { known: [], absent: ['descheduler'] } };
+
+        await workspace.disconnect(PROD, { quiet: true });
+
+        expect(workspace.customKindsFor(PROD).status).toBe('idle');
+        expect(workspace.pluginProbes[PROD]).toBeUndefined();
+    });
+
+    test('the plugins a cluster does not have fold away per context', () => {
+        expect(workspace.isAbsentPluginsExpanded(PROD)).toBe(false);
+
+        workspace.toggleAbsentPlugins(PROD);
+        expect(workspace.isAbsentPluginsExpanded(PROD)).toBe(true);
+        expect(workspace.isAbsentPluginsExpanded(STAGING)).toBe(false);
+
+        workspace.toggleAbsentPlugins(PROD);
+        expect(workspace.isAbsentPluginsExpanded(PROD)).toBe(false);
     });
 
     test('unfolding a plugin is per context', () => {

@@ -176,6 +176,7 @@
                         "columns",
                         "type",
                         "restore",
+                        "image",
                         "info",
                         "help",
                         "book"
@@ -418,6 +419,7 @@
                         "columns",
                         "type",
                         "restore",
+                        "image",
                         "info",
                         "help",
                         "book"
@@ -854,6 +856,7 @@
                         "columns",
                         "type",
                         "restore",
+                        "image",
                         "info",
                         "help",
                         "book"

@@ -121,6 +121,27 @@ export interface HelmSettings {
     timeoutSeconds: number;
 }
 
+/** Where the start page's picture comes from. */
+export type BackgroundSource = 'builtin' | 'folder' | 'none';
+
+/**
+ * The start page's picture, resolved: which pictures, the one kept if any,
+ * and how long each stays.
+ */
+export interface BackgroundSettings {
+    source: BackgroundSource;
+    /** `scene:<id>` or `file:<name>`; empty rotates through them all. */
+    pinned: string;
+    /** Minutes one picture stays. Never zero here: the store's zero is resolved. */
+    minutes: number;
+    /**
+     * 'varied' draws each built-in picture in a colour scheme of its own;
+     * 'theme' draws them all in the theme's. The theme decides dark or light
+     * either way.
+     */
+    palette: 'varied' | 'theme';
+}
+
 /** One forward the user set up, as it is remembered between sessions. */
 export interface SavedForward {
     id: string;
@@ -244,6 +265,8 @@ export interface Settings {
         terminal: TerminalSettings;
         /** Where helm is, and how it is run. */
         helm: HelmSettings;
+        /** The picture behind the start page. */
+        background: BackgroundSettings;
     };
     /**
      * The forwards the user set up. The live state of each lives in the
@@ -381,6 +404,17 @@ export function adoptSettings(settings: appconfig.Settings): Settings {
                 // Zero from the store means never chosen. Five minutes is
                 // helm's own default for --wait.
                 timeoutSeconds: settings.preferences?.helm?.timeoutSeconds || 300,
+            },
+            background: {
+                // The store normalises the source; this only covers a call
+                // that failed before it got there.
+                source: (['builtin', 'folder', 'none'].includes(settings.preferences?.background?.source ?? '')
+                    ? settings.preferences?.background?.source
+                    : 'builtin') as BackgroundSource,
+                pinned: settings.preferences?.background?.pinned ?? '',
+                // Zero from the store means never chosen: a quarter of an hour.
+                minutes: settings.preferences?.background?.minutes || 15,
+                palette: settings.preferences?.background?.palette === 'theme' ? 'theme' : 'varied',
             },
         },
         portForwards: (settings.portForwards ?? []).map((forward) => ({

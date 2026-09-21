@@ -87,6 +87,14 @@
     /** The plugin action waiting on its confirmation, if any. */
     let askingPlugin = $state<OfferedAction | null>(null);
     let hasPluginActions = $derived(workspace.pluginActsOn(object.contextId, object.kind));
+    /**
+     * What is offered, less what comes from plugins this cluster does not
+     * have. The backend answers for every enabled plugin, so with two plugins
+     * acting on pods and only one of them in this cluster, the other's
+     * buttons would otherwise ride along.
+     */
+    let pluginsHere = $derived(new Set(workspace.pluginsHereFor(object.contextId).map((p) => p.id)));
+    let offeredHere = $derived(offered.filter((action) => pluginsHere.has(action.pluginId)));
 
     async function loadOffered(ref: DetailTarget): Promise<void> {
         try {
@@ -676,7 +684,7 @@
     }}
 />
 
-{#if available.length > 0 || offered.length > 0}
+{#if available.length > 0 || offeredHere.length > 0}
     <div class="bar" class:stacked={asked?.id === 'drain' || asked?.form === 'number'}>
         {#if askingPlugin}
             {@const a = askingPlugin}
@@ -934,10 +942,10 @@
             {/each}
             <!-- A plugin's buttons after the app's own, and before the one that
                  cannot be undone, each saying which plugin it is from. -->
-            {#if offered.length > 0 && available.some((a) => a.tone !== 'danger')}
+            {#if offeredHere.length > 0 && available.some((a) => a.tone !== 'danger')}
                 <span class="sep" aria-hidden="true"></span>
             {/if}
-            {#each offered as action (action.pluginId + '/' + action.id)}
+            {#each offeredHere as action (action.pluginId + '/' + action.id)}
                 <button
                     class:danger={action.tone === 'danger'}
                     disabled={busy}

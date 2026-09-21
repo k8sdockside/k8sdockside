@@ -73,7 +73,7 @@ func main() {
 			// The gateway's half comes first: nothing reaches the app, plugin
 			// views included, without having been let through and named.
 			Middleware: func(next http.Handler) http.Handler {
-				return gw.Identity(built.PluginViews(next))
+				return gw.Identity(built.Backgrounds(built.PluginViews(next)))
 			},
 		},
 		Server: application.ServerOptions{

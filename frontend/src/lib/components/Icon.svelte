@@ -178,6 +178,7 @@
         // A box being reopened: last session's tabs coming back.
         restore: ['M3 12a9 9 0 1 0 2.6-6.4', 'M3 4v5h5', 'M12 8v4l3 2'],
         // An open book: what the app is and where it keeps things.
+        image: ['M4 5h16v14H4z', 'M4 16l5-5 4 4 3-3 4 4', 'M15.5 9h.01'],
         info: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z', 'M12 11v5', 'M12 8h.01'],
         // A ring with a question mark: the help page.
         help: ['M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z', 'M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7', 'M12 17h.01'],

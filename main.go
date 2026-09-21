@@ -4,6 +4,7 @@ package main
 
 import (
 	"log"
+	"net/http"
 
 	"github.com/k8sdockside/k8sdockside/internal/appconfig"
 	"github.com/k8sdockside/k8sdockside/internal/services"
@@ -38,7 +39,10 @@ func main() {
 			Handler: application.AssetFileServerFS(assets),
 			// Serves plugins' own views from their folders, and refuses those
 			// views' sandboxed frames any direct call into the services above.
-			Middleware: built.PluginViews,
+			// The start page's own images are served ahead of them.
+			Middleware: func(next http.Handler) http.Handler {
+				return built.Backgrounds(built.PluginViews(next))
+			},
 		},
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,

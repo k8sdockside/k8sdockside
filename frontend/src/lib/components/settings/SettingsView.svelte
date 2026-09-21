@@ -18,6 +18,7 @@
     const SECTIONS = [
         { id: 'appearance', label: 'Appearance', icon: 'sun' },
         { id: 'themes', label: 'Themes', icon: 'display' },
+        { id: 'startpage', label: 'Start page', icon: 'image' },
         { id: 'plugins', label: 'Plugins', icon: 'puzzle' },
         { id: 'behaviour', label: 'Behaviour', icon: 'sliders' },
         { id: 'terminal', label: 'Terminal', icon: 'terminal' },
@@ -43,6 +44,7 @@
     import BehaviourSection from './BehaviourSection.svelte';
     import HelmSection from './HelmSection.svelte';
     import SourcesSection from './SourcesSection.svelte';
+    import StartPageSection from './StartPageSection.svelte';
     import TerminalSection from './TerminalSection.svelte';
     import PluginsSection from './PluginsSection.svelte';
     import ThemesSection from './ThemesSection.svelte';
@@ -101,6 +103,8 @@
             <AppearanceSection onshowthemes={() => show('themes')} />
         {:else if active === 'themes'}
             <ThemesSection />
+        {:else if active === 'startpage'}
+            <StartPageSection />
         {:else if active === 'plugins'}
             <PluginsSection />
         {:else if active === 'behaviour'}

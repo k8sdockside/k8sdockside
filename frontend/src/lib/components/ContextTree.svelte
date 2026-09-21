@@ -23,6 +23,7 @@
     import { session } from '../state/session.svelte';
     import { workspace, type Health } from '../state/workspace.svelte';
     import { clusters } from '../state/health.svelte';
+    import type { Plugin } from '../plugins/types';
     import Icon from './Icon.svelte';
     import PluginMark from './PluginMark.svelte';
     import { notices } from '../state/notices.svelte';
@@ -222,6 +223,21 @@
         return found ? 'installed' : 'absent';
     }
 
+    /**
+     * The installed plugins split by whether this cluster has them. The ones
+     * it does not are folded under a row of their own: with a plugin for
+     * every product the list grows long, and most of it is products a given
+     * cluster does not run. A plugin not yet known either way stays with the
+     * listed ones until the answer comes.
+     */
+    let absentPlugins = $derived(
+        workspace.enabledPlugins.filter((p) => workspace.pluginInstalledIn(context.id, p) === false),
+    );
+    let listedPlugins = $derived(
+        workspace.enabledPlugins.filter((p) => workspace.pluginInstalledIn(context.id, p) !== false),
+    );
+    let absentOpen = $derived(workspace.isAbsentPluginsExpanded(context.id));
+
     function presenceTitle(name: string, state: string): string {
         switch (state) {
             case 'installed':
@@ -296,6 +312,54 @@
         }
     }
 </script>
+
+<!-- One installed plugin's row, and its views when it is unfolded. Drawn in
+     the plugins section's own list and again under "not in this cluster". -->
+{#snippet pluginRow(plugin: Plugin)}
+    {@const open = workspace.isPluginExpanded(context.id, plugin.id)}
+    {@const state = presence(plugin.id)}
+    <button
+        class="plugin {state}"
+        onclick={() => workspace.togglePlugin(context.id, plugin.id)}
+        aria-expanded={open}
+        title={presenceTitle(plugin.name, state)}
+    >
+        <Icon name={open ? 'chevron-down' : 'chevron-right'} size={11} />
+        <PluginMark id={plugin.id} icon={plugin.icon} logo={plugin.logo} size={14} />
+        <span>{plugin.name}</span>
+    </button>
+
+    {#if open}
+        <!-- Always first, and always there whether or not the plugin declared
+             it: "is this even in this cluster?" is the question that has to
+             have somewhere to be answered, especially when the CRDs are
+             missing and every other row below would open onto an error. -->
+        {@const overview = pluginKindFor(plugin.id, PLUGIN_OVERVIEW)}
+        <button
+            class="item nested"
+            data-kind={overview}
+            class:open={isOpen(overview)}
+            onclick={() => workspace.openTab(context.id, overview)}
+        >
+            <Icon name="dashboard" size={14} />
+            <span>Overview</span>
+        </button>
+
+        {#each plugin.views as view (view.id)}
+            {@const kind = pluginKindFor(plugin.id, view.id)}
+            <button
+                class="item nested"
+                data-kind={kind}
+                class:open={isOpen(kind)}
+                onclick={() => workspace.openTab(context.id, kind)}
+                title={view.namespace ? `${view.label} in ${view.namespace}` : view.label}
+            >
+                <Icon name={view.icon} size={14} />
+                <span>{view.label}</span>
+            </button>
+        {/each}
+    {/if}
+{/snippet}
 
 <div class="context" bind:this={root} class:selected style:--ctx-color={color} style:--ctx-tint={alpha(color, 0.16)}>
     <div class="head" bind:this={head}>
@@ -423,7 +487,7 @@
                          open, the items themselves say how many there are. -->
                     {#if folded}
                         <span class="tally">
-                            {group.label === PLUGINS_GROUP ? workspace.enabledPlugins.length : itemsOf(group).length}
+                            {group.label === PLUGINS_GROUP ? listedPlugins.length : itemsOf(group).length}
                         </span>
                     {/if}
                 </button>
@@ -436,7 +500,10 @@
                      Nested inside the heading it would fold the section on its
                      way through, so it sits beside it and stops the click. -->
                 {#if !folded && (group.label === DEFINITIONS_GROUP || group.label === PLUGINS_GROUP)}
-                    {@const reading = workspace.customKindsFor(context.id).status === 'loading'}
+                    {@const reading = workspace.isReadingKinds(context.id)}
+                    {@const again = group.label === PLUGINS_GROUP
+                        ? 'Check again which plugins this cluster has'
+                        : "Read this cluster's definitions again"}
                     <button
                         class="reload"
                         class:spinning={reading}
@@ -445,8 +512,8 @@
                             event.stopPropagation();
                             void workspace.loadCustomKinds(context.id, { force: true });
                         }}
-                        title="Read this cluster's definitions again"
-                        aria-label="Read this cluster's definitions again"
+                        title={again}
+                        aria-label={again}
                     >
                         <Icon name="refresh" size={12} />
                     </button>
@@ -508,65 +575,45 @@
 
                     <!-- The plugins section: one row per plugin installed on
                          this machine, each unfolding into its own views. The
-                         rows are the same whatever cluster this is -- a plugin
-                         is installed here, not there -- and whether the cluster
-                         actually has it is said in the margin. -->
+                         plugins are the same whatever cluster this is -- a
+                         plugin is installed here, not there -- but the ones
+                         this cluster does not have are folded away under a
+                         row of their own, so the list is what is here. -->
                     {#if group.label === PLUGINS_GROUP}
                         {@const suggested = workspace.pluginSuggestionsFor(context.id)}
                         {#if workspace.enabledPlugins.length === 0 && suggested.length === 0}
                             <p class="note">No plugins installed</p>
                         {:else}
-                            {#each workspace.enabledPlugins as plugin (plugin.id)}
-                                {@const open = workspace.isPluginExpanded(context.id, plugin.id)}
-                                {@const state = presence(plugin.id)}
-                                <button
-                                    class="plugin {state}"
-                                    onclick={() => workspace.togglePlugin(context.id, plugin.id)}
-                                    aria-expanded={open}
-                                    title={presenceTitle(plugin.name, state)}
-                                >
-                                    <Icon name={open ? 'chevron-down' : 'chevron-right'} size={11} />
-                                    <PluginMark id={plugin.id} icon={plugin.icon} logo={plugin.logo} size={14} />
-                                    <span>{plugin.name}</span>
-                                    {#if state === 'absent'}
-                                        <span class="missing">not installed</span>
-                                    {/if}
-                                </button>
-
-                                {#if open}
-                                    <!-- Always first, and always there whether
-                                         or not the plugin declared it: "is this
-                                         even in this cluster?" is the question
-                                         that has to have somewhere to be
-                                         answered, especially when the CRDs are
-                                         missing and every other row below would
-                                         open onto an error. -->
-                                    {@const overview = pluginKindFor(plugin.id, PLUGIN_OVERVIEW)}
-                                    <button
-                                        class="item nested"
-                                        data-kind={overview}
-                                        class:open={isOpen(overview)}
-                                        onclick={() => workspace.openTab(context.id, overview)}
-                                    >
-                                        <Icon name="dashboard" size={14} />
-                                        <span>Overview</span>
-                                    </button>
-
-                                    {#each plugin.views as view (view.id)}
-                                        {@const kind = pluginKindFor(plugin.id, view.id)}
-                                        <button
-                                            class="item nested"
-                                            data-kind={kind}
-                                            class:open={isOpen(kind)}
-                                            onclick={() => workspace.openTab(context.id, kind)}
-                                            title={view.namespace ? `${view.label} in ${view.namespace}` : view.label}
-                                        >
-                                            <Icon name={view.icon} size={14} />
-                                            <span>{view.label}</span>
-                                        </button>
-                                    {/each}
-                                {/if}
+                            {#each listedPlugins as plugin (plugin.id)}
+                                {@render pluginRow(plugin)}
                             {/each}
+
+                            <!-- Still openable: the overview is where "this
+                                 cluster does not have it" is explained, and
+                                 hiding the rows outright would leave someone
+                                 who installed a plugin wondering where it
+                                 went. The Plugins heading's refresh, or the
+                                 recheck every minute, moves a plugin back up
+                                 once its product is installed. -->
+                            {#if absentPlugins.length > 0}
+                                <button
+                                    class="plugin absent-toggle"
+                                    onclick={() => workspace.toggleAbsentPlugins(context.id)}
+                                    aria-expanded={absentOpen}
+                                    title="Plugins installed on this machine for products this cluster does not appear to run"
+                                >
+                                    <Icon name={absentOpen ? 'chevron-down' : 'chevron-right'} size={11} />
+                                    <span>Not in this cluster</span>
+                                    <span class="tally">{absentPlugins.length}</span>
+                                </button>
+                                {#if absentOpen}
+                                    <div class="absent-plugins">
+                                        {#each absentPlugins as plugin (plugin.id)}
+                                            {@render pluginRow(plugin)}
+                                        {/each}
+                                    </div>
+                                {/if}
+                            {/if}
 
                             <!-- Known plugins for what this cluster runs and
                                  this machine has no plugin for: a quiet row
@@ -1119,6 +1166,25 @@
        went. */
     .plugin.absent {
         color: var(--text-faint);
+    }
+
+    /* The row the plugins this cluster does not have are folded under. Faint
+       and lower-key than a plugin, so it reads as a place things were put
+       away rather than as one more plugin. */
+    .plugin.absent-toggle {
+        gap: 5px;
+        font-size: 11.5px;
+        color: var(--text-faint);
+    }
+
+    .plugin.absent-toggle:hover {
+        color: var(--text);
+    }
+
+    /* Everything under it one level in, its plugins' views included: they all
+       indent off --indent. */
+    .absent-plugins {
+        --indent: 40px;
     }
 
     /* Named for what it says rather than for the row's state, which the row

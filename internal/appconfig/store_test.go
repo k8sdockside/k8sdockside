@@ -1418,3 +1418,71 @@ func TestASettingsFileFromBeforeNamespaceFiltersStillOpens(t *testing.T) {
 		t.Errorf("namespaces = %v, want none", tabs[0].Namespaces)
 	}
 }
+
+// A settings file from before the start page had a picture reads as the
+// built-in ones, changing on the default interval; a hand-edited one that asks
+// for something that does not exist is brought back to that.
+func TestTheBackgroundIsFilledInAndRepaired(t *testing.T) {
+	path := tempSettings(t)
+	body := `{"preferences":{"background":{"source":"wallpaper","minutes":999999,"pinned":"  scene:mesh  ","palette":"sepia"}}}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := openAt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := store.Get().Preferences.Background
+	if got.Source != BackgroundBuiltin {
+		t.Errorf("source = %q, want %q", got.Source, BackgroundBuiltin)
+	}
+	if got.Minutes != 0 {
+		t.Errorf("minutes = %d, want 0 (never chosen)", got.Minutes)
+	}
+	if got.Palette != BackgroundPaletteVaried {
+		t.Errorf("palette = %q, want %q", got.Palette, BackgroundPaletteVaried)
+	}
+	// Kept as written, less the spaces: a pinned picture that is not there
+	// today may be back tomorrow.
+	if got.Pinned != "scene:mesh" {
+		t.Errorf("pinned = %q", got.Pinned)
+	}
+
+	if got := openIn(t).Get().Preferences.Background.Source; got != BackgroundBuiltin {
+		t.Errorf("a fresh install's source = %q", got)
+	}
+}
+
+func TestTheBackgroundRoundTrips(t *testing.T) {
+	path := tempSettings(t)
+	store, err := openAt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefs := store.Get().Preferences
+	prefs.Background = Background{Source: BackgroundFolder, Pinned: "file:sky.png", Minutes: 30, Palette: BackgroundPaletteTheme}
+	if _, err := store.SetPreferences(prefs); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetBackgroundFolder("/home/u/Pictures"); err != nil {
+		t.Fatal(err)
+	}
+
+	again, err := openAt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := again.Get().Preferences.Background; got != prefs.Background {
+		t.Errorf("background = %+v, want %+v", got, prefs.Background)
+	}
+	if got := again.BackgroundFolder(); got != "/home/u/Pictures" {
+		t.Errorf("folder = %q", got)
+	}
+
+	if _, err := again.SetBackgroundFolder(""); err != nil {
+		t.Fatal(err)
+	}
+	if got := again.BackgroundFolder(); got != "" {
+		t.Errorf("cleared folder = %q", got)
+	}
+}

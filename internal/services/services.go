@@ -35,12 +35,15 @@ type Built struct {
 	// which needs the plugin catalogue, and so comes from here rather than from
 	// main.go.
 	PluginViews application.Middleware
+	// Backgrounds is the asset middleware that serves the images in the
+	// user's background folder, which the settings store knows the place of.
+	Backgrounds application.Middleware
 	// Resync rescans the kubeconfig sources, for the web version's admin page
 	// to call once it has added or removed a cluster.
 	Resync func()
 }
 
-// New wires the fourteen services the frontend calls and returns them ready to
+// New wires the fifteen services the frontend calls and returns them ready to
 // register with the application.
 func New(settings *appconfig.Store, opts Options) Built {
 	configs := NewKubeconfigService(settings)
@@ -83,6 +86,7 @@ func New(settings *appconfig.Store, opts Options) Built {
 	logs := NewLogService(configs, resources.watcher)
 	prefs := NewSettingsService(settings)
 	looks := NewThemeService(settings)
+	backdrops := NewBackgroundService(settings)
 
 	// Every service that opens a stream files it under whoever opened it, so
 	// the web version can deliver the stream's events to that user alone.
@@ -99,6 +103,7 @@ func New(settings *appconfig.Store, opts Options) Built {
 	solutions.server = opts.Server
 	prefs.server = opts.Server
 	looks.server = opts.Server
+	backdrops.server = opts.Server
 	// The web version is updated by whoever deploys it, not by the person
 	// using it, so it has no business telling them about new releases.
 	news.disabled = opts.Server
@@ -111,6 +116,7 @@ func New(settings *appconfig.Store, opts Options) Built {
 			application.NewService(actions),
 			application.NewService(logs),
 			application.NewService(looks),
+			application.NewService(backdrops),
 			application.NewService(solutions),
 			application.NewService(graphs),
 			application.NewService(charts),
@@ -121,6 +127,7 @@ func New(settings *appconfig.Store, opts Options) Built {
 			application.NewService(&SessionService{server: opts.Server}),
 		},
 		PluginViews: solutions.assetMiddleware(),
+		Backgrounds: backdrops.assetMiddleware(),
 		Resync:      func() { configs.Sync() },
 	}
 }

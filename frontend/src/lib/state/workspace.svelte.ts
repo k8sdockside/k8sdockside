@@ -174,6 +174,14 @@ export interface CustomKinds {
 const NOT_LOADED: CustomKinds = { status: 'idle', groups: [], message: '' };
 
 /**
+ * How often a connected cluster is asked again which plugins it has -- see
+ * Workspace.recheckPlugins. A minute is soon enough that installing a product
+ * reads as bringing its plugin to life, and slow enough that the handful of
+ * requests it costs goes unnoticed.
+ */
+export const PLUGIN_RECHECK_MS = 60_000;
+
+/**
  * Whether one saved tab can come back.
  *
  * A view this build has never heard of is skipped rather than guessed at, and
@@ -288,6 +296,7 @@ function defaultSettings(): Settings {
                 scrollback: 5000,
             },
             helm: { path: '', wait: false, atomic: false, timeoutSeconds: 300 },
+            background: { source: 'builtin', pinned: '', minutes: 15, palette: 'varied' },
         },
         portForwards: [],
         layout: { detailPane: 'right', sidebarWidth: 320, collapsedGroups: null, zoom: 1 },
@@ -462,6 +471,19 @@ class Workspace {
      */
     pluginProbes = $state<Record<string, { known: string[]; absent: string[] }>>({});
     /**
+     * Contexts whose definitions are being read again over an answer already
+     * on screen, for the refresh button's spinner. The answer itself stays put
+     * until the new one lands -- see loadCustomKinds.
+     */
+    rereadingKinds = $state<string[]>([]);
+    /** Contexts with a read of their definitions in flight, whichever kind. */
+    private readingKinds = new Set<string>();
+    /**
+     * Bumped per context when it is disconnected, so a read that set out
+     * before does not land an answer for a cluster that has been let go of.
+     */
+    private kindsGenerations = new Map<string, number>();
+    /**
      * Which API groups are open, as `contextId\0group`. Not persisted: it is
      * where you are looking right now rather than how you like the sidebar, and
      * it would otherwise grow the settings file a line per group per cluster.
@@ -507,6 +529,11 @@ class Workspace {
      * you are looking right now rather than how you like the sidebar.
      */
     expandedPlugins = $state<string[]>([]);
+    /**
+     * Contexts whose "not in this cluster" plugins are unfolded in the
+     * sidebar. Not persisted, like expandedPlugins.
+     */
+    expandedAbsentPlugins = $state<string[]>([]);
 
     syncing = $state(false);
     loaded = $state(false);
@@ -934,6 +961,10 @@ class Workspace {
         }
         this.expanded = this.expanded.filter((id) => id !== contextId);
         clusters.forget(contextId);
+        // What it served and which plugins it had go too: a context opened
+        // again is asked afresh, which is how a product installed while it was
+        // let go of gets its plugin back.
+        this.forgetDefinitions(contextId);
 
         try {
             await ResourceService.Disconnect(contextId);
@@ -1479,6 +1510,16 @@ class Workspace {
         const view = parsePluginKind(tab.kind);
         if (view) {
             this.openGroup(tab.contextId, PLUGINS_GROUP);
+            // A plugin this cluster does not have is folded one level deeper,
+            // under "not in this cluster".
+            const plugin = this.plugins.find((p) => p.id === view.pluginId);
+            if (
+                plugin &&
+                this.pluginInstalledIn(tab.contextId, plugin) === false &&
+                !this.isAbsentPluginsExpanded(tab.contextId)
+            ) {
+                this.toggleAbsentPlugins(tab.contextId);
+            }
             if (!this.isPluginExpanded(tab.contextId, view.pluginId)) {
                 this.togglePlugin(tab.contextId, view.pluginId);
             }
@@ -2062,20 +2103,38 @@ class Workspace {
     /**
      * Fetches the definitions a cluster serves.
      *
-     * Called when the definitions section is opened rather than when a context
-     * is, for the same reason probing is lazy: this is a request to a cluster,
-     * and a kubeconfig with twenty contexts should not make twenty of them
-     * because the sidebar was expanded. The answer is kept, so opening and
-     * closing the section costs nothing after the first time.
+     * Called when a cluster first answers -- see askAboutPlugins -- or when
+     * its definitions section is opened, and not for every context in the
+     * kubeconfig, for the same reason probing is lazy: this is a request to a
+     * cluster, and a kubeconfig with twenty contexts should not make twenty of
+     * them because the sidebar was expanded. The answer is kept, so opening
+     * and closing the section costs nothing after the first time.
+     *
+     * Asking again over an answer already on screen leaves that answer there
+     * until the new one lands. Blanking it would blank everything read from
+     * it too -- which plugins this cluster has, and so every panel and button
+     * they draw -- only to put it all back a moment later. `quiet` is the
+     * background recheck: it also keeps the last answer when the cluster does
+     * not reply, rather than trading a good answer for a passing failure.
      */
-    async loadCustomKinds(contextId: string, { force = false } = {}): Promise<void> {
-        const status = this.customKindsFor(contextId).status;
-        if (status === 'loading') return;
-        if (!force && status !== 'idle') return;
+    async loadCustomKinds(contextId: string, { force = false, quiet = false } = {}): Promise<void> {
+        const previous = this.customKindsFor(contextId);
+        if (previous.status === 'loading' || this.readingKinds.has(contextId)) return;
+        if (!force && previous.status !== 'idle') return;
 
-        this.customKinds[contextId] = { status: 'loading', groups: [], message: '' };
+        const keep = quiet || previous.status === 'ready';
+        const generation = this.kindsGenerations.get(contextId) ?? 0;
+        const current = () => (this.kindsGenerations.get(contextId) ?? 0) === generation;
+
+        this.readingKinds.add(contextId);
+        if (!keep) {
+            this.customKinds[contextId] = { status: 'loading', groups: [], message: '' };
+        } else if (!quiet) {
+            this.rereadingKinds = [...this.rereadingKinds, contextId];
+        }
         try {
             const groups = await ResourceService.CustomResourceKinds(contextId);
+            if (!current()) return;
             // Normalised here rather than guarded at every use: the generated
             // bindings type both the list and each group's kinds as nullable.
             this.customKinds[contextId] = {
@@ -2086,10 +2145,69 @@ class Workspace {
             // The definitions answer for every plugin that defines a custom
             // resource. The handful that define none are asked about here, on
             // the same trigger and with the same laziness.
-            void this.probeCluster(contextId);
+            await this.probeCluster(contextId, { quiet, current });
         } catch (err) {
-            this.customKinds[contextId] = { status: 'error', groups: [], message: message(err) };
+            if (current() && !quiet) {
+                this.customKinds[contextId] = { status: 'error', groups: [], message: message(err) };
+            }
+        } finally {
+            if (current()) this.readingKinds.delete(contextId);
+            if (this.rereadingKinds.includes(contextId)) {
+                this.rereadingKinds = this.rereadingKinds.filter((id) => id !== contextId);
+            }
         }
+    }
+
+    /** Whether a context's definitions are being read, first time or again. */
+    isReadingKinds(contextId: string): boolean {
+        return this.customKindsFor(contextId).status === 'loading' || this.rereadingKinds.includes(contextId);
+    }
+
+    /**
+     * Makes sure every cluster that has answered has been asked which plugins
+     * it has.
+     *
+     * What a plugin draws onto a cluster's own objects -- a Descheduler panel
+     * on a pod, an "Allow descheduling" button beside it -- is drawn only once
+     * the cluster is known to run the product, so the question cannot wait
+     * for the sidebar's Plugins section to be opened: viewing a pod is reason
+     * enough. Contexts that have not answered are left alone, which is what
+     * keeps this as lazy as the probing that decides they have. Asks nothing
+     * of a context that has an answer already.
+     */
+    askAboutPlugins(contextIds: string[]): void {
+        for (const id of contextIds) void this.loadCustomKinds(id);
+    }
+
+    /**
+     * Asks every connected cluster that has been asked before again, quietly,
+     * so a product installed while the app is open brings its plugin to life
+     * -- and one removed takes it away -- without anybody pressing refresh.
+     * See PLUGIN_RECHECK_MS for how often.
+     *
+     * An errored answer is asked again too: a cluster that was unreachable a
+     * minute ago may not be now.
+     */
+    recheckPlugins(): void {
+        for (const [id, loaded] of Object.entries(this.customKinds)) {
+            if (loaded.status !== 'ready' && loaded.status !== 'error') continue;
+            if (clusters.of(id).status !== 'connected') continue;
+            void this.loadCustomKinds(id, { force: true, quiet: true });
+        }
+    }
+
+    /**
+     * Forgets what a context served and which plugins it had, so the next
+     * look at it asks again. A read still in flight is left to land nowhere.
+     */
+    private forgetDefinitions(contextId: string): void {
+        this.kindsGenerations.set(contextId, (this.kindsGenerations.get(contextId) ?? 0) + 1);
+        this.readingKinds.delete(contextId);
+        this.rereadingKinds = this.rereadingKinds.filter((id) => id !== contextId);
+        const { [contextId]: _kinds, ...kinds } = this.customKinds;
+        this.customKinds = kinds;
+        const { [contextId]: _probe, ...probes } = this.pluginProbes;
+        this.pluginProbes = probes;
     }
 
     /**
@@ -2105,13 +2223,19 @@ class Workspace {
      * to, so this is usually one request or none.
      *
      * A failure is not reported: the definitions beside it already say the
-     * cluster would not answer, and it leaves every row as it was.
+     * cluster would not answer, and it leaves every row as it was. A quiet
+     * recheck that fails keeps the answer it had.
      */
-    private async probeCluster(contextId: string): Promise<void> {
+    private async probeCluster(
+        contextId: string,
+        { quiet = false, current = () => true }: { quiet?: boolean; current?: () => boolean } = {},
+    ): Promise<void> {
         try {
             const probe = await PluginService.Probe(contextId);
+            if (!current()) return;
             this.pluginProbes[contextId] = { known: probe?.known ?? [], absent: probe?.absent ?? [] };
         } catch {
+            if (!current() || (quiet && this.pluginProbes[contextId])) return;
             this.pluginProbes[contextId] = { known: [], absent: [] };
         }
     }
@@ -2151,6 +2275,15 @@ class Workspace {
         this.expandedPlugins = toggled(this.expandedPlugins, apiGroupKey(contextId, pluginId));
     }
 
+    /** Whether the plugins this cluster does not have are unfolded in the sidebar. */
+    isAbsentPluginsExpanded(contextId: string): boolean {
+        return this.expandedAbsentPlugins.includes(contextId);
+    }
+
+    toggleAbsentPlugins(contextId: string): void {
+        this.expandedAbsentPlugins = toggled(this.expandedAbsentPlugins, contextId);
+    }
+
     /** Opens a plugin's landing page for a context. */
     openPluginOverview(contextId: string, pluginId: string): void {
         this.openTab(contextId, pluginKindFor(pluginId, PLUGIN_OVERVIEW));
@@ -2173,12 +2306,16 @@ class Workspace {
      * right.
      */
     pluginInstalledIn(contextId: string, plugin: Plugin): boolean | null {
+        const required = plugin.requires.filter((req) => !req.optional);
+        const probed = this.probeDecides(plugin);
+        // A plugin that needs nothing is at home in every cluster, and does
+        // not have to wait for one to answer to say so.
+        if (required.length === 0 && !probed) return true;
+
         const loaded = this.customKinds[contextId];
         if (!loaded || loaded.status !== 'ready') return null;
 
         const served = new Set(loaded.groups.flatMap((group) => group.kinds.map((kind) => kind.kind)));
-        const required = plugin.requires.filter((req) => !req.optional);
-        if (required.length === 0) return true;
 
         // Some plugins the definitions cannot answer for at all: a product
         // that defines no custom resources requires only kinds every cluster
@@ -2186,7 +2323,7 @@ class Workspace {
         // cluster. The backend looks for the objects instead -- what the
         // manifest asks for, or what the known list knows to look for -- and
         // until it has answered the honest verdict is that we do not know.
-        if (this.probeDecides(plugin)) {
+        if (probed) {
             const probe = this.pluginProbes[contextId];
             if (!probe) return null;
             if (probe.absent.includes(plugin.id)) return false;
@@ -2220,24 +2357,28 @@ class Workspace {
     }
 
     /**
-     * The enabled plugins worth drawing for one cluster: all of them, less any
-     * this cluster has said it does not have.
+     * The enabled plugins worth drawing for one cluster: the ones it is known
+     * to have.
      *
      * A plugin is installed on this machine, not in a cluster, and its rows in
-     * the sidebar say so -- they are listed for every context with "not
-     * installed" in the margin where it is missing, because that row is how
-     * you find out. What a plugin draws *onto the cluster's own objects* is a
-     * different matter: a Descheduler panel on every pod of a cluster with no
-     * descheduler in it, and an "Allow descheduling" button beside it, are a
-     * feature of a product that is not there.
+     * the sidebar say so -- the ones a cluster does not have are listed for it
+     * under "not in this cluster", because that row is how you find out. What
+     * a plugin draws *onto the cluster's own objects* is a different matter: a
+     * Descheduler panel on every pod of a cluster with no descheduler in it,
+     * and an "Allow descheduling" button beside it, are a feature of a product
+     * that is not there.
      *
-     * `false` is the only answer that hides anything. A cluster that has not
-     * been asked yet, or would not answer, leaves the plugin drawn -- the same
-     * way round as everywhere else here, because a panel that briefly should
-     * not be there costs less than one that never appears.
+     * So only a yes draws anything. The cluster is asked as soon as it answers
+     * at all -- see askAboutPlugins -- so "not asked yet" is a moment, and a
+     * panel that appears a moment late is better than one that shows up and
+     * then vanishes. The one exception is a cluster that would not say which
+     * definitions it serves: it cannot tell us which products it runs either,
+     * and taking every plugin away from it for that would be the wrong way
+     * round.
      */
     pluginsHereFor(contextId: string): Plugin[] {
-        return this.enabledPlugins.filter((plugin) => this.pluginInstalledIn(contextId, plugin) !== false);
+        if (this.customKindsFor(contextId).status === 'error') return this.enabledPlugins;
+        return this.enabledPlugins.filter((plugin) => this.pluginInstalledIn(contextId, plugin) === true);
     }
 
     /**
@@ -2953,6 +3094,25 @@ class Workspace {
         const next = { ...this.settings.preferences.helm, ...patch };
         if (next.atomic) next.wait = true;
         this.updatePreferences({ helm: next });
+    }
+
+    // ----- the start page's picture -----------------------------------------
+
+    /** Where the start page's picture comes from, which one is kept, and how often it changes. */
+    background = $derived(this.settings.preferences.background);
+
+    /**
+     * Changes part of the background settings. A patch, for the reason
+     * setTerminal takes one: the settings view edits a field at a time.
+     */
+    setBackground(patch: Partial<Settings['preferences']['background']>): void {
+        this.updatePreferences({ background: { ...this.settings.preferences.background, ...patch } });
+    }
+
+    /** Opens Settings on the start page's section. */
+    openBackgroundSettings(): void {
+        rememberSection('startpage');
+        this.openSettings();
     }
 
     /** Sets the window every chart on screen covers, in minutes. */

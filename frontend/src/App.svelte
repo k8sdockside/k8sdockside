@@ -14,11 +14,13 @@
   pane it was last dragged to.
 -->
 <script lang="ts">
-    import { onMount } from 'svelte';
+    import { onMount, untrack } from 'svelte';
     import Icon from './lib/components/Icon.svelte';
     import Pane from './lib/components/Pane.svelte';
     import TopBar from './lib/components/TopBar.svelte';
-    import { workspace } from './lib/state/workspace.svelte';
+    import Welcome from './lib/components/Welcome.svelte';
+    import { PLUGIN_RECHECK_MS, workspace } from './lib/state/workspace.svelte';
+    import { clusters } from './lib/state/health.svelte';
     import { notices } from './lib/state/notices.svelte';
     import { session } from './lib/state/session.svelte';
     import { rowMetrics } from './lib/density';
@@ -128,6 +130,34 @@
         }
     }
 
+    // Which plugins a cluster has decides what they draw on its objects -- a
+    // Descheduler panel on a pod, an "Allow descheduling" button beside it --
+    // so it is asked as soon as the cluster answers, whether or not the
+    // sidebar's Plugins section has been opened. Here rather than in the
+    // sidebar because the tree can be hidden while a pod is still on screen.
+    let reached = $derived(
+        workspace.contexts.filter((c) => clusters.of(c.id).status === 'connected').map((c) => c.id),
+    );
+    $effect(() => {
+        const ids = reached;
+        untrack(() => workspace.askAboutPlugins(ids));
+    });
+
+    // And asked again now and then, so installing the descheduler into a
+    // cluster that is already open brings its plugin to life without a reload.
+    $effect(() => {
+        const timer = setInterval(() => workspace.recheckPlugins(), PLUGIN_RECHECK_MS);
+        return () => clearInterval(timer);
+    });
+
+    // A plugin installed or switched on mid-session was not part of the last
+    // question, so the clusters already asked are asked again straight away.
+    let pluginIds = $derived(workspace.enabledPlugins.map((p) => p.id).join('\n'));
+    $effect(() => {
+        void pluginIds;
+        untrack(() => workspace.recheckPlugins());
+    });
+
     // Notices are informational; they should not need dismissing by hand.
     $effect(() => {
         if (!notices.current) return;
@@ -163,45 +193,7 @@
     </div>
 
     {#snippet welcome()}
-        <div class="welcome-stage">
-            <div class="welcome">
-                <h1>K8s Dockside</h1>
-                {#if workspace.contexts.length > 0}
-                    <p>Pick a context in the sidebar, then choose a view to open it as a tab.</p>
-                    <p class="hint">
-                        Tabs take the colour of their context, so you always know which cluster you are
-                        looking at. Drag them to reorder, or into another panel to keep two views side by
-                        side.
-                    </p>
-                {:else if workspace.loaded && session.server}
-                    <!-- The web version has no disk of the user's to look
-                         on: clusters are kubeconfigs an administrator
-                         uploads on the gateway's own page. -->
-                    <p>No clusters yet.</p>
-                    <p class="hint">
-                        An administrator adds clusters under Administration → Clusters. They appear here as
-                        soon as one has.
-                    </p>
-                {:else if workspace.loaded}
-                    <p>No kubeconfig contexts yet.</p>
-                    <p class="hint">
-                        Nothing turned up in <code>~/.kube</code> or <code>$KUBECONFIG</code>. Use the
-                        sidebar to add kubeconfig files, or point it at a folder and it will take every
-                        one in there, whatever they are named.
-                    </p>
-                {:else}
-                    <p>Looking for kubeconfig files…</p>
-                {/if}
-                <p class="welcome-links">
-                    {#if workspace.loaded && workspace.contexts.length === 0 && session.admin && session.clustersUrl}
-                        <!-- A page of the same site, so an ordinary link. -->
-                        <a href={session.clustersUrl}><Icon name="server" size={13} /> Manage clusters</a>
-                    {/if}
-                    <button onclick={() => workspace.openHelp()}><Icon name="help" size={13} /> How to use K8s Dockside</button>
-                    <button onclick={() => workspace.openKubernetesPrimer()}><Icon name="book" size={13} /> New to Kubernetes?</button>
-                </p>
-            </div>
-        </div>
+        <Welcome />
     {/snippet}
 
     <footer class="statusbar">
@@ -264,114 +256,6 @@
         flex: 1 1 auto;
         min-height: 0;
         min-width: 0;
-    }
-
-    /* The harbour behind the idle screen. It fills the empty content area
-       rather than sitting at a fixed size, so the app looks like itself when
-       nothing is open -- and goes with the panel the moment a tab is, rather
-       than sitting behind a table of pod names. */
-    .welcome-stage {
-        position: relative;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        overflow-y: auto;
-    }
-
-    /* The image lives on a pseudo-element so it alone can be faded. Setting
-       opacity on the container would take the text down with it, and the text
-       is the part that has to stay readable -- which is the whole difference
-       between a background and a picture.
-
-       `contain`-style sizing keeps the mark whole at any window size, and it is
-       kept out of the way of the pointer so nothing here is selectable. */
-    .welcome-links {
-        display: flex;
-        gap: 8px;
-        justify-content: center;
-        flex-wrap: wrap;
-        margin-top: 18px;
-    }
-
-    .welcome-links button,
-    .welcome-links a {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 6px 11px;
-        border-radius: var(--radius-sm);
-        background: var(--bg-raised);
-        box-shadow: inset 0 0 0 1px var(--border-soft);
-        font-size: 12.5px;
-        color: var(--text-dim);
-        text-decoration: none;
-    }
-
-    .welcome-links button:hover,
-    .welcome-links a:hover {
-        background: var(--bg-hover);
-        color: var(--text);
-    }
-
-    .welcome-stage::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        /* The neon harbour by night: drawn for the dark themes, and faded just
-           enough that the theme's own ground shows through it and the heading
-           stays legible against the sky. `cover` keeps the ship in frame at
-           any pane shape; what goes is sky or sea at the edges, never the
-           middle. See frontend/artwork/neon_harbour.py for how it is made. */
-        background-image: url('/k8s_dockside_neon_harbour.svg');
-        background-repeat: no-repeat;
-        background-position: center;
-        background-size: cover;
-        opacity: 0.72;
-        pointer-events: none;
-    }
-
-    /* A light theme gets the same harbour by day. The night picture faded
-       over a pale window only ever reads as grey; the day one is drawn for
-       it, so it can be shown almost whole. */
-    :global([data-theme-base='light']) .welcome-stage::before {
-        background-image: url('/k8s_dockside_neon_harbour_light.svg');
-        opacity: 0.85;
-    }
-
-    .welcome {
-        /* Above the watermark, not through it. */
-        position: relative;
-        z-index: 1;
-        max-width: 520px;
-        padding: 64px 32px;
-        margin: 0 auto;
-        text-align: center;
-    }
-
-    .welcome h1 {
-        margin: 0 0 12px;
-        font-size: 22px;
-        font-weight: 600;
-    }
-
-    .welcome p {
-        margin: 0 0 10px;
-        color: var(--text-dim);
-    }
-
-    .welcome .hint {
-        font-size: 12px;
-        color: var(--text-faint);
-        line-height: 1.7;
-    }
-
-    .welcome code {
-        font-family: var(--mono);
-        font-size: 11px;
-        background: var(--bg-raised);
-        border-radius: 3px;
-        padding: 1px 5px;
     }
 
     .statusbar {
