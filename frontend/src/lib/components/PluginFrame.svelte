@@ -147,16 +147,23 @@
         /** Shown in a code block: the patch, or what the action is. */
         detail: string;
         apply: string;
+        /** Colours the answer as one that destroys something. */
+        danger?: boolean;
+        /** When set, the answer waits until this -- the object's name -- is typed. */
+        typeToConfirm?: string;
         answer: (yes: boolean) => void;
     }
 
     let confirming = $state<Confirmation | null>(null);
+    /** What has been typed towards a confirmation's typeToConfirm. */
+    let typed = $state('');
 
     function ask(request: Omit<Confirmation, 'answer'>): Promise<boolean> {
         // One at a time: a page that queues twenty would otherwise stack
         // twenty dialogs, and the user would be approving the pile, not a change.
         if (confirming) return Promise.reject(new Error('another change is already waiting for an answer'));
         return new Promise((resolve) => {
+            typed = '';
             confirming = {
                 ...request,
                 answer: (yes) => {
@@ -287,11 +294,19 @@
                 // Always asked, whatever the manifest says about confirming:
                 // the click that got here was inside the plugin's own page, and
                 // nothing the page draws can be taken as the user saying yes.
+                // A delete cannot be taken back, so its name has to be typed.
+                const deleting = spec.type === 'delete';
+                const question = (spec.confirm ?? '')
+                    .replaceAll('{name}', target.name)
+                    .replaceAll('{namespace}', target.namespace);
+                const where = `${target.namespace ? `${target.namespace}/` : ''}${target.name}`;
                 const yes = await ask({
                     title: `${p.name} wants to run ${spec.label}`,
                     target,
-                    detail: `${spec.label} — ${target.namespace ? `${target.namespace}/` : ''}${target.name}`,
+                    detail: question ? `${question}\n\n${spec.label} — ${where}` : `${spec.label} — ${where}`,
                     apply: spec.label,
+                    danger: deleting || spec.tone === 'danger',
+                    typeToConfirm: deleting ? target.name : undefined,
                 });
                 if (!yes) throw new Error('the action was declined');
                 const created = await PluginService.RunAction(
@@ -531,9 +546,31 @@
                         <strong>{contextName}</strong>:
                     </p>
                     <pre>{c.detail}</pre>
+                    {#if c.typeToConfirm}
+                        <label class="type-to-confirm">
+                            <span>Type <strong>{c.typeToConfirm}</strong> to confirm:</span>
+                            <!-- svelte-ignore a11y_autofocus -->
+                            <input
+                                type="text"
+                                bind:value={typed}
+                                autofocus
+                                autocomplete="off"
+                                spellcheck="false"
+                                onkeydown={(e) => {
+                                    if (e.key === 'Enter' && typed === c.typeToConfirm) c.answer(true);
+                                    if (e.key === 'Escape') c.answer(false);
+                                }}
+                            />
+                        </label>
+                    {/if}
                     <div class="buttons">
                         <button class="cancel" onclick={() => c.answer(false)}>Cancel</button>
-                        <button class="apply" onclick={() => c.answer(true)}>{c.apply}</button>
+                        <button
+                            class="apply"
+                            class:danger={c.danger}
+                            disabled={!!c.typeToConfirm && typed !== c.typeToConfirm}
+                            onclick={() => c.answer(true)}>{c.apply}</button
+                        >
                     </div>
                 </div>
             </div>
@@ -679,5 +716,34 @@
     .apply {
         color: var(--accent-text);
         background: var(--accent);
+    }
+
+    .apply.danger {
+        color: #fff;
+        background: var(--error);
+    }
+
+    .apply:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .type-to-confirm {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 0 0 14px;
+        font-size: 12.5px;
+        color: var(--text-dim);
+    }
+
+    .type-to-confirm input {
+        padding: 6px 8px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-mono, monospace);
+        font-size: 12.5px;
     }
 </style>

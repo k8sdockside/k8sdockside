@@ -37,6 +37,11 @@ const (
 	// RequestCreate creates a new object in the same namespace -- a
 	// VirtualMachineInstanceMigration, an Argo CD sync operation's record.
 	RequestCreate = "create"
+	// RequestDelete deletes the object the button is on. It is left off the
+	// app's own action bar, which has a Delete of its own for every kind: it is
+	// for a plugin's pages, which run it through the bridge, where the user is
+	// asked to type the object's name before it goes.
+	RequestDelete = "delete"
 )
 
 // ToneDanger colours an action apart and pushes it to the end of the bar.
@@ -79,7 +84,7 @@ type Condition struct {
 // Request is the one call an action makes. Strings anywhere inside Patch, Body
 // and Object may use {name} and {namespace}, which are the object's.
 type Request struct {
-	// Type is RequestPatch, RequestSubresource or RequestCreate.
+	// Type is RequestPatch, RequestSubresource, RequestCreate or RequestDelete.
 	Type string `json:"type"`
 
 	// Patch is the merge patch, for RequestPatch.
@@ -289,10 +294,15 @@ func validateRequest(kind string, r Request) (Request, error) {
 			return r, fmt.Errorf("the object a create request makes needs a kind")
 		}
 
+	case RequestDelete:
+		if !writable(kind) {
+			return r, fmt.Errorf("no plugin action may delete %s", kind)
+		}
+
 	case "":
-		return r, fmt.Errorf("the request has no type; it is %q, %q or %q", RequestPatch, RequestSubresource, RequestCreate)
+		return r, fmt.Errorf("the request has no type; it is %q, %q, %q or %q", RequestPatch, RequestSubresource, RequestCreate, RequestDelete)
 	default:
-		return r, fmt.Errorf("the request type %q is not one of %q, %q or %q", r.Type, RequestPatch, RequestSubresource, RequestCreate)
+		return r, fmt.Errorf("the request type %q is not one of %q, %q, %q or %q", r.Type, RequestPatch, RequestSubresource, RequestCreate, RequestDelete)
 	}
 	return r, nil
 }
@@ -392,6 +402,9 @@ type Offered struct {
 	Tone       string `json:"tone"`
 	Confirm    string `json:"confirm"`
 	Done       string `json:"done"`
+	// Type is the request's type, so the action bar can leave out a delete
+	// it already has a button for.
+	Type string `json:"type"`
 }
 
 // Offer is what one action says about one object.
@@ -406,6 +419,7 @@ func (a Action) Offer(p Plugin, namespace, name string) Offered {
 		Tone:       a.Tone,
 		Confirm:    expandString(a.Confirm, vars),
 		Done:       expandString(a.Done, vars),
+		Type:       a.Request.Type,
 	}
 }
 

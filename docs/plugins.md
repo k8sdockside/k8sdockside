@@ -745,13 +745,14 @@ the rest of the manifest, so a built-in plugin can have them too:
 | `confirm` | optional | A question asked before it runs. `{name}` and `{namespace}` are filled in. Empty runs on the click. |
 | `done` | optional | The notice once it has worked. |
 | `when` | optional | Conditions on the object, all of which must hold: `{ "field", "in": [...] }`, `{ "field", "notIn": [...] }`, or just `{ "field" }` for "is set". The field is a path as in `cards`. `notIn` also holds when the field is absent. |
-| `request` | required | What pressing it does — one of the three below. |
+| `request` | required | What pressing it does — one of the four below. |
 
 | `request.type` | |
 | --- | --- |
 | `patch` | Merge-patches the object with `patch`. |
 | `subresource` | Calls `/apis/<apiGroup>/<version>/namespaces/<ns>/<resource>/<name>/<subresource>` with `method` (`PUT`, the default, or `POST`) and an optional JSON `body`. The kind must be a custom resource; `apiGroup` defaults to its group and may only be that group or one under it (`subresources.kubevirt.io` under `kubevirt.io`); `resource` defaults to its plural. |
 | `create` | Creates `object` (with its `apiVersion` and `kind`), of the app kind `kind`, in the object's own namespace. `metadata.generateName` works; the name given is in the notice. |
+| `delete` | Deletes the object, as `kubectl delete` would. It is not drawn on the app's own action bar, which has a Delete of its own: it is for the plugin's pages, through `run()`, where the user has to type the object's name before it goes. |
 
 Strings anywhere in `patch`, `body` and `object` may use `{name}` and
 `{namespace}`.

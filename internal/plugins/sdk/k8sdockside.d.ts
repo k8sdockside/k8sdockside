@@ -579,7 +579,8 @@ declare namespace K8sDockside {
          * Runs one of the actions the plugin declares in its manifest, on the
          * section's object or the one named (`{ namespace, name }`; the kind
          * is the action's). The app asks the user first, every time, whatever
-         * the manifest says about confirming. Rejects with "the action was
+         * the manifest says about confirming; for a `delete` action they have
+         * to type the object's name as well. Rejects with "the action was
          * declined" if they say no.
          */
         run(actionId: string, ref?: ActionTarget): Promise<RunResult>;

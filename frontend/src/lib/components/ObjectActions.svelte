@@ -94,7 +94,11 @@
      * buttons would otherwise ride along.
      */
     let pluginsHere = $derived(new Set(workspace.pluginsHereFor(object.contextId).map((p) => p.id)));
-    let offeredHere = $derived(offered.filter((action) => pluginsHere.has(action.pluginId)));
+    // A plugin's delete is left out too: the bar has a Delete of its own for
+    // every kind, and a plugin's is for its own pages to run.
+    let offeredHere = $derived(
+        offered.filter((action) => pluginsHere.has(action.pluginId) && action.type !== 'delete'),
+    );
 
     async function loadOffered(ref: DetailTarget): Promise<void> {
         try {

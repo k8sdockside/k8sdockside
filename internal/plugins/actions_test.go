@@ -62,8 +62,10 @@ func TestActionsAreRefusedWhereTheyWouldReachTooFar(t *testing.T) {
             "request": { "type": "subresource", "subresource": "x", "version": "v1", "method": "DELETE" } }`,
 		"a path in the version": `{ "id": "a", "kind": "` + vmKind + `",
             "request": { "type": "subresource", "subresource": "x", "version": "v1/../../api" } }`,
-		"no request":  `{ "id": "a", "kind": "` + vmKind + `" }`,
-		"a bad field": `{ "id": "a", "kind": "` + vmKind + `", "when": [{ "field": "status..x" }], "request": { "type": "patch", "patch": { "a": 1 } } }`,
+		"deleting a secret": `{ "id": "a", "kind": "secrets", "request": { "type": "delete" } }`,
+		"deleting a CRD":    `{ "id": "a", "kind": "crd:roles.rbac.authorization.k8s.io", "request": { "type": "delete" } }`,
+		"no request":        `{ "id": "a", "kind": "` + vmKind + `" }`,
+		"a bad field":       `{ "id": "a", "kind": "` + vmKind + `", "when": [{ "field": "status..x" }], "request": { "type": "patch", "patch": { "a": 1 } } }`,
 	}
 	for name, action := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -71,6 +73,27 @@ func TestActionsAreRefusedWhereTheyWouldReachTooFar(t *testing.T) {
 				t.Error("loaded, want it refused")
 			}
 		})
+	}
+}
+
+func TestADeleteActionLoadsAndSaysSoInItsOffer(t *testing.T) {
+	p, err := parsePlugin(t, `{
+        "id": "vms",
+        "actions": [
+            { "id": "delete-vm", "label": "Delete VM", "kind": "`+vmKind+`", "tone": "danger",
+              "confirm": "Delete {namespace}/{name}?", "request": { "type": "delete" } }
+        ]
+    }`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	del, ok := p.Action("delete-vm")
+	if !ok || del.Request.Type != RequestDelete {
+		t.Fatalf("delete-vm = %+v", del)
+	}
+	offer := del.Offer(p, "ns", "web")
+	if offer.Type != RequestDelete || offer.Confirm != "Delete ns/web?" {
+		t.Errorf("offer = %+v", offer)
 	}
 }
 

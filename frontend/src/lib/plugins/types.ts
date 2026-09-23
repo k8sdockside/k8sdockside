@@ -73,6 +73,12 @@ export interface PluginActionSpec {
     id: string;
     label: string;
     kind: string;
+    /** The request's type -- `patch`, `subresource`, `create` or `delete` -- so a delete can be asked about as one. */
+    type?: string;
+    /** `danger` or empty. */
+    tone?: string;
+    /** The manifest's question, with `{name}` and `{namespace}` not yet filled in. */
+    confirm?: string;
 }
 
 /** One of a plugin's own panels in the detail view of objects of a kind. */
@@ -98,6 +104,8 @@ export interface OfferedAction {
     confirm: string;
     /** The notice once it has worked. */
     done: string;
+    /** The request's type: `patch`, `subresource`, `create` or `delete`. */
+    type?: string;
 }
 
 /** One place a plugin points its reader at: the product's site, its source. */

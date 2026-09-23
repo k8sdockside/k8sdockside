@@ -556,6 +556,9 @@ func (s *PluginService) RunAction(contextID, pluginID, actionID, namespace, name
 		meta["namespace"] = namespace
 		object["metadata"] = meta
 		return s.watcher.Create(ctx, req.Kind, namespace, object)
+
+	case plugins.RequestDelete:
+		return "", s.watcher.Delete(ctx, action.Kind, namespace, name)
 	}
 	return "", fmt.Errorf("the %s plugin's action %q has a request this app cannot make", plugin.Name, actionID)
 }

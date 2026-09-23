@@ -64,7 +64,14 @@ export function adoptPlugin(plugin: bindings.Plugin): Plugin {
                   })),
               }
             : null,
-        actions: (plugin.actions ?? []).map((a) => ({ id: a.id, label: a.label, kind: a.kind })),
+        actions: (plugin.actions ?? []).map((a) => ({
+            id: a.id,
+            label: a.label,
+            kind: a.kind,
+            type: a.request?.type ?? '',
+            tone: a.tone ?? '',
+            confirm: a.confirm ?? '',
+        })),
         sections: (plugin.sections ?? []).map((s) => ({
             id: s.id,
             label: s.label,
