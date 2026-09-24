@@ -52,6 +52,14 @@ type UpdateStatus struct {
 	// no check has succeeded or the release has no file for it. The release
 	// page, which always exists, is the fallback.
 	Download string `json:"download"`
+	// Server is set in the web version, where the app is upgraded by whoever
+	// deployed it -- with Helm, usually -- rather than by the person in the
+	// browser. It never checks on its own there, and offers no download.
+	Server bool `json:"server"`
+	// CanCheck is whether a check may be asked for at all. False when the
+	// web version's operator has switched checks off -- a cluster that must
+	// not reach GitHub, say.
+	CanCheck bool `json:"canCheck"`
 }
 
 // UpdateService tells the window when a newer release of the app exists.
@@ -86,9 +94,12 @@ type UpdateService struct {
 	err       string
 	// stop ends the background loop; nil until ServiceStartup has begun it.
 	stop context.CancelFunc
-	// disabled is set in the web version, which is updated by whoever deploys
-	// it rather than by the person using it. It asks GitHub nothing.
-	disabled bool
+	// server is set in the web version, which is updated by whoever deploys
+	// it rather than by the person using it. There it never asks GitHub on its
+	// own: only when somebody presses Check now, to see whether the server is
+	// behind -- and never at all when noChecks says the operator forbade it.
+	server   bool
+	noChecks bool
 }
 
 // NewUpdateService wires the service to the settings it reads the preference
@@ -108,7 +119,7 @@ func NewUpdateService(store *appconfig.Store) *UpdateService {
 // ServiceStartup begins the background checks. Wails calls it as the app comes
 // up, on every service that has it.
 func (s *UpdateService) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
-	if s.disabled {
+	if s.server {
 		return nil
 	}
 	ctx, s.stop = context.WithCancel(ctx)
@@ -152,9 +163,10 @@ func (s *UpdateService) Status() UpdateStatus {
 
 // Check asks GitHub now, whether or not automatic checks are on: pressing the
 // button on the About page is the user asking, and the preference is about the
-// app asking on its own.
+// app asking on its own. The same in the web version, where it is the only
+// check there is -- unless the operator switched checks off.
 func (s *UpdateService) Check() UpdateStatus {
-	if s.disabled {
+	if s.noChecks {
 		return s.snapshot()
 	}
 	return s.check(context.Background())
@@ -187,7 +199,10 @@ func (s *UpdateService) snapshot() UpdateStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	status := UpdateStatus{Current: s.current, Error: s.err, Install: s.install.String()}
+	status := UpdateStatus{Current: s.current, Error: s.err, Install: s.install.String(), Server: s.server, CanCheck: !s.noChecks}
+	if s.server {
+		status.Install = "server"
+	}
 	if !s.checkedAt.IsZero() {
 		status.CheckedAt = s.checkedAt.Format(time.RFC3339)
 	}
@@ -196,7 +211,9 @@ func (s *UpdateService) snapshot() UpdateStatus {
 		status.Latest = &release
 		status.Newer = updates.Newer(s.current, release.Version)
 		status.Unread = status.Newer && s.store.Get().Updates.ReadVersion != release.Version
-		status.Download = release.Download(s.install)
+		if !s.server {
+			status.Download = release.Download(s.install)
+		}
 	}
 	return status
 }
@@ -226,7 +243,7 @@ func (s *UpdateService) MarkRead() (UpdateStatus, error) {
 // by the checker rather than taken from the window, so nothing the webview
 // says can decide what gets opened.
 func (s *UpdateService) OpenRelease() error {
-	if s.disabled {
+	if s.server {
 		return errDesktopOnly
 	}
 	s.mu.Lock()
@@ -249,7 +266,7 @@ func (s *UpdateService) OpenRelease() error {
 // to download -- no check yet, or no file for this platform -- it fails, and
 // the window is expected not to have offered the button.
 func (s *UpdateService) OpenDownload() error {
-	if s.disabled {
+	if s.server {
 		return errDesktopOnly
 	}
 	s.mu.Lock()

@@ -146,3 +146,24 @@ describe('every other kind', () => {
         expect(HelmUnsubscribe).not.toHaveBeenCalled();
     });
 });
+
+// A loading view tells "connecting" from "reading" by this: the watch is open,
+// the cluster reached, and the list is on its way.
+describe('opening', () => {
+    test('says when the watch is open, before any rows', async () => {
+        const opened = vi.fn();
+        const rows = vi.fn();
+        subscribe('ctx', 'pods', [], rows, vi.fn(), opened);
+        await vi.waitFor(() => expect(opened).toHaveBeenCalledOnce());
+        expect(rows).not.toHaveBeenCalled();
+    });
+
+    test('a watch that cannot be opened never says it is open', async () => {
+        Subscribe.mockRejectedValueOnce(new Error('connection refused'));
+        const opened = vi.fn();
+        const failed = vi.fn();
+        subscribe('ctx', 'pods', [], vi.fn(), failed, opened);
+        await vi.waitFor(() => expect(failed).toHaveBeenCalledWith('connection refused'));
+        expect(opened).not.toHaveBeenCalled();
+    });
+});

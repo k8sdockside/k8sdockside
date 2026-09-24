@@ -302,3 +302,57 @@ func TestOpenDownloadWithoutAnAppFailsRatherThanPanics(t *testing.T) {
 		t.Error("OpenDownload with nothing to download and no app: want an error")
 	}
 }
+
+// The web version never asks on its own -- it is upgraded by whoever deployed
+// it -- but says which version it is, and checks when somebody asks it to.
+func TestTheWebVersionChecksOnlyWhenAsked(t *testing.T) {
+	endpoint := newReleasesEndpoint(t, "v0.2.0")
+	s, _ := updateServiceFor(t, "v0.1.9", endpoint)
+	s.server = true
+	s.delay = 10 * time.Millisecond
+	s.every = 10 * time.Millisecond
+
+	if err := s.ServiceStartup(context.Background(), applicationServiceOptions()); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(60 * time.Millisecond)
+	if n := endpoint.asked.Load(); n != 0 {
+		t.Fatalf("the web version asked GitHub %d times on its own", n)
+	}
+	before := s.Status()
+	if before.Current != "v0.1.9" || !before.Server || !before.CanCheck {
+		t.Errorf("status before asking = %+v", before)
+	}
+
+	got := s.Check()
+	if endpoint.asked.Load() != 1 {
+		t.Fatalf("asked %d times, want once", endpoint.asked.Load())
+	}
+	if got.Latest == nil || got.Latest.Version != "v0.2.0" || !got.Newer {
+		t.Errorf("after asking = %+v, want v0.2.0 known and newer", got)
+	}
+	// Nothing to download: the server is upgraded with Helm, not from a browser.
+	if got.Download != "" || got.Install != "server" {
+		t.Errorf("download = %q, install = %q", got.Download, got.Install)
+	}
+	if err := s.OpenDownload(); err == nil {
+		t.Error("the web version opened a download")
+	}
+	_ = s.ServiceShutdown()
+}
+
+// A server that must not reach the internet: not even a pressed button asks.
+func TestTheWebVersionsOperatorCanForbidChecks(t *testing.T) {
+	endpoint := newReleasesEndpoint(t, "v0.2.0")
+	s, _ := updateServiceFor(t, "v0.1.9", endpoint)
+	s.server = true
+	s.noChecks = true
+
+	got := s.Check()
+	if endpoint.asked.Load() != 0 {
+		t.Fatalf("GitHub was asked with checks forbidden")
+	}
+	if got.CanCheck || got.Current != "v0.1.9" {
+		t.Errorf("status = %+v, want the version shown and no check offered", got)
+	}
+}

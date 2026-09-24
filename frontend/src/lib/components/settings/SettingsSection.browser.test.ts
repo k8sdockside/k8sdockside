@@ -110,6 +110,7 @@ test('the sections are ordered with the everyday ones first and About last', asy
         'Dates and times',
         'Plugins',
         'Behaviour',
+        'Notifications',
         'Terminal',
         'Helm',
         'Kubeconfig sources',
@@ -144,4 +145,42 @@ test('...and a freshly mounted view comes back to it, not to the first section',
 
     await expect.element(page.getByRole('tab', { name: 'Behaviour' })).toHaveAttribute('aria-selected', 'true');
     await expect.element(page.getByRole('tab', { name: 'Appearance' })).toHaveAttribute('aria-selected', 'false');
+});
+
+// Where alerts go is a choice of three, and a snooze is a button away.
+test('cluster alerts can go to the bell only, or nowhere, and be snoozed', async () => {
+    const { workspace } = await import('../../state/workspace.svelte');
+    workspace.setAlertMode('system');
+    workspace.snoozeAlerts(null);
+    render(SettingsView);
+    await page.getByRole('tab', { name: 'Notifications' }).click();
+
+    await page.getByRole('radio', { name: 'Only the bell' }).click();
+    expect(workspace.alertMode).toBe('bell');
+    expect(workspace.desktopNotifications).toBe(false);
+
+    await page.getByRole('button', { name: 'For 4 hours' }).click();
+    expect(workspace.alertsSnoozedUntil - Date.now()).toBeGreaterThan(3.9 * 3600_000);
+    await expect.element(page.getByRole('button', { name: 'Resume now' })).toBeVisible();
+
+    await page.getByRole('radio', { name: 'Off' }).click();
+    expect(workspace.alertMode).toBe('off');
+    // Nothing to snooze when nothing is raised.
+    expect(page.getByRole('button', { name: 'Resume now' }).elements()).toHaveLength(0);
+
+    workspace.setAlertMode('system');
+    workspace.snoozeAlerts(null);
+});
+
+// The bell's "Settings" and the help pages' buttons choose a section while
+// Settings may already be open; it follows.
+test('an open settings view follows a link to another section', async () => {
+    const { rememberSection } = await import('./section.svelte');
+    render(SettingsView);
+    await page.getByRole('tab', { name: 'Appearance' }).click();
+
+    rememberSection('notifications');
+
+    await expect.element(page.getByRole('tab', { name: 'Notifications' })).toHaveAttribute('aria-selected', 'true');
+    await expect.element(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
 });

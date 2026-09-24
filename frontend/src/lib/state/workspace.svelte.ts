@@ -30,6 +30,7 @@ import {
     isEmptyContextPrefs,
     type ConfigFile,
     type ContextPrefs,
+    type AlertMode,
     type ContextSort,
     type Density,
     type Settings,
@@ -291,6 +292,8 @@ function defaultSettings(): Settings {
             showLineNumbers: true,
             checkForUpdates: true,
             desktopNotifications: true,
+            alerts: 'system',
+            alertsSnoozedUntil: '',
             dateTime: { ...DEFAULT_DATETIME },
             metricsRange: 60,
             terminal: {
@@ -709,6 +712,10 @@ class Workspace {
     confirmSourceRemoval = $derived(this.settings.preferences.confirmSourceRemoval);
     checkForUpdates = $derived(this.settings.preferences.checkForUpdates);
     desktopNotifications = $derived(this.settings.preferences.desktopNotifications);
+    /** Where cluster alerts go. */
+    alertMode = $derived(this.settings.preferences.alerts);
+    /** When the alerts' snooze ends, as a timestamp; 0 when they are not snoozed. */
+    alertsSnoozedUntil = $derived(Date.parse(this.settings.preferences.alertsSnoozedUntil) || 0);
     /** Whether the sidebar groups contexts under the kubeconfig they came from. */
     showKubeconfigNames = $derived(this.settings.preferences.showKubeconfigNames);
     /**
@@ -3066,6 +3073,16 @@ class Workspace {
 
     setDesktopNotifications(desktopNotifications: boolean): void {
         this.updatePreferences({ desktopNotifications });
+    }
+
+    /** Where cluster alerts go from now on. */
+    setAlertMode(alerts: AlertMode): void {
+        this.updatePreferences({ alerts, desktopNotifications: alerts === 'system' });
+    }
+
+    /** Snoozes the cluster alerts until a moment, or ends a snooze with null. */
+    snoozeAlerts(until: Date | null): void {
+        this.updatePreferences({ alertsSnoozedUntil: until ? until.toISOString() : '' });
     }
 
     /** Changes one or more of how dates and times are written. */

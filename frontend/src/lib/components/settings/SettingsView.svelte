@@ -22,6 +22,7 @@
         { id: 'datetime', label: 'Dates and times', icon: 'clock' },
         { id: 'plugins', label: 'Plugins', icon: 'puzzle' },
         { id: 'behaviour', label: 'Behaviour', icon: 'sliders' },
+        { id: 'notifications', label: 'Notifications', icon: 'bell' },
         { id: 'terminal', label: 'Terminal', icon: 'terminal' },
         { id: 'helm', label: 'Helm', icon: 'helm' },
         { id: 'sources', label: 'Kubeconfig sources', icon: 'folder' },
@@ -43,6 +44,7 @@
     import AboutSection from './AboutSection.svelte';
     import AppearanceSection from './AppearanceSection.svelte';
     import BehaviourSection from './BehaviourSection.svelte';
+    import NotificationsSection from './NotificationsSection.svelte';
     import HelmSection from './HelmSection.svelte';
     import SourcesSection from './SourcesSection.svelte';
     import StartPageSection from './StartPageSection.svelte';
@@ -52,6 +54,13 @@
     import DateTimeSection from './DateTimeSection.svelte';
 
     let active = $state<SectionId>(startSection());
+
+    // A link from elsewhere -- the bell's "Settings", a help page's button --
+    // chooses a section while the view may already be open; it follows.
+    $effect(() => {
+        const id = settingsSection.current;
+        if (id !== active && SECTIONS.some((s) => s.id === id)) active = id as SectionId;
+    });
 
     function show(id: SectionId): void {
         active = id;
@@ -113,6 +122,8 @@
             <PluginsSection />
         {:else if active === 'behaviour'}
             <BehaviourSection />
+        {:else if active === 'notifications'}
+            <NotificationsSection />
         {:else if active === 'terminal'}
             <TerminalSection />
         {:else if active === 'helm'}

@@ -162,7 +162,7 @@ guide to everything else is in the app: press **F1**.
   those credentials go only to the API server they belong to.
 - **One other automatic request:** an update check with GitHub that carries
   nothing but the app's version. You can switch it off in *Settings →
-  Behaviour*.
+  Notifications*. The web version never checks on its own.
 - **Everything else happens only when you ask for it:** installing a plugin,
   upgrading a Helm release, opening a link.
 - **Your data goes to no one.** Beyond your clusters, the one fixed

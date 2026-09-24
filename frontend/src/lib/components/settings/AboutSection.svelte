@@ -85,7 +85,7 @@
         if (s.error) return 'Not checked yet.';
         return workspace.checkForUpdates
             ? 'Not checked yet. The app checks on its own shortly after launch.'
-            : 'Not checked yet. Automatic checks are off under Behaviour.';
+            : 'Not checked yet. Automatic checks are off under Notifications.';
     });
 
     function timeOf(iso: string): string {

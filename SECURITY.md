@@ -50,7 +50,9 @@ connection the app makes is listed in
   `api.github.com/repos/k8sdockside/k8sdockside/releases/latest`, carrying
   nothing but the app's name and version in its `User-Agent`. No cluster,
   kubeconfig or settings data is sent. It can be switched off under
-  *Settings → Behaviour*; the button under *About* checks only when pressed.
+  *Settings → Notifications*; the button under *About* checks only when pressed.
+  The web version never checks on its own: only when a user presses *Check
+  now* on the bell, and never when installed with `updateCheck: false`.
   The page it offers to open is built from the release tag, never taken from
   the response. Everything else that leaves the machine happens only when you
   ask for it: installing or updating a plugin, a Helm upgrade, the optional

@@ -13,7 +13,7 @@
 //
 // Its own store rather than a corner of the workspace, like the health store
 // it reports to: it reads no tabs or panes, and what it needs from the
-// workspace -- which clusters, what they are called, whether to notify -- is
+// workspace -- which clusters, what they are called, where alerts go -- is
 // handed to it at start rather than reached for.
 
 import { Events } from '@wailsio/runtime';
@@ -82,8 +82,12 @@ export interface FleetSource {
     all(): string[];
     /** The name a cluster is shown by, for the notifications. */
     nameOf(contextId: string): string;
-    /** Whether alerts go to the system's notifications as well. */
-    notify(): boolean;
+    /**
+     * Where alerts go -- the bell and the system's notifications, the bell
+     * only, or nowhere -- and until when they are snoozed (a timestamp, 0 for
+     * not snoozed).
+     */
+    alerts(): { mode: 'system' | 'bell' | 'off'; snoozedUntil: number };
     /** Opens a cluster, for a clicked notification. */
     open(contextId: string): void;
 }
@@ -285,7 +289,20 @@ class Fleet {
         this.alerts = [];
     }
 
+    /**
+     * Keeps one alert on the bell, and posts it to the system when the user
+     * wants that and has not snoozed it.
+     *
+     * Off, nothing is kept: the sidebar's marks and the fleet view still say
+     * what is wrong, and that is what somebody who switched alerts off asked
+     * for. Snoozed, the alert is still kept -- so nothing is lost while the
+     * user was not being told -- but it is kept read, which keeps the bell's
+     * dot quiet, and nothing is posted.
+     */
     private raise(contextId: string, draft: AlertDraft): void {
+        const want = this.source?.alerts() ?? { mode: 'system', snoozedUntil: 0 };
+        if (want.mode === 'off') return;
+        const snoozed = want.snoozedUntil > Date.now();
         const alert: ClusterAlert = {
             id: `alert-${++this.sequence}`,
             contextId,
@@ -293,12 +310,12 @@ class Fleet {
             title: draft.title,
             body: draft.body,
             at: Date.now(),
-            read: false,
+            read: snoozed,
             items: draft.items ?? [],
             action: draft.action ?? { kind: 'dashboard', label: 'Open the dashboard' },
         };
         this.alerts = [alert, ...this.alerts].slice(0, ALERTS_KEPT);
-        if (this.source?.notify()) void this.post(contextId, draft, alert.id);
+        if (want.mode === 'system' && !snoozed) void this.post(contextId, draft, alert.id);
     }
 
     /**

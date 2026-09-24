@@ -54,6 +54,12 @@ export function subscribe(
     namespaces: string[],
     onTable: Listener,
     onError: (message: string) => void,
+    /**
+     * Called once the backend has the watch open -- the cluster reached, its
+     * credentials accepted, the kind found -- and is reading the list. What a
+     * loading view uses to tell connecting from reading.
+     */
+    onOpen?: () => void,
 ): Subscription {
     // Helm releases go through their own service. A release is not a kind: the
     // backend watches the Secrets holding them and re-reads on each change,
@@ -86,6 +92,7 @@ export function subscribe(
             }
             id = subscriptionId;
             listeners.set(subscriptionId, onTable);
+            onOpen?.();
 
             const buffered = pending.get(subscriptionId);
             if (buffered) {

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/k8sdockside/k8sdockside/internal/appconfig"
 	"github.com/k8sdockside/k8sdockside/internal/gateway"
@@ -47,6 +48,9 @@ func main() {
 		Server:            true,
 		Owners:            owners,
 		KubeconfigFolders: folders,
+		// K8SDOCKSIDE_UPDATE_CHECK=false: never ask GitHub, not even when a
+		// user presses Check now. The server never asks on its own either way.
+		NoUpdateChecks: strings.EqualFold(strings.TrimSpace(os.Getenv("K8SDOCKSIDE_UPDATE_CHECK")), "false"),
 	})
 
 	gw, err := gateway.New(cfg, gateway.Deps{

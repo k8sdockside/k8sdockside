@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/k8sdockside/k8sdockside/internal/themes"
 )
@@ -465,7 +466,21 @@ type Preferences struct {
 	// woken up for it.
 	//
 	// Nullable for the same reason CheckForUpdates is: the default is on.
+	//
+	// Superseded by Alerts, which can also say "not at all"; still read, from
+	// a file older than it, to fill Alerts in.
 	DesktopNotifications *bool `json:"desktopNotifications"`
+	// Alerts is where the cluster alerts go: AlertsSystem (the bell and the
+	// system's notifications), AlertsBell (the bell only) or AlertsOff (not
+	// raised at all -- the sidebar's marks and the fleet view still show
+	// what is wrong). Empty in a file older than the choice, and then read
+	// from DesktopNotifications: on or unset is AlertsSystem, off AlertsBell.
+	Alerts string `json:"alerts,omitzero"`
+	// AlertsSnoozedUntil is when a snooze of the alerts ends, RFC3339; empty
+	// when they are not snoozed. While snoozed, alerts are kept on the bell
+	// but raise no system notification and no unread dot. Kept in the file so
+	// a snooze outlasts a restart, which is when it is most often wanted.
+	AlertsSnoozedUntil string `json:"alertsSnoozedUntil,omitzero"`
 	// Terminal is how a shell opens: in the dock or in the terminal emulator
 	// the user already has, which shell to try, and what a node shell is made
 	// of. See Terminal.
@@ -480,6 +495,13 @@ type Preferences struct {
 	// plugin's pages, which are handed the same choice. See DateTime.
 	DateTime DateTime `json:"dateTime"`
 }
+
+// Where cluster alerts go.
+const (
+	AlertsSystem = "system"
+	AlertsBell   = "bell"
+	AlertsOff    = "off"
+)
 
 // How a time of day is written.
 const (
@@ -705,6 +727,10 @@ func Defaults() Settings {
 			Helm:        DefaultHelm(),
 			Background:  Background{Source: BackgroundBuiltin, Palette: BackgroundPaletteVaried},
 			DateTime:    normaliseDateTime(DateTime{}),
+			// Alerts is left empty: a settings file is read over these
+			// defaults, and only an empty value lets normaliseAlerts tell a
+			// file from before the choice -- whose switch decides -- from one
+			// that made it. A fresh install is normalised the same way.
 		},
 		PortForwards: []PortForward{},
 	}
@@ -827,7 +853,7 @@ func Open() (*Store, error) {
 // temporary directory without going near the real settings file, and so that
 // the loading rules can be exercised without also exercising the migration.
 func openAt(path string) (*Store, error) {
-	s := &Store{path: path, data: Defaults()}
+	s := &Store{path: path, data: normalise(Defaults())}
 
 	raw, err := os.ReadFile(path) // #nosec G304 -- the app's own settings file
 	if errors.Is(err, fs.ErrNotExist) {
@@ -1267,6 +1293,7 @@ func (s *Store) SetPreferences(p Preferences) (Settings, error) {
 			p.DesktopNotifications = &notify
 		}
 		p.DateTime = normaliseDateTime(p.DateTime)
+		p = normaliseAlerts(p)
 		d.Preferences = p
 	})
 }
@@ -1530,6 +1557,7 @@ func normalise(s Settings) Settings {
 	s.Preferences.Helm = normaliseHelm(s.Preferences.Helm)
 	s.Preferences.Background = normaliseBackground(s.Preferences.Background)
 	s.Preferences.DateTime = normaliseDateTime(s.Preferences.DateTime)
+	s.Preferences = normaliseAlerts(s.Preferences)
 	s.BackgroundFolder = strings.TrimSpace(s.BackgroundFolder)
 	if s.PortForwards == nil {
 		s.PortForwards = []PortForward{}
@@ -1841,6 +1869,29 @@ func normaliseHelm(h Helm) Helm {
 // normaliseBackground repairs a source nothing answers to and an interval
 // outside what anyone would choose. The pinned picture is kept as written --
 // see Background.Pinned.
+// normaliseAlerts fills in where alerts go for a file older than the choice,
+// from the switch that came before it, and drops a snooze that is not a time.
+// A snooze that has run out is left for the reader to see as over: the file is
+// not rewritten on a timer.
+func normaliseAlerts(p Preferences) Preferences {
+	switch p.Alerts {
+	case AlertsSystem, AlertsBell, AlertsOff:
+	default:
+		if p.DesktopNotifications != nil && !*p.DesktopNotifications {
+			p.Alerts = AlertsBell
+		} else {
+			p.Alerts = AlertsSystem
+		}
+	}
+	p.AlertsSnoozedUntil = strings.TrimSpace(p.AlertsSnoozedUntil)
+	if p.AlertsSnoozedUntil != "" {
+		if _, err := time.Parse(time.RFC3339, p.AlertsSnoozedUntil); err != nil {
+			p.AlertsSnoozedUntil = ""
+		}
+	}
+	return p
+}
+
 // normaliseDateTime puts anything it does not know back to the default, so
 // every reader can switch on the constants alone.
 func normaliseDateTime(d DateTime) DateTime {

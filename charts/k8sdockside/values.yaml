@@ -382,6 +382,14 @@ auth:
     name: ""
     key: providers.json
 
+# Whether the bell may ask GitHub if a newer release of k8sdockside exists.
+# The server never asks on its own and never updates itself -- it is upgraded
+# by whoever runs it, with `helm upgrade` -- but anybody signed in can press
+# "Check now" on the bell to see whether this deployment is behind. Set false
+# for a cluster that must not reach the internet: the bell then only says
+# which version is running.
+updateCheck: true
+
 # Extra environment variables for the container, e.g. the OAuth client secrets
 # named by clientSecretEnv above, or any K8SDOCKSIDE_* setting the chart does not
 # have a value for.

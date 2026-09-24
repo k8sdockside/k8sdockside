@@ -14,6 +14,7 @@
     import SortableTable from './SortableTable.svelte';
     import EventTimeline from './EventTimeline.svelte';
     import WhenVisible from './WhenVisible.svelte';
+    import LoadingState from './LoadingState.svelte';
     import { detail } from '../state/detail.svelte';
     import { changes } from '../state/changes.svelte';
     import { actions } from '../state/actions.svelte';
@@ -265,7 +266,15 @@
 
 <div class="dashboard" style:--ctx-color={color}>
     {#if loading && !overview}
-        <p class="status">Loading cluster overview…</p>
+        {#key attempt}
+            <LoadingState
+                what="the overview"
+                cluster={context ? workspace.displayName(context) : contextId}
+                phase="reading"
+                steps={false}
+                onRetry={() => attempt++}
+            />
+        {/key}
     {:else if error}
         <ErrorState message={error} {context} onRetry={() => attempt++} />
     {:else if overview}

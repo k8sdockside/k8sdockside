@@ -125,7 +125,7 @@ const RELEASE = {
 };
 
 function status(over: Record<string, unknown> = {}) {
-    return { current: 'v0.0.2', latest: null, newer: false, unread: false, checkedAt: '', error: '', install: 'Debian package, amd64', download: '', ...over };
+    return { current: 'v0.0.2', latest: null, newer: false, unread: false, checkedAt: '', error: '', install: 'Debian package, amd64', download: '', server: false, canCheck: true, ...over };
 }
 
 const NEWS = status({ latest: RELEASE, newer: true, unread: true, checkedAt: '2026-09-06T10:00:00Z' });
@@ -358,4 +358,79 @@ test('a revealed alert opens the bell on its details', async () => {
     await expect.element(page.getByRole('button', { name: /Open Nodes/ })).toBeVisible();
     await expect.element(page.getByText('worker-3 — 2 of 3 nodes ready.')).toBeVisible();
     fleet.clear();
+});
+
+// A while without being told: the bell offers it, and says when it ends.
+test('cluster alerts can be snoozed from the bell, and resumed', async () => {
+    const { workspace } = await import('../state/workspace.svelte');
+    Status.mockResolvedValue({ current: 'v1', latest: null, newer: false, unread: false, checkedAt: '', error: '', install: '', download: '' });
+    workspace.setAlertMode('system');
+    workspace.snoozeAlerts(null);
+    render(NotificationMenu);
+
+    await page.getByRole('button', { name: /Notifications/ }).click();
+    await page.getByRole('button', { name: 'Snooze', exact: true }).click();
+    await page.getByRole('button', { name: 'For 1 hour' }).click();
+
+    const until = workspace.alertsSnoozedUntil;
+    expect(until - Date.now()).toBeGreaterThan(59 * 60 * 1000);
+    expect(until - Date.now()).toBeLessThanOrEqual(60 * 60 * 1000);
+    await expect.element(page.getByText(/Snoozed until/)).toBeVisible();
+
+    await page.getByRole('button', { name: /Snoozed · Resume/ }).click();
+    expect(workspace.alertsSnoozedUntil).toBe(0);
+});
+
+test('with cluster alerts off, the bell says so and offers no snooze', async () => {
+    const { workspace } = await import('../state/workspace.svelte');
+    const { fleet } = await import('../state/fleet.svelte');
+    Status.mockResolvedValue({ current: 'v1', latest: null, newer: false, unread: false, checkedAt: '', error: '', install: '', download: '' });
+    fleet.clear();
+    workspace.setAlertMode('off');
+    render(NotificationMenu);
+
+    await page.getByRole('button', { name: /Notifications/ }).click();
+    await expect.element(page.getByText(/Cluster alerts are off/)).toBeVisible();
+    expect(page.getByRole('button', { name: 'Snooze', exact: true }).elements()).toHaveLength(0);
+    workspace.setAlertMode('system');
+});
+
+// The web version, installed with Helm, says which version it runs and -- when
+// somebody asks -- whether a newer one is out, as work for whoever runs it.
+test('the web version says which version runs, and how a newer one is installed', async () => {
+    const { session } = await import('../state/session.svelte');
+    const desktop = session.info;
+    session.info = { ...desktop, server: true, admin: false };
+    try {
+        Status.mockResolvedValue(status({ current: 'v0.1.9', server: true, install: 'server' }));
+        Check.mockResolvedValue({ ...NEWS, current: 'v0.1.9', server: true, install: 'server' });
+        render(NotificationMenu);
+
+        await bell().click();
+        await expect.element(page.getByText(/This server runs K8s Dockside v0\.1\.9/)).toBeVisible();
+
+        await page.getByRole('button', { name: 'Check now' }).click();
+        await expect.element(page.getByText(/is available/)).toBeVisible();
+        await expect.element(page.getByText('helm upgrade')).toBeVisible();
+        // Nothing to download: the browser cannot install a server.
+        expect(page.getByRole('button', { name: /Download/ }).elements()).toHaveLength(0);
+    } finally {
+        session.info = desktop;
+    }
+});
+
+test('a server kept off the internet shows its version and offers no check', async () => {
+    const { session } = await import('../state/session.svelte');
+    const desktop = session.info;
+    session.info = { ...desktop, server: true, admin: false };
+    try {
+        Status.mockResolvedValue(status({ current: 'v0.1.9', server: true, canCheck: false }));
+        render(NotificationMenu);
+
+        await bell().click();
+        await expect.element(page.getByText('Version v0.1.9')).toBeVisible();
+        expect(page.getByRole('button', { name: 'Check now' }).elements()).toHaveLength(0);
+    } finally {
+        session.info = desktop;
+    }
 });

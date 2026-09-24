@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/metadata"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
@@ -42,6 +43,11 @@ const callTimeout = 20 * time.Second
 // kinds the UI names into the resources this particular server actually serves.
 type clusterClient struct {
 	dynamic dynamic.Interface
+	// metadata reads objects without their bodies: names, labels and
+	// versions. For the Helm release watch, whose Secrets carry a whole
+	// gzipped chart each and are wanted only as a signal -- see
+	// metadataInformerFor.
+	metadata metadata.Interface
 	// typed serves the one thing the dynamic client cannot reach: the Eviction
 	// API a drain goes through, which is a subresource create with a body of
 	// its own rather than a write to a resource.
@@ -110,6 +116,11 @@ func newClusterClient(kc Context) (*clusterClient, error) {
 		return nil, fmt.Errorf("dynamic client for context %q: %w", kc.Name, err)
 	}
 
+	meta, err := metadata.NewForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("metadata client for context %q: %w", kc.Name, err)
+	}
+
 	typed, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("client for context %q: %w", kc.Name, err)
@@ -122,12 +133,13 @@ func newClusterClient(kc Context) (*clusterClient, error) {
 	cached := memory.NewMemCacheClient(disco)
 
 	return &clusterClient{
-		dynamic: dyn,
-		typed:   typed,
-		mapper:  restmapper.NewDeferredDiscoveryRESTMapper(cached),
-		disco:   cached,
-		host:    cfg.Host,
-		cfg:     cfg,
+		dynamic:  dyn,
+		metadata: meta,
+		typed:    typed,
+		mapper:   restmapper.NewDeferredDiscoveryRESTMapper(cached),
+		disco:    cached,
+		host:     cfg.Host,
+		cfg:      cfg,
 		// The cache is empty and fills on first use, so a miss right after
 		// is against a listing fetched moments ago; counting the build as a
 		// reset keeps that first miss from fetching the same listing twice.

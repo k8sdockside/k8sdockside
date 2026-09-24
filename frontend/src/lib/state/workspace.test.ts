@@ -1173,6 +1173,8 @@ describe('preferences', () => {
             showLineNumbers: true,
             checkForUpdates: true,
             desktopNotifications: true,
+            alerts: 'system',
+            alertsSnoozedUntil: '',
             dateTime: { clock: 'system', dates: 'system', zone: 'local', ages: 'relative' },
             metricsRange: 60,
             terminal: {

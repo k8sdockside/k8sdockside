@@ -163,6 +163,7 @@ The most used keys. [values.yaml](values.yaml) documents every one.
 | `auth.adminEmails` | `[]` | OAuth users with these verified emails become admins |
 | `auth.providers` | `[]` | OAuth providers; callback `<publicURL>/-/oauth/<id>/callback` |
 | `auth.existingProvidersSecret` | | A providers JSON file from your own Secret |
+| `updateCheck` | `true` | Let users press **Check now** on the bell to see whether a newer release exists. The server never checks on its own and never updates itself; `false` keeps it off the internet entirely |
 | `resources` | 100m / 256Mi, limit 1Gi | |
 | `extraEnv` / `extraEnvFrom` | `[]` | e.g. the variables named by `clientSecretEnv` |
 | `extraVolumes` / `extraVolumeMounts` | `[]` | |

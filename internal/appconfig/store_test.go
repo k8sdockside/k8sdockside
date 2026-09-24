@@ -1537,3 +1537,62 @@ func TestDatesAndTimesRoundTrip(t *testing.T) {
 		t.Errorf("clock = %q, want %q", saved.Preferences.DateTime.Clock, ClockSystem)
 	}
 }
+
+// A file from before the choice keeps what its switch said: off meant "the
+// bell only", which is what the bell-only choice is.
+func TestAlertsAreReadFromTheSwitchBeforeThem(t *testing.T) {
+	cases := map[string]string{
+		`{"preferences":{}}`:                                             AlertsSystem,
+		`{"preferences":{"desktopNotifications":true}}`:                  AlertsSystem,
+		`{"preferences":{"desktopNotifications":false}}`:                 AlertsBell,
+		`{"preferences":{"alerts":"off"}}`:                               AlertsOff,
+		`{"preferences":{"alerts":"loud","desktopNotifications":false}}`: AlertsBell,
+	}
+	for body, want := range cases {
+		path := tempSettings(t)
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		store, err := openAt(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := store.Get().Preferences.Alerts; got != want {
+			t.Errorf("%s: alerts = %q, want %q", body, got, want)
+		}
+	}
+	if got := openIn(t).Get().Preferences.Alerts; got != AlertsSystem {
+		t.Errorf("a fresh install's alerts = %q", got)
+	}
+}
+
+func TestASnoozeOutlastsARestartAndNonsenseIsDropped(t *testing.T) {
+	path := tempSettings(t)
+	store, err := openAt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefs := store.Get().Preferences
+	prefs.Alerts = AlertsBell
+	prefs.AlertsSnoozedUntil = "2026-09-25T08:00:00Z"
+	if _, err := store.SetPreferences(prefs); err != nil {
+		t.Fatal(err)
+	}
+	again, err := openAt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := again.Get().Preferences
+	if got.Alerts != AlertsBell || got.AlertsSnoozedUntil != "2026-09-25T08:00:00Z" {
+		t.Errorf("alerts = %q until %q", got.Alerts, got.AlertsSnoozedUntil)
+	}
+
+	prefs.AlertsSnoozedUntil = "tomorrow"
+	saved, err := again.SetPreferences(prefs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Preferences.AlertsSnoozedUntil != "" {
+		t.Errorf("a snooze that is not a time was kept: %q", saved.Preferences.AlertsSnoozedUntil)
+	}
+}

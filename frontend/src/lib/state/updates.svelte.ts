@@ -5,10 +5,12 @@
 // keeps only the latest answer, and offers the two things that can be done with
 // it: open the release, or mark the notice as read so the bell goes quiet.
 //
-// None of it applies to the web version. There the app is whatever the server
-// was deployed with, and a newer release is news for whoever runs the server,
-// not for the person in the browser, who could neither download nor install
-// it. So there nothing is asked for, and nothing is ever unread.
+// In the web version the app is whatever the server was deployed with, and it
+// is upgraded by whoever runs it -- with Helm, usually. So there the backend
+// never asks on its own: the bell says which version is running, and asks
+// only when somebody presses Check now (and not even then when the operator
+// switched checks off). A newer release is still worth saying, as something
+// for whoever runs the server to do; there is nothing to download.
 
 import { Events } from '@wailsio/runtime';
 import { UpdateService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
@@ -22,7 +24,18 @@ export type UpdateStatus = main.UpdateStatus;
 export type Release = NonNullable<UpdateStatus['latest']>;
 
 /** The status before the backend has been asked anything. */
-const UNKNOWN: UpdateStatus = { current: '', latest: null, newer: false, unread: false, checkedAt: '', error: '', install: '', download: '' };
+const UNKNOWN: UpdateStatus = {
+    current: '',
+    latest: null,
+    newer: false,
+    unread: false,
+    checkedAt: '',
+    error: '',
+    install: '',
+    download: '',
+    server: false,
+    canCheck: true,
+};
 
 function message(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
@@ -47,16 +60,19 @@ class Updates {
         return this.status.latest;
     }
 
-    /** Whether a release newer than this build exists. Never, in the web version. */
+    /** Whether a release newer than this build exists. */
     get available(): boolean {
-        if (session.server) return false;
         return this.status.newer && this.status.latest !== null;
     }
 
     /** Whether that release is still news: newer, and not yet marked as read. */
     get unread(): boolean {
-        if (session.server) return false;
         return this.status.unread;
+    }
+
+    /** Whether a check may be asked for: false where the server's operator forbade it. */
+    get canCheck(): boolean {
+        return this.status.canCheck !== false;
     }
 
     /**
@@ -80,10 +96,6 @@ class Updates {
         // so it waits for that rather than asking first and ignoring the
         // answer. The session is asked once; this shares that question.
         await session.load();
-        if (session.server) {
-            this.loaded = true;
-            return;
-        }
         try {
             this.status = await UpdateService.Status();
         } catch {
@@ -95,9 +107,9 @@ class Updates {
         }
     }
 
-    /** Asks GitHub now, whether or not automatic checks are on. Not in the web version. */
+    /** Asks GitHub now, whether or not automatic checks are on. The web version's only check. */
     async check(): Promise<void> {
-        if (session.server) return;
+        if (!this.canCheck) return;
         this.checking = true;
         try {
             this.status = await UpdateService.Check();
@@ -116,8 +128,17 @@ class Updates {
         this.status = await UpdateService.MarkRead();
     }
 
-    /** Sends the latest release's page to the browser. */
+    /**
+     * Sends the latest release's page to the browser. In the web version the
+     * page is the browser, so it opens in a tab of its own -- the address is
+     * GitHub's, from the server's answer.
+     */
     async openRelease(): Promise<void> {
+        if (session.server) {
+            const url = this.latest?.url || 'https://github.com/k8sdockside/k8sdockside/releases';
+            window.open(url, '_blank', 'noopener,noreferrer');
+            return;
+        }
         await UpdateService.OpenRelease();
     }
 

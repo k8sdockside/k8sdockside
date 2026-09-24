@@ -26,6 +26,11 @@ type Options struct {
 	// in-cluster context, the Secrets the Helm chart mounts and the files
 	// uploaded through the admin page.
 	KubeconfigFolders []string
+	// NoUpdateChecks forbids the web version from asking GitHub whether a
+	// newer release exists even when somebody asks it to: for a server that
+	// must not reach the internet. Ignored by the desktop app, whose own
+	// setting decides.
+	NoUpdateChecks bool
 }
 
 // Built is what New hands back for main to register.
@@ -109,8 +114,10 @@ func New(settings *appconfig.Store, opts Options) Built {
 	looks.server = opts.Server
 	backdrops.server = opts.Server
 	// The web version is updated by whoever deploys it, not by the person
-	// using it, so it has no business telling them about new releases.
-	news.disabled = opts.Server
+	// using it: it never asks GitHub on its own there, only when somebody
+	// presses Check now -- and not even then when the operator said so.
+	news.server = opts.Server
+	news.noChecks = opts.Server && opts.NoUpdateChecks
 
 	return Built{
 		Services: []application.Service{

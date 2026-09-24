@@ -260,8 +260,12 @@ export interface Settings {
         showLineNumbers: boolean;
         /** Whether the app asks GitHub, on its own, if a newer release is out. */
         checkForUpdates: boolean;
-        /** Whether cluster alerts are posted as the system's notifications too. */
+        /** Whether cluster alerts are posted as the system's notifications too. Superseded by alerts. */
         desktopNotifications: boolean;
+        /** Where cluster alerts go: the bell and the system, the bell only, or nowhere. */
+        alerts: AlertMode;
+        /** When a snooze of the alerts ends, RFC3339; empty when not snoozed. */
+        alertsSnoozedUntil: string;
         /** How dates and times are written, in the app and in plugins' pages. */
         dateTime: DateTimeSettings;
         /** How far back a metrics chart looks, in minutes. */
@@ -288,6 +292,9 @@ export interface Settings {
         collapsedGroups: string[] | null;
     };
 }
+
+/** Where cluster alerts go. */
+export type AlertMode = 'system' | 'bell' | 'off';
 
 /** One resource in a listing. */
 export interface Row {
@@ -385,6 +392,11 @@ export function adoptSettings(settings: appconfig.Settings): Settings {
             checkForUpdates: settings.preferences?.checkForUpdates ?? true,
             // On by default, nullable on the Go side for the same reason.
             desktopNotifications: settings.preferences?.desktopNotifications ?? true,
+            // Filled in by the store from the switch before it; empty only
+            // from an older backend, where the switch still says.
+            alerts: ((settings.preferences?.alerts as AlertMode) ||
+                (settings.preferences?.desktopNotifications === false ? 'bell' : 'system')) as AlertMode,
+            alertsSnoozedUntil: settings.preferences?.alertsSnoozedUntil ?? '',
             // Normalised by the store, so an unknown value never arrives; an
             // empty one is a file older than the setting.
             dateTime: {

@@ -497,7 +497,7 @@ export const HELP: Page = {
                     only: 'desktop',
                     items: [
                         '**Settings** live in one JSON file: `$XDG_CONFIG_HOME/k8sdockside/settings.json` on Linux and macOS, `%AppData%\\k8sdockside\\settings.json` on Windows. The path is shown in the status bar and under Settings → About, with a button to open it. Deleting it is how you start over. Your themes and plugins sit in folders beside it.',
-                        '**Updates.** The bell in the title bar says when a newer release is out, and offers the release page and the download for the way this build was installed. It is one request to GitHub shortly after launch and every six hours, carrying nothing but the app’s name and version. Switch it off under Settings → Behaviour; the check-now button under About works either way.',
+                        '**Updates.** The bell in the title bar says when a newer release is out, and offers the release page and the download for the way this build was installed. It is one request to GitHub shortly after launch and every six hours, carrying nothing but the app’s name and version. Switch it off under Settings → Notifications; the check-now button under About works either way.',
                         '**Nothing else leaves the machine.** Clusters are dialled only when you open something on them, and Prometheus is reached through the API server you are already talking to. A cluster’s client is kept for two minutes after the last tab or poll on it, so switching tabs does not rebuild it, and a kind the cluster does not have is looked for again at most once a minute.',
                         '**Credentials.** Client certificates, tokens and `exec` credential plugins all work, because the app uses the same client library `kubectl` does.',
                     ],
@@ -507,7 +507,7 @@ export const HELP: Page = {
                     only: 'web',
                     items: [
                         '**Settings** are kept on the server and shared by everyone who signs in: a theme, a layout or a context’s colour changed by one person is changed for all. Settings → About says which version the server runs.',
-                        '**Updates** are up to whoever runs the server. The web version asks GitHub nothing, and has no update notice.',
+                        '**Updates** are up to whoever runs the server, with `helm upgrade`. The bell says which version the server runs, and **Check now** asks GitHub whether a newer release is out — only when pressed, never on its own, and not at all if the server was installed with `updateCheck: false`.',
                         '**Nothing leaves the server** that nobody asked for. Clusters are dialled only when someone opens something on them, and Prometheus is reached through the API server.',
                         '**Credentials** are the server’s — the kubeconfigs and service account it was given — and every signed-in user works through them.',
                     ],
@@ -517,7 +517,7 @@ export const HELP: Page = {
                     only: 'desktop',
                     actions: [
                         { kind: 'settings', section: 'about', label: 'About and updates' },
-                        { kind: 'settings', section: 'behaviour', label: 'Behaviour' },
+                        { kind: 'settings', section: 'notifications', label: 'Notifications' },
                     ],
                 },
                 {
@@ -525,7 +525,7 @@ export const HELP: Page = {
                     only: 'web',
                     actions: [
                         { kind: 'settings', section: 'about', label: 'About' },
-                        { kind: 'settings', section: 'behaviour', label: 'Behaviour' },
+                        { kind: 'settings', section: 'notifications', label: 'Notifications' },
                     ],
                 },
                 {

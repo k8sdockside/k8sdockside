@@ -10,7 +10,10 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
+	"sync"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -31,8 +34,10 @@ import (
 // That is not the same as not being live. SubscribeHelm watches the release
 // Secrets for the one thing the cache may safely hold -- that they changed --
 // and re-reads on each change, so a release upgraded from another machine
-// repaints here the way a pod does. See stripReleasePayload for what the watch
-// is allowed to remember, which is nothing that was in the release.
+// repaints here the way a pod does. The watch asks for the Secrets' metadata
+// only, so their payloads never even cross the network for it; and the
+// re-read takes each release's current revision, found from Helm's labels,
+// rather than all ten it keeps -- see helmReleases.
 
 // HelmReleaseSecretType marks a Secret as one of Helm 3's release records.
 const HelmReleaseSecretType = "helm.sh/release.v1" // #nosec G101 -- a Secret type label, not a credential
@@ -244,24 +249,111 @@ func (w *Watcher) helmReleases(kc Context, keep map[string]bool) (Table, error) 
 		ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 		defer cancel()
 
-		items, _, err := c.list(ctx, KindSecrets, metav1.ListOptions{
-			FieldSelector: helmReleaseField,
-		})
+		mapping, err := c.mappingForKind(KindSecrets)
 		if err != nil {
 			return err
 		}
-
-		pointers := make([]*unstructured.Unstructured, 0, len(items))
-		for i := range items {
-			if keep != nil && !keep[items[i].GetNamespace()] {
-				continue
-			}
-			pointers = append(pointers, &items[i])
+		// Which revision of each release is current is in the labels Helm puts
+		// on its Secrets, so that is read first, without the payloads. Only
+		// the current revision of each release is then read whole: a release
+		// keeps ten revisions by default, and each carries its gzipped chart.
+		heads, err := c.metadata.Resource(mapping.Resource).List(ctx, metav1.ListOptions{FieldSelector: helmReleaseField})
+		if err != nil {
+			return err
 		}
-		table = helmTable(pointers)
+		refs := currentRevisions(heads.Items, keep)
+
+		items, err := readSecrets(ctx, c, mapping, refs)
+		if err != nil && len(items) == 0 && len(refs) > 0 {
+			return err
+		}
+		table = helmTable(items)
 		return nil
 	})
 	return table, err
+}
+
+// currentRevisions picks, from release Secrets' metadata, the one holding
+// each release's current revision: the highest `version` label among those
+// with the same `name` in a namespace. A Secret without Helm's labels -- an
+// older Helm, one written by hand -- is kept as well, to be decoded and
+// judged on what it says, since its labels cannot be.
+func currentRevisions(items []metav1.PartialObjectMetadata, keep map[string]bool) []ObjectRef {
+	type head struct {
+		ref      ObjectRef
+		revision int
+	}
+	best := map[string]head{}
+	var unlabelled []ObjectRef
+	for i := range items {
+		m := &items[i]
+		if keep != nil && !keep[m.Namespace] {
+			continue
+		}
+		name := m.Labels["name"]
+		revision, err := strconv.Atoi(m.Labels["version"])
+		if name == "" || err != nil {
+			unlabelled = append(unlabelled, ObjectRef{Namespace: m.Namespace, Name: m.Name})
+			continue
+		}
+		key := m.Namespace + "/" + name
+		if seen, ok := best[key]; !ok || revision > seen.revision {
+			best[key] = head{ref: ObjectRef{Namespace: m.Namespace, Name: m.Name}, revision: revision}
+		}
+	}
+	out := make([]ObjectRef, 0, len(best)+len(unlabelled))
+	for _, h := range best {
+		out = append(out, h.ref)
+	}
+	out = append(out, unlabelled...)
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Namespace != out[j].Namespace {
+			return out[i].Namespace < out[j].Namespace
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+// helmReadParallel is how many release Secrets are read at once: enough that
+// fifty releases are not fifty round trips one after another, few enough to
+// leave the client's rate limit to pace them.
+const helmReadParallel = 8
+
+// readSecrets reads Secrets whole, several at a time. One that cannot be read
+// is left out -- a release deleted between the list and the read is the usual
+// reason -- and the first failure is returned alongside what was read.
+func readSecrets(ctx context.Context, c *clusterClient, mapping *meta.RESTMapping, refs []ObjectRef) ([]*unstructured.Unstructured, error) {
+	out := make([]*unstructured.Unstructured, len(refs))
+	errs := make([]error, len(refs))
+	slots := make(chan struct{}, helmReadParallel)
+	var wg sync.WaitGroup
+	for i, ref := range refs {
+		wg.Add(1)
+		slots <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-slots }()
+			got, err := resourceFor(c.dynamic, mapping, ref.Namespace).Get(ctx, ref.Name, metav1.GetOptions{})
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			out[i] = got
+		}()
+	}
+	wg.Wait()
+
+	read := make([]*unstructured.Unstructured, 0, len(refs))
+	var first error
+	for i := range out {
+		if out[i] != nil {
+			read = append(read, out[i])
+		} else if first == nil && errs[i] != nil {
+			first = errs[i]
+		}
+	}
+	return read, first
 }
 
 // SubscribeHelm opens a live view of a cluster's Helm releases and returns its
@@ -297,7 +389,9 @@ func (w *Watcher) SubscribeHelmFor(kc Context, namespaces []string, claim func(i
 		return "", err
 	}
 
-	live := w.informerFor(cl, mapping, helmReleaseField, stripReleasePayload)
+	// Metadata only: the watch is a signal that something changed, and the
+	// releases are then read again -- see helmReleases.
+	live := w.metadataInformerFor(cl, mapping, helmReleaseField)
 
 	sub := &subscription{
 		id:         fmt.Sprintf("sub-%d", w.nextID.Add(1)),
@@ -323,22 +417,4 @@ func (w *Watcher) SubscribeHelmFor(kc Context, namespaces []string, claim func(i
 	go w.firstSnapshot(sub)
 
 	return sub.id, nil
-}
-
-// stripReleasePayload drops a release Secret's payload before it is cached.
-//
-// stripBulk redacts Secret values too, but only for an object that arrives
-// carrying its kind, and this is not a place to depend on that: what would be
-// retained on a miss is precisely the rendered manifest and the chart values.
-// Here the payload is removed unconditionally, because this watch has no use
-// for it under any circumstances -- it exists to notice that a release changed,
-// and the release itself is then read live. See SubscribeHelm.
-func stripReleasePayload(obj any) (any, error) {
-	u, ok := obj.(*unstructured.Unstructured)
-	if !ok {
-		return obj, nil
-	}
-	u.SetManagedFields(nil)
-	unstructured.RemoveNestedField(u.Object, "data")
-	return u, nil
 }

@@ -13,15 +13,19 @@
   now. Drawn by the app rather than the platform for the reason the menus are
   -- see MenuBar.svelte.
 
-  The web version keeps the bell, as the fixed place news would arrive, but has
-  no release news to put in it: the server is upgraded by whoever runs it, not
-  from a browser. So there it is quiet, and offers no check.
+  The web version is upgraded by whoever runs it, with Helm, not from a
+  browser. So there the bell never asks GitHub on its own: it says which
+  version the server runs, checks when somebody presses Check now -- unless
+  the operator switched that off -- and a newer release is shown as work for
+  whoever runs the server, with no download.
 -->
 <script lang="ts">
     import { formatDate, formatDateTime, formatTime } from '../datetime.svelte';
     import { detail } from '../state/detail.svelte';
     import type { AlertItem } from '../fleet/alerts';
-    import { onMount } from 'svelte';
+    import { isSnoozed, snoozeChoices } from '../fleet/snooze';
+    import { rememberSection } from './settings/section.svelte';
+    import { onMount, untrack } from 'svelte';
     import { session } from '../state/session.svelte';
     import { updates } from '../state/updates.svelte';
     import { fleet, type ClusterAlert } from '../state/fleet.svelte';
@@ -58,6 +62,17 @@
     function clusterName(contextId: string): string {
         const context = workspace.contexts.find((c) => c.id === contextId);
         return context ? workspace.displayName(context) : contextId;
+    }
+
+    /** Whether the snooze choices are showing. */
+    let choosingSnooze = $state(false);
+
+    // Read as the panel opens, so a snooze that has run out since stops showing.
+    let snoozed = $derived(open && isSnoozed(workspace.alertsSnoozedUntil));
+
+    function snooze(until: Date | null): void {
+        workspace.snoozeAlerts(until);
+        choosingSnooze = false;
     }
 
     /** The alert whose details are open, if any. One at a time. */
@@ -97,10 +112,13 @@
 
     // A clicked system notification opens the bell on that alert, with its
     // details showing and in view.
+    // Only a request made after the bell was drawn: one from before -- a
+    // notification clicked an hour ago -- must not open it again.
+    let revealSeen = untrack(() => fleet.revealed?.nonce ?? 0);
     $effect(() => {
         const request = fleet.revealed;
-        if (!request) return;
-        request.nonce;
+        if (!request || request.nonce === revealSeen) return;
+        revealSeen = request.nonce;
         open = true;
         expanded = request.id;
         requestAnimationFrame(() => {
@@ -201,7 +219,38 @@
             bind:this={panelEl}
             onkeydown={onKeyDown}
         >
-            <p class="heading">Clusters</p>
+            <div class="heading-row">
+                <p class="heading">Clusters</p>
+                {#if workspace.alertMode !== 'off'}
+                    {#if snoozed}
+                        <button class="snooze-toggle on" onclick={() => snooze(null)} title="Alerts are snoozed; resume them now">
+                            <Icon name="pause" size={11} /> Snoozed · Resume
+                        </button>
+                    {:else}
+                        <button
+                            class="snooze-toggle"
+                            onclick={() => (choosingSnooze = !choosingSnooze)}
+                            aria-expanded={choosingSnooze}
+                            title="A while without being told about cluster alerts"
+                        >
+                            <Icon name="pause" size={11} /> Snooze
+                        </button>
+                    {/if}
+                {/if}
+            </div>
+            {#if choosingSnooze && !snoozed}
+                <div class="snooze-choices" role="group" aria-label="Snooze cluster alerts">
+                    {#each snoozeChoices() as choice (choice.label)}
+                        <button onclick={() => snooze(choice.until)}>{choice.label}</button>
+                    {/each}
+                </div>
+            {/if}
+            {#if snoozed}
+                <p class="snooze-note">
+                    Snoozed until {formatDateTime(workspace.alertsSnoozedUntil)}. Alerts are still kept here, but raise no
+                    notification and no dot.
+                </p>
+            {/if}
 
             {#if fleet.alerts.length > 0}
                 <ul class="alerts">
@@ -278,6 +327,11 @@
                     {/if}
                     <button onclick={() => fleet.clear()}><Icon name="trash" size={12} /> Clear</button>
                 </div>
+            {:else if workspace.alertMode === 'off'}
+                <p class="empty">
+                    Cluster alerts are off. The marks in the sidebar still show what is wrong.
+                    <button class="inline" onclick={() => { close(); rememberSection('notifications'); workspace.openSettings(); }}>Settings</button>
+                </p>
             {:else}
                 <p class="empty">
                     Nothing has changed for the worse on a connected cluster.
@@ -293,9 +347,16 @@
                     <div class="text">
                         <p class="title">K8s Dockside {latest.version} is available</p>
                         <p class="detail">
-                            You have {updates.status.current}{#if dayOf(latest.publishedAt)}
+                            {session.server ? 'This server runs' : 'You have'} {updates.status.current}{#if dayOf(latest.publishedAt)}
                                 · released {dayOf(latest.publishedAt)}{/if}
                         </p>
+                        <!-- Upgraded by whoever runs it, not from here: say how. -->
+                        {#if session.server}
+                            <p class="detail">
+                                Whoever runs this server upgrades it, usually with
+                                <code>helm upgrade</code> to the new chart version.
+                            </p>
+                        {/if}
                     </div>
                     <div class="actions">
                         <!-- The file for this install, when the release has
@@ -314,23 +375,25 @@
                 </article>
             {:else}
                 <p class="empty">
-                    {#if session.server}
-                        Nothing yet.
-                    {:else if updates.checking}
+                    {#if updates.checking}
                         Checking for updates…
                     {:else if updates.status.error}
                         Could not check for updates.
                     {:else if latest}
                         You're up to date. {latest.version} is the latest release.
+                    {:else if session.server}
+                        <!-- The web version never asks on its own: it says what it
+                             runs, and asks when somebody presses the button. -->
+                        This server runs K8s Dockside {updates.status.current || 'of an unknown version'}.
+                        {#if updates.canCheck}Check now to see whether a newer release is out.{/if}
                     {:else if workspace.checkForUpdates}
                         Nothing yet.
                     {:else}
-                        Update checks are off. Turn them on under Settings › Behaviour, or check now.
+                        Update checks are off. Turn them on under Settings › Notifications, or check now.
                     {/if}
                 </p>
             {/if}
 
-            {#if !session.server}
             <footer>
                 {#if updates.status.error}
                     <span class="problem" title={updates.status.error}>{updates.status.error}</span>
@@ -339,12 +402,16 @@
                 {:else}
                     <span class="checked"></span>
                 {/if}
-                <button class="check" disabled={updates.checking} onclick={() => void updates.check()}>
-                    <Icon name="refresh" size={12} />
-                    {updates.checking ? 'Checking…' : 'Check now'}
-                </button>
+                {#if updates.canCheck}
+                    <button class="check" disabled={updates.checking} onclick={() => void updates.check()}>
+                        <Icon name="refresh" size={12} />
+                        {updates.checking ? 'Checking…' : 'Check now'}
+                    </button>
+                {:else}
+                    <!-- The operator keeps this server off the internet. -->
+                    <span class="checked">Version {updates.status.current}</span>
+                {/if}
             </footer>
-            {/if}
         </div>
     {/if}
 </div>
@@ -412,6 +479,62 @@
         border-radius: var(--radius);
         background: var(--bg-raised);
         box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+    }
+
+    .heading-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .snooze-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin: 0 4px 4px 0;
+        padding: 2px 8px;
+        font-size: 11px;
+        border-radius: var(--radius-sm);
+        color: var(--text-faint);
+    }
+
+    .snooze-toggle:hover {
+        background: var(--bg-hover);
+        color: var(--text);
+    }
+
+    .snooze-toggle.on {
+        color: var(--warn);
+        background: color-mix(in srgb, var(--warn) 12%, transparent);
+    }
+
+    .snooze-choices {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 0 0 8px;
+    }
+
+    .snooze-choices button {
+        padding: 4px 9px;
+        border-radius: var(--radius-sm);
+        background: var(--bg-raised);
+        box-shadow: inset 0 0 0 1px var(--border);
+        font-size: 11px;
+        color: var(--text-dim);
+    }
+
+    .snooze-choices button:hover {
+        background: var(--bg-hover);
+        color: var(--text);
+    }
+
+    .snooze-note {
+        margin: 0 6px 8px;
+        font-size: 11px;
+        line-height: 1.45;
+        color: var(--text-faint);
     }
 
     .heading.releases {

@@ -47,7 +47,11 @@
                 const context = workspace.contexts.find((c) => c.id === id);
                 return context ? workspace.displayName(context) : id;
             },
-            notify: () => workspace.desktopNotifications && !session.server,
+            // The web version has no system of its own to notify: the bell only.
+            alerts: () => ({
+                mode: session.server && workspace.alertMode === 'system' ? 'bell' : workspace.alertMode,
+                snoozedUntil: workspace.alertsSnoozedUntil,
+            }),
             open: (id) => workspace.openTab(id, DASHBOARD),
         });
     });

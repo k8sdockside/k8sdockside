@@ -97,6 +97,8 @@ spec:
             {{- end }}
             - name: K8SDOCKSIDE_SESSION_TTL
               value: {{ .Values.auth.sessionTTL | quote }}
+            - name: K8SDOCKSIDE_UPDATE_CHECK
+              value: {{ .Values.updateCheck | quote }}
             - name: K8SDOCKSIDE_PASSWORD_LOGIN
               value: {{ .Values.auth.passwordLogin | quote }}
             {{- if .Values.auth.existingSetupTokenSecret.name }}

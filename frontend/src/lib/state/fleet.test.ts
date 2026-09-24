@@ -40,13 +40,13 @@ const NO_CREDENTIALS = { contextId: '', items: [], error: '' };
 
 let stop: (() => void) | null = null;
 
-function start(watched: string[], notify = true) {
+function start(watched: string[], notify: boolean | 'off' = true, snoozedUntil = 0) {
     stop?.();
     stop = fleet.start({
         watched: () => watched,
         all: () => [...watched, 'idle'],
         nameOf: (id) => `name of ${id}`,
-        notify: () => notify,
+        alerts: () => ({ mode: notify === 'off' ? 'off' : notify ? 'system' : 'bell', snoozedUntil }),
         open: vi.fn(),
     });
 }
@@ -172,4 +172,45 @@ test('a notification carries its alert, and revealing it opens that alert', asyn
     expect(fleet.revealed?.id).toBe(alert.id);
     expect(fleet.alerts[0]!.read).toBe(true);
     expect(fleet.reveal('alert-that-was-cleared')).toBe(false);
+});
+
+// Off means off: the sidebar and the fleet view still say what is wrong, but
+// nothing is raised.
+test('with alerts off nothing is raised', async () => {
+    start([], 'off');
+    Health.mockResolvedValueOnce(reading('a'));
+    await fleet.check('a');
+    Health.mockResolvedValueOnce(reading('a', { nodesReady: 2, notReadyNodes: ['worker-3'] }));
+    await fleet.check('a');
+
+    expect(fleet.alerts).toEqual([]);
+    expect(Send).not.toHaveBeenCalled();
+    // What is wrong is still known, for the sidebar's mark.
+    expect(fleet.trouble('a')).toMatchObject({ tone: 'error' });
+});
+
+// Snoozed, nothing pops up and the bell stays quiet -- but nothing is lost.
+test('snoozed, an alert is kept on the bell, read and unposted', async () => {
+    start([], true, Date.now() + 60 * 60 * 1000);
+    Health.mockResolvedValueOnce(reading('a'));
+    await fleet.check('a');
+    Health.mockResolvedValueOnce(reading('a', { nodesReady: 2, notReadyNodes: ['worker-3'] }));
+    await fleet.check('a');
+
+    expect(fleet.alerts).toHaveLength(1);
+    expect(fleet.alerts[0]!.read).toBe(true);
+    expect(fleet.unread).toBe(0);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(Send).not.toHaveBeenCalled();
+});
+
+test('a snooze that has run out is no snooze', async () => {
+    start([], true, Date.now() - 1000);
+    Health.mockResolvedValueOnce(reading('a'));
+    await fleet.check('a');
+    Health.mockResolvedValueOnce(reading('a', { nodesReady: 2, notReadyNodes: ['worker-3'] }));
+    await fleet.check('a');
+
+    expect(fleet.unread).toBe(1);
+    await vi.waitFor(() => expect(Send).toHaveBeenCalled());
 });

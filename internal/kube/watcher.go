@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic/dynamicinformer"
+	"k8s.io/client-go/metadata/metadatainformer"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -471,6 +472,53 @@ func (w *Watcher) informerFor(cl *cluster, mapping *meta.RESTMapping, field stri
 	// A watch that cannot be established -- unreachable cluster, expired
 	// credentials, no RBAC for this kind -- is the failure the user most needs
 	// to see, and it arrives here rather than from Subscribe.
+	_ = inf.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
+		w.reportError(live, err)
+	})
+
+	go inf.Run(live.stop)
+	return live
+}
+
+// metadataInformerFor is informerFor for a watch that is only a signal: it
+// fetches objects' metadata and never their bodies. The Helm release watch is
+// the one user -- a release Secret carries its whole gzipped chart and values,
+// often hundreds of kilobytes, with ten revisions kept per release by default,
+// and a full watch pulled all of that across the network just to throw it
+// away on arrival. Shared under a key of its own, so a full watch of the same
+// resource is never handed out in its place, or it in a full one's.
+func (w *Watcher) metadataInformerFor(cl *cluster, mapping *meta.RESTMapping, field string) *liveInformer {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	key := informerKey{gvr: mapping.Resource, field: "metadata:" + field}
+	if live, ok := cl.informers[key]; ok {
+		live.refs++
+		return live
+	}
+
+	var tweak metadatainformer.TweakListOptionsFunc
+	if field != "" {
+		tweak = func(opts *metav1.ListOptions) { opts.FieldSelector = field }
+	}
+	gi := metadatainformer.NewFilteredMetadataInformer(cl.client.metadata, mapping.Resource, "", resync, cache.Indexers{}, tweak)
+	inf := gi.Informer()
+
+	live := &liveInformer{
+		refs:     1,
+		key:      key,
+		informer: inf,
+		lister:   gi.Lister(),
+		scope:    mapping.Scope.Name(),
+		stop:     make(chan struct{}),
+	}
+	cl.informers[key] = live
+
+	_, _ = inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(any) { w.markKind(live) },
+		UpdateFunc: func(any, any) { w.markKind(live) },
+		DeleteFunc: func(any) { w.markKind(live) },
+	})
 	_ = inf.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
 		w.reportError(live, err)
 	})

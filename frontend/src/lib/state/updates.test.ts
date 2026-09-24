@@ -34,7 +34,7 @@ const RELEASE = {
 
 /** A status as the backend sends it. */
 function status(over: Record<string, unknown> = {}) {
-    return { current: 'v0.0.2', latest: null, newer: false, unread: false, checkedAt: '', error: '', install: 'Linux tarball, amd64', download: '', ...over };
+    return { current: 'v0.0.2', latest: null, newer: false, unread: false, checkedAt: '', error: '', install: 'Linux tarball, amd64', download: '', server: false, canCheck: true, ...over };
 }
 
 const NEWS = status({ latest: RELEASE, newer: true, unread: true, checkedAt: '2026-09-06T10:00:00Z' });
@@ -161,8 +161,9 @@ describe('the download for this install', () => {
     });
 });
 
-// The server is upgraded by whoever runs it. Nobody in a browser can download
-// or install a release, so there is nothing to ask and nothing to be news.
+// The server is upgraded by whoever runs it, with Helm. It never asks GitHub on
+// its own; it says which version runs, checks when somebody presses the
+// button, and says so when a newer release is out -- with nothing to download.
 describe('in the web version', () => {
     const DESKTOP = session.info;
 
@@ -174,24 +175,38 @@ describe('in the web version', () => {
         session.info = DESKTOP;
     });
 
-    test('nothing is asked for, and the bell still counts as loaded', async () => {
+    test('what the server knows is read, so the bell can say which version runs', async () => {
+        Status.mockResolvedValueOnce(status({ current: 'v0.1.9', server: true, install: 'server' }));
         await updates.load();
 
-        expect(Status).not.toHaveBeenCalled();
+        expect(Status).toHaveBeenCalledOnce();
+        expect(updates.status.current).toBe('v0.1.9');
         expect(updates.loaded).toBe(true);
     });
 
-    test('a check does nothing', async () => {
+    test('a check asks when somebody presses the button', async () => {
+        Check.mockResolvedValueOnce({ ...NEWS, server: true });
+        await updates.check();
+
+        expect(Check).toHaveBeenCalledOnce();
+        expect(updates.available).toBe(true);
+    });
+
+    test('with checks forbidden by the operator, pressing does nothing', async () => {
+        updates.status = status({ server: true, canCheck: false });
         await updates.check();
 
         expect(Check).not.toHaveBeenCalled();
-        expect(updates.checking).toBe(false);
+        expect(updates.canCheck).toBe(false);
     });
 
-    test('a newer release is never news', () => {
-        updates.status = NEWS;
+    test('the release page opens in a tab of its own, not through the server', async () => {
+        const opened = vi.spyOn(window, 'open').mockReturnValue(null);
+        updates.status = { ...NEWS, server: true };
+        await updates.openRelease();
 
-        expect(updates.unread).toBe(false);
-        expect(updates.available).toBe(false);
+        expect(opened).toHaveBeenCalledWith(RELEASE.url, '_blank', 'noopener,noreferrer');
+        expect(OpenRelease).not.toHaveBeenCalled();
+        opened.mockRestore();
     });
 });
