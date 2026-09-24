@@ -272,3 +272,37 @@ test('a width is held inside the range a column can be found in', async () => {
 
     expect(seen).toEqual([MIN_COLUMN_WIDTH]);
 });
+
+// A long list draws only the rows in view: a row costs about 0.15ms, and a
+// namespace of five thousand pods froze the window for most of a second when
+// it opened. The scrollbar is still as long as the whole list, and scrolling
+// brings the right rows in.
+test('a long list draws only what is in view, and scrolling brings the rest', async () => {
+    const box = document.createElement('div');
+    box.style.cssText = 'height: 400px; overflow: auto;';
+    document.body.appendChild(box);
+    const long = Array.from({ length: 3000 }, (_, i) => ({
+        id: `r${i}`,
+        name: `pod-${i}`,
+        namespace: 'default',
+        cells: [{ text: `pod-${i}`, sort: '', tone: '', pills: [] }, { text: 'Running', sort: '', tone: '', pills: [] }],
+    }));
+    await render(SortableTable, { props: { columns: ['Name', 'Status'], rows: long }, target: box });
+    const drawn = () => [...box.querySelectorAll('tbody tr[data-row]')].map((r) => r.querySelector('td')?.textContent ?? '');
+    const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+    await frame();
+
+    expect(drawn().length).toBeLessThan(200);
+    expect(drawn()[0]).toBe('pod-0');
+    // Every row is accounted for in the height, drawn or not.
+    const rowHeight = box.querySelector<HTMLElement>('tbody tr[data-row]')!.offsetHeight;
+    expect(box.scrollHeight).toBeGreaterThan(rowHeight * 2900);
+
+    box.scrollTop = rowHeight * 1500;
+    await frame();
+    await frame();
+    const now = drawn();
+    expect(now).toContain('pod-1500');
+    expect(now).not.toContain('pod-0');
+    box.remove();
+});

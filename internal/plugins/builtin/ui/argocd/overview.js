@@ -629,6 +629,16 @@
 
     function every(ms, fn) {
         function run() {
+            // Nothing is read while the window is hidden: the next turn waits
+            // for it to be shown, and runs the moment it is.
+            if (document.visibilityState === 'hidden') {
+                document.addEventListener('visibilitychange', function shown() {
+                    if (document.visibilityState === 'hidden') return;
+                    document.removeEventListener('visibilitychange', shown);
+                    run();
+                });
+                return;
+            }
             Promise.resolve()
                 .then(fn)
                 .catch(fail)

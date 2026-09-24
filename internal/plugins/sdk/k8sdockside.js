@@ -322,6 +322,16 @@
             var timer = null;
             var interval = Math.max(1000, (query && query.interval) || 5000);
             function tick() {
+                // Paused while the window is hidden -- nobody sees the answer --
+                // and resumed the moment it is shown.
+                if (document.visibilityState === 'hidden') {
+                    document.addEventListener('visibilitychange', function shown() {
+                        if (document.visibilityState === 'hidden' || stopped) return;
+                        document.removeEventListener('visibilitychange', shown);
+                        tick();
+                    });
+                    return;
+                }
                 call('list', query)
                     .then(function (items) {
                         if (!stopped) callback(items);

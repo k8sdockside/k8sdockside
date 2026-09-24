@@ -1,5 +1,6 @@
 <!-- The overview tab: what the cluster is, how much of it is healthy, and what has gone wrong lately. -->
 <script lang="ts">
+    import { everyWhileVisible } from '../visibility';
     import { formatDate, formatTime } from '../datetime.svelte';
     import { ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
@@ -12,6 +13,7 @@
     import Icon from './Icon.svelte';
     import SortableTable from './SortableTable.svelte';
     import EventTimeline from './EventTimeline.svelte';
+    import WhenVisible from './WhenVisible.svelte';
     import { detail } from '../state/detail.svelte';
     import { changes } from '../state/changes.svelte';
     import { actions } from '../state/actions.svelte';
@@ -108,13 +110,14 @@
         }
 
         void load();
-        const timer = setInterval(() => {
+        // Not while the window is hidden; see visibility.ts.
+        const stop = everyWhileVisible(REFRESH_MS, () => {
             if (live) void load();
-        }, REFRESH_MS);
+        });
 
         return () => {
             live = false;
-            clearInterval(timer);
+            stop();
         };
     });
 
@@ -452,12 +455,18 @@
              cluster is made of, the charts say what it has been doing, and the
              events say what went wrong. That is the order someone reads them
              in. -->
-        <MetricsPanel {contextId} attach="dashboard" title="Metrics" />
+        <!-- Below the fold on most screens, and a dozen Prometheus queries:
+             drawn as it comes into view rather than with the counters. -->
+        <WhenVisible height={320}>
+            <MetricsPanel {contextId} attach="dashboard" title="Metrics" />
+        </WhenVisible>
 
         <!-- The events again, drawn against time, which is what shows the
              order things went wrong in. The table under it is the newest few
              as rows. -->
-        <EventTimeline {contextId} namespaces={overview.namespaces} refreshKey={attempt} />
+        <WhenVisible height={260}>
+            <EventTimeline {contextId} namespaces={overview.namespaces} refreshKey={attempt} />
+        </WhenVisible>
 
         <section class="events">
             <h2>

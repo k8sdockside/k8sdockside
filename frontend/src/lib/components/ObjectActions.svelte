@@ -11,6 +11,7 @@
   mistaken for a question about something else.
 -->
 <script lang="ts">
+    import { everyWhileVisible } from '../visibility';
     import { singularFor } from '../catalogue';
     import { ANSWERS, actionsFor, actionsForVM, type Action, type ActionId } from '../actions';
     import { actions, type DrainOptions, type RolloutRevision } from '../state/actions.svelte';
@@ -121,8 +122,7 @@
         askingPlugin = null;
         if (!hasPluginActions) return;
         void loadOffered(ref);
-        const timer = setInterval(() => void loadOffered(ref), 5000);
-        return () => clearInterval(timer);
+        return everyWhileVisible(5000, () => void loadOffered(ref));
     });
 
     function choosePlugin(action: OfferedAction): void {

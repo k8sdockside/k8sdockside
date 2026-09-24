@@ -70,6 +70,23 @@
         "official": true
     },
     {
+        "id": "envoy-gateway",
+        "name": "Envoy Gateway",
+        "tagline": "Gateway API traffic through Envoy, from listener to backend",
+        "category": "networking",
+        "icon": "gateway",
+        "description": "Every Gateway with its addresses, listeners and proxies, a traffic map from listener to route to the Service behind it that shows where the path breaks, and every policy with what it is attached to and what it does in plain words. Panels on Gateways, routes and policies.",
+        "repo": "https://github.com/k8sdockside/envoy.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
+        "detect": ["crd:envoyproxies.gateway.envoyproxy.io"],
+        "links": [
+            { "label": "gateway.envoyproxy.io", "url": "https://gateway.envoyproxy.io" },
+            { "label": "GitHub", "url": "https://github.com/envoyproxy/gateway" }
+        ],
+        "official": true
+    },
+    {
         "id": "cilium",
         "name": "Cilium",
         "tagline": "eBPF networking, identities and the policies between them",

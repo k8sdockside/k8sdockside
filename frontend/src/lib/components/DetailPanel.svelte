@@ -23,6 +23,7 @@
     import ObjectActions from './ObjectActions.svelte';
     import ObjectLinks from './ObjectLinks.svelte';
     import PluginFrame from './PluginFrame.svelte';
+    import WhenVisible from './WhenVisible.svelte';
     import { detail } from '../state/detail.svelte';
     import { notices } from '../state/notices.svelte';
     import { copyText } from '../clipboard';
@@ -257,10 +258,14 @@
             {#each workspace.pluginSectionsFor(target.contextId, target.kind) as entry (entry.plugin.id + '/' + entry.section.id)}
                 <div class="plugin-section">
                     <h3>{entry.section.label} <span>· {entry.plugin.name}</span></h3>
-                    <PluginFrame
-                        contextId={target.contextId}
-                        section={{ pluginId: entry.plugin.id, sectionId: entry.section.id, object: target }}
-                    />
+                    <!-- Each is a frame of its own that loads a page and polls:
+                         started as it scrolls into view, not all at once. -->
+                    <WhenVisible height={entry.section.height ?? 160}>
+                        <PluginFrame
+                            contextId={target.contextId}
+                            section={{ pluginId: entry.plugin.id, sectionId: entry.section.id, object: target }}
+                        />
+                    </WhenVisible>
                 </div>
             {/each}
 

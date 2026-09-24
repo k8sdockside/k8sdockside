@@ -67,3 +67,21 @@ func TestEvictedAmongKeepsOnlyTheEvicted(t *testing.T) {
 		t.Errorf("evicted = %+v, want %+v", got, want)
 	}
 }
+
+// The dashboard's and the fleet's reads run at once: the wait is the slowest
+// of them, not their sum.
+func TestParallelRunsTogetherAndWaitsForAll(t *testing.T) {
+	start := time.Now()
+	done := make([]bool, 3)
+	parallel(
+		func() { time.Sleep(60 * time.Millisecond); done[0] = true },
+		func() { time.Sleep(60 * time.Millisecond); done[1] = true },
+		func() { time.Sleep(60 * time.Millisecond); done[2] = true },
+	)
+	if !done[0] || !done[1] || !done[2] {
+		t.Fatalf("returned before every function had: %v", done)
+	}
+	if took := time.Since(start); took > 150*time.Millisecond {
+		t.Errorf("took %s, as if they ran one after another", took)
+	}
+}

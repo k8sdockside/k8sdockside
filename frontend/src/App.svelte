@@ -14,6 +14,7 @@
   pane it was last dragged to.
 -->
 <script lang="ts">
+    import { everyWhileVisible } from './lib/visibility';
     import { onMount, untrack } from 'svelte';
     import Icon from './lib/components/Icon.svelte';
     import Pane from './lib/components/Pane.svelte';
@@ -169,8 +170,7 @@
     // And asked again now and then, so installing the descheduler into a
     // cluster that is already open brings its plugin to life without a reload.
     $effect(() => {
-        const timer = setInterval(() => workspace.recheckPlugins(), PLUGIN_RECHECK_MS);
-        return () => clearInterval(timer);
+        return everyWhileVisible(PLUGIN_RECHECK_MS, () => workspace.recheckPlugins());
     });
 
     // A plugin installed or switched on mid-session was not part of the last

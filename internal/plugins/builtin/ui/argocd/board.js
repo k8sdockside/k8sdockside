@@ -580,6 +580,15 @@
     }
 
     function tick() {
+        // Not while the window is hidden: the next read waits to be shown.
+        if (document.visibilityState === 'hidden') {
+            document.addEventListener('visibilitychange', function shown() {
+                if (document.visibilityState === 'hidden') return;
+                document.removeEventListener('visibilitychange', shown);
+                tick();
+            });
+            return;
+        }
         A.load(sdk)
             .then(function (model) {
                 $('error').hidden = true;

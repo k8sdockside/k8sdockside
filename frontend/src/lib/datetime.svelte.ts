@@ -177,6 +177,9 @@ function tick(): void {
     if (ticking || typeof window === 'undefined') return;
     ticking = true;
     setInterval(() => {
+        // Nothing to count for while nobody can see it; the first tick after
+        // the window is shown again brings every age up to date.
+        if (document.visibilityState === 'hidden') return;
         const now = Date.now();
         clock.second = now;
         if (Math.floor(now / 60_000) !== Math.floor(clock.minute / 60_000)) clock.minute = now;

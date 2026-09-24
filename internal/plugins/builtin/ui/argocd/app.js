@@ -162,8 +162,12 @@
             }
             tick();
             setInterval(function () {
-                if (!state.busy) tick();
+                if (!state.busy && document.visibilityState !== 'hidden') tick();
             }, POLL);
+            // Shown again after being hidden: read now rather than at the next turn.
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState !== 'hidden' && !state.busy) tick();
+            });
         })
         .catch(fail);
 })();

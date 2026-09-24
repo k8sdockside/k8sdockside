@@ -339,14 +339,27 @@
                 });
         }
 
-        function lists() {
+        /**
+         * Every Application and ApplicationSet, for working out who owns this
+         * one. Read on the first load and then once a minute, not on every
+         * poll: in a cluster with hundreds of Applications that is the
+         * heaviest read the view makes, and who owns an Application almost
+         * never changes while somebody is looking at it.
+         */
+        var LISTS_EVERY = 60000;
+        var listed = { at: 0, value: null };
+        function lists(force) {
+            if (!force && listed.value && Date.now() - listed.at < LISTS_EVERY) return Promise.resolve(listed.value);
             var apps = sdk.list({ kind: A.KINDS.apps }).catch(function () {
                 return [];
             });
             var sets = sdk.list({ kind: A.KINDS.appsets }).catch(function () {
                 return [];
             });
-            return Promise.all([apps, sets]);
+            return Promise.all([apps, sets]).then(function (value) {
+                listed = { at: Date.now(), value: value };
+                return value;
+            });
         }
 
         /**
@@ -355,7 +368,7 @@
          * not thrown away under them.
          */
         function reload(force) {
-            return Promise.all([opts.read(), lists()])
+            return Promise.all([opts.read(), lists(force)])
                 .then(function (got) {
                     if (opts.onRecover) opts.onRecover();
                     var obj = got[0];
@@ -397,7 +410,7 @@
             if (timer) return;
             reload(true);
             timer = setInterval(function () {
-                if (!state.busy) reload(false);
+                if (!state.busy && document.visibilityState !== 'hidden') reload(false);
             }, POLL);
         }
 

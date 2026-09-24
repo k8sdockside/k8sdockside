@@ -658,7 +658,9 @@ declare namespace K8sDockside {
          * Polls `list` every `query.interval` ms (default 5000, at least 1000)
          * and calls `onItems` with each answer, the first straight away. A
          * failed poll calls `onError` instead and polling carries on. Returns
-         * a function that stops it.
+         * a function that stops it. Polling pauses while the window is hidden
+         * and resumes, with a read straight away, when it is shown (0.1.10
+         * and newer).
          */
         watch<T extends KubeObject = KubeObject>(
             query: WatchQuery,

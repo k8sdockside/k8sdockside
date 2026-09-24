@@ -144,6 +144,13 @@
     }
 
     /**
+     * One collator for every comparison. localeCompare with options builds a
+     * new one per call, which is most of the time a sort of a few thousand
+     * rows takes.
+     */
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+
+    /**
      * What a cell sorts by: its sort key where it has one, its text otherwise.
      * An age reads "3d" and sorts by seconds; a volume reads "500Mi" and sorts
      * by bytes. Comparing the text would order them as words.
@@ -157,12 +164,84 @@
 
         const column = Math.min(sortColumn, Math.max(0, (columns.length || 1) - 1));
         const out = [...rows].sort((a, b) =>
-            sortKey(a.cells[column]).localeCompare(sortKey(b.cells[column]), undefined, {
-                numeric: true,
-                sensitivity: 'base',
-            }),
+            collator.compare(sortKey(a.cells[column]), sortKey(b.cells[column])),
         );
         return sortDescending ? out.reverse() : out;
+    });
+
+    // ----- drawing only the rows in view ------------------------------------
+    //
+    // A row costs about 0.15ms to draw, so a list of 5000 pods froze the
+    // window for most of a second when it opened, and again on every sort.
+    // Past WINDOW_FROM rows only the ones in view are drawn, with a spacer row
+    // above and below standing in for the rest, so the scrollbar is as long
+    // as it would be and the cost stays that of one screenful however long
+    // the list. Below it every row is drawn, as before: the saving is nothing
+    // there, and a plain table is simpler to reason about.
+    //
+    // Rows are one line (cells do not wrap), so every row is as tall as the
+    // first one drawn -- measured rather than assumed, since the density
+    // preference and the zoom both change it.
+
+    const WINDOW_FROM = 300;
+    /** Rows drawn beyond each edge of the view, so a fast scroll does not show gaps. */
+    const OVERSCAN = 20;
+
+    let tableEl = $state<HTMLTableElement | null>(null);
+    let scroller: HTMLElement | null = null;
+    let rowHeight = $state(30);
+    let windowStart = $state(0);
+    let windowSize = $state(80);
+
+    let windowed = $derived(sorted.length > WINDOW_FROM);
+    let first = $derived(windowed ? Math.min(windowStart, Math.max(0, sorted.length - windowSize)) : 0);
+    let last = $derived(windowed ? Math.min(sorted.length, first + windowSize) : sorted.length);
+    let drawn = $derived(windowed ? sorted.slice(first, last) : sorted);
+
+    /** The nearest ancestor that scrolls, which is what the rows move in. */
+    function scrollParentOf(node: HTMLElement): HTMLElement | null {
+        for (let el = node.parentElement; el; el = el.parentElement) {
+            const overflow = getComputedStyle(el).overflowY;
+            if (overflow === 'auto' || overflow === 'scroll') return el;
+        }
+        return null;
+    }
+
+    function measure(): void {
+        if (!tableEl || !scroller) return;
+        const row = tableEl.querySelector<HTMLTableRowElement>('tbody tr[data-row]');
+        if (row && row.offsetHeight > 0) rowHeight = row.offsetHeight;
+        const body = tableEl.tBodies[0];
+        if (!body) return;
+        // Where the first row would be, measured from the top of what scrolls.
+        const top = body.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+        const seen = scroller.scrollTop - top;
+        windowStart = Math.max(0, Math.floor(seen / rowHeight) - OVERSCAN);
+        windowSize = Math.ceil(scroller.clientHeight / rowHeight) + OVERSCAN * 2;
+    }
+
+    $effect(() => {
+        if (!tableEl || !windowed) return;
+        scroller = scrollParentOf(tableEl);
+        if (!scroller) return;
+        const target = scroller;
+        let frame = 0;
+        const onScroll = () => {
+            if (frame) return;
+            frame = requestAnimationFrame(() => {
+                frame = 0;
+                measure();
+            });
+        };
+        target.addEventListener('scroll', onScroll, { passive: true });
+        const resize = new ResizeObserver(onScroll);
+        resize.observe(target);
+        measure();
+        return () => {
+            target.removeEventListener('scroll', onScroll);
+            resize.disconnect();
+            cancelAnimationFrame(frame);
+        };
     });
 
     function sortBy(index: number): void {
@@ -250,7 +329,7 @@
     }
 </script>
 
-<table>
+<table bind:this={tableEl}>
     <thead>
         <tr>
             {#if picked}
@@ -317,8 +396,13 @@
         </tr>
     </thead>
     <tbody>
-        {#each sorted as row, at (row.id)}
+        {#if windowed && first > 0}
+            <tr class="spacer" aria-hidden="true" style:height="{first * rowHeight}px"><td colspan={shown.length + (picked ? 1 : 0)}></td></tr>
+        {/if}
+        {#each drawn as row, i (row.id)}
+            {@const at = first + i}
             <tr
+                data-row
                 class:selected={selectedRowId === row.id}
                 class:picked={picked?.has(row.id)}
                 onclick={(event) => press(row, at, event)}
@@ -342,7 +426,7 @@
                 {#each shown as column (column.index)}
                     {@const value = row.cells[column.index]}
                     <td class={value?.tone} style={sized(column.key)}>
-                        {#if cell}{@render cell(row, column.index)}{:else if value?.at}{@const shown = timeCell(value.text, value.at)}<span title={shown.title}>{shown.text}</span>{:else}{value?.text ?? ''}{/if}
+                        {#if cell}{@render cell(row, column.index)}{:else if value?.at}{@const moment = timeCell(value.text, value.at)}<span title={moment.title}>{moment.text}</span>{:else}{value?.text ?? ''}{/if}
                     </td>
                 {/each}
             </tr>
@@ -351,6 +435,9 @@
                 <td colspan={shown.length + (picked ? 1 : 0)}>{empty}</td>
             </tr>
         {/each}
+        {#if windowed && last < sorted.length}
+            <tr class="spacer" aria-hidden="true" style:height="{(sorted.length - last) * rowHeight}px"><td colspan={shown.length + (picked ? 1 : 0)}></td></tr>
+        {/if}
     </tbody>
 </table>
 
@@ -453,6 +540,19 @@
     tbody tr {
         cursor: default;
         border-bottom: 1px solid var(--border-soft);
+    }
+
+    /* The rows not drawn, when only those in view are: space and nothing
+       else, so the scrollbar is as long as the list. */
+    tbody tr.spacer,
+    tbody tr.spacer:hover {
+        border: 0;
+        background: none;
+    }
+
+    tbody tr.spacer td {
+        padding: 0;
+        border: 0;
     }
 
     tbody tr:hover {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -106,24 +107,41 @@ func (w *Watcher) Overview(kc Context) (Overview, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 		defer cancel()
 
-		if v, err := c.disco.ServerVersion(); err == nil {
-			out.Version = v.GitVersion
-		}
 		out.Server = c.host
 
-		namespaces, _, err := c.list(ctx, KindNamespaces, metav1.ListOptions{})
-		if err != nil {
-			return err
+		// Six reads that do not depend on one another, made at once: against
+		// a cluster at the far end of a VPN each is a round trip, and one
+		// after another the dashboard waited for the sum of them rather than
+		// for the slowest.
+		var (
+			namespaces, nodes, pods, deployments []unstructured.Unstructured
+			nsErr, nodesErr, podsErr, deployErr  error
+			version                              string
+		)
+		parallel(
+			func() {
+				if v, err := c.disco.ServerVersion(); err == nil {
+					version = v.GitVersion
+				}
+			},
+			func() { namespaces, _, nsErr = c.list(ctx, KindNamespaces, metav1.ListOptions{}) },
+			func() { nodes, _, nodesErr = c.list(ctx, KindNodes, metav1.ListOptions{}) },
+			func() { pods, _, podsErr = c.list(ctx, KindPods, metav1.ListOptions{}) },
+			func() { deployments, _, deployErr = c.list(ctx, KindDeployments, metav1.ListOptions{}) },
+			func() { out.Events = c.eventTable(ctx) },
+		)
+		out.Version = version
+		for _, err := range []error{nsErr, nodesErr, podsErr} {
+			if err != nil {
+				return err
+			}
 		}
+
 		for i := range namespaces {
 			out.Namespaces = append(out.Namespaces, namespaces[i].GetName())
 		}
 		sort.Strings(out.Namespaces)
 
-		nodes, _, err := c.list(ctx, KindNodes, metav1.ListOptions{})
-		if err != nil {
-			return err
-		}
 		nodesReady := 0
 		for i := range nodes {
 			n := &nodes[i]
@@ -133,10 +151,6 @@ func (w *Watcher) Overview(kc Context) (Overview, error) {
 		}
 		out.Distribution = distributionOf(nodes)
 
-		pods, _, err := c.list(ctx, KindPods, metav1.ListOptions{})
-		if err != nil {
-			return err
-		}
 		podsRunning := 0
 		for i := range pods {
 			if nestedString(&pods[i], "status", "phase") == "Running" {
@@ -145,8 +159,10 @@ func (w *Watcher) Overview(kc Context) (Overview, error) {
 		}
 		out.Pods = podTrouble(pods)
 
+		// Deployments are allowed to fail: a role that cannot list them still
+		// sees its nodes and pods.
 		deployTotal, deployReady := 0, 0
-		if deployments, _, err := c.list(ctx, KindDeployments, metav1.ListOptions{}); err == nil {
+		if deployErr == nil {
 			for i := range deployments {
 				d := &deployments[i]
 				deployTotal++
@@ -166,8 +182,6 @@ func (w *Watcher) Overview(kc Context) (Overview, error) {
 		// the Budget's, which counts them for a node and a namespace as well
 		// and by the scheduler's own rules. Two implementations of the same
 		// sum would eventually disagree.
-
-		out.Events = c.eventTable(ctx)
 		return nil
 	})
 
@@ -175,6 +189,21 @@ func (w *Watcher) Overview(kc Context) (Overview, error) {
 		out.Error = err.Error()
 	}
 	return out, err
+}
+
+// parallel runs each function in a goroutine of its own and returns when all
+// of them have. For reads that do not depend on one another; each writes only
+// its own variables.
+func parallel(fns ...func()) {
+	var wg sync.WaitGroup
+	wg.Add(len(fns))
+	for _, fn := range fns {
+		go func() {
+			defer wg.Done()
+			fn()
+		}()
+	}
+	wg.Wait()
 }
 
 // dashboardEvents is how many rows the dashboard panel shows. Enough to be

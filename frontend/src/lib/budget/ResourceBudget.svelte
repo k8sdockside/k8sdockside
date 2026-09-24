@@ -14,6 +14,7 @@
   cluster doing nothing.
 -->
 <script lang="ts">
+    import { everyWhileVisible } from '../visibility';
     import { ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import { formatValue, type Unit } from '../charts/format';
     import { adoptBudget, adoptDelay, barsFor, ceilingOf, delayTone, type Bar, type Budget, type CPUDelay } from './adopt';
@@ -89,13 +90,14 @@
             if (live) await load();
         })();
 
-        const timer = setInterval(() => {
+        // Not while the window is hidden; see visibility.ts.
+        const stop = everyWhileVisible(REFRESH_MS, () => {
             if (live) void load();
-        }, REFRESH_MS);
+        });
 
         return () => {
             live = false;
-            clearInterval(timer);
+            stop();
         };
     });
 

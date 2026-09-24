@@ -11,6 +11,7 @@
   so a cluster with no monitoring shows no empty frame.
 -->
 <script lang="ts">
+    import { everyWhileVisible } from '../visibility';
     import { MetricsService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import Icon from '../components/Icon.svelte';
     import { adoptPanel, type MetricsPanelData } from './adopt';
@@ -97,13 +98,14 @@
             if (live) await load();
         })();
 
-        const timer = setInterval(() => {
+        // Not while the window is hidden; see visibility.ts.
+        const stop = everyWhileVisible(REFRESH_MS, () => {
             if (live) void load();
-        }, REFRESH_MS);
+        });
 
         return () => {
             live = false;
-            clearInterval(timer);
+            stop();
         };
     });
 

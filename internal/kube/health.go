@@ -70,10 +70,28 @@ func (w *Watcher) Health(kc Context) (ClusterHealth, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 		defer cancel()
 
-		nodes, _, err := c.list(ctx, KindNodes, metav1.ListOptions{})
-		if err != nil {
-			return err
+		// Three reads at once, for the reason Overview makes its own so.
+		var (
+			nodes, pods, events         []unstructured.Unstructured
+			nodesErr, podsErr, eventErr error
+		)
+		parallel(
+			func() { nodes, _, nodesErr = c.list(ctx, KindNodes, metav1.ListOptions{}) },
+			func() { pods, _, podsErr = c.list(ctx, KindPods, metav1.ListOptions{}) },
+			// Only the warnings: the field selector is served by the API
+			// server, so a cluster with a hundred thousand Normal events does
+			// not send them all to be thrown away here.
+			func() {
+				events, _, eventErr = c.list(ctx, KindEvents, metav1.ListOptions{FieldSelector: "type=Warning", Limit: 2000})
+			},
+		)
+		if nodesErr != nil {
+			return nodesErr
 		}
+		if podsErr != nil {
+			return podsErr
+		}
+
 		out.NodesTotal = len(nodes)
 		for i := range nodes {
 			if conditionStatus(&nodes[i], "Ready", "status", "conditions") == "True" {
@@ -84,10 +102,6 @@ func (w *Watcher) Health(kc Context) (ClusterHealth, error) {
 		}
 		sort.Strings(out.NotReadyNodes)
 
-		pods, _, err := c.list(ctx, KindPods, metav1.ListOptions{})
-		if err != nil {
-			return err
-		}
 		out.PodsTotal = len(pods)
 		for i := range pods {
 			if nestedString(&pods[i], "status", "phase") == "Running" {
@@ -96,10 +110,8 @@ func (w *Watcher) Health(kc Context) (ClusterHealth, error) {
 		}
 		out.Pods = podTrouble(pods)
 
-		// Only the warnings: the field selector is served by the API server,
-		// so a cluster with a hundred thousand Normal events does not send
-		// them all to be thrown away here.
-		if events, _, err := c.list(ctx, KindEvents, metav1.ListOptions{FieldSelector: "type=Warning", Limit: 2000}); err == nil {
+		// Events are allowed to fail -- see above.
+		if eventErr == nil {
 			out.Warnings, out.WarningReasons = recentWarnings(events, time.Now())
 		}
 		return nil
