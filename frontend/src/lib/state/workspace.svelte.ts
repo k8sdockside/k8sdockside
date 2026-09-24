@@ -1361,6 +1361,15 @@ class Workspace {
     }
 
     /**
+     * Opens the pod listing searched for some text across every namespace --
+     * a status such as Evicted, from the dashboard's attention panel.
+     */
+    showPodsMatching(contextId: string, query: string): void {
+        views.focusQuery(resourceTabId(contextId, PODS), query);
+        this.openTab(contextId, PODS);
+    }
+
+    /**
      * Opens the app-wide settings, or focuses it if already open.
      *
      * It goes to the far end of the strip rather than beside the current tab,

@@ -250,3 +250,57 @@ test('a first read that fails is the page, not a note', async () => {
     await expect.element(page.getByRole('button', { name: 'Try again' })).toBeVisible();
     expect(page.getByRole('button', { name: 'Refresh' }).elements()).toHaveLength(0);
 });
+
+// Evicted pods linger as Failed until something deletes them, and the Pods
+// tile only says how many are not running -- so the dashboard says why, and
+// the count is the way to the pods themselves.
+test('evicted pods are called out and lead to the pods tab searched for them', async () => {
+    vi.mocked(ResourceService.Overview).mockResolvedValue({
+        ...OVERVIEW,
+        pods: {
+            evicted: 42,
+            failed: 0,
+            crashLooping: 0,
+            restarting: 3,
+            restarts: 11,
+            worst: [{ namespace: 'monitoring', name: 'loki-0', reason: 'Evicted', restarts: 0 }],
+        },
+    } as never);
+    render(Dashboard, { contextId: PROD });
+
+    await expect.element(page.getByText('Pods need attention')).toBeVisible();
+    await expect.element(page.getByText('3 pods restarted · 11 restarts')).toBeVisible();
+
+    await page.getByRole('button', { name: /42 evicted/ }).click();
+    expect(workspace.tabs.map((t) => [t.contextId, t.kind])).toContainEqual([PROD, 'pods']);
+
+    await page.getByRole('button', { name: /loki-0/ }).click();
+    expect(detail.target).toEqual({ contextId: PROD, kind: 'pods', namespace: 'monitoring', name: 'loki-0' });
+});
+
+test('a cluster with nothing wrong with its pods shows no attention panel', async () => {
+    vi.mocked(ResourceService.Overview).mockResolvedValue({
+        ...OVERVIEW,
+        pods: { evicted: 0, failed: 0, crashLooping: 0, restarting: 0, restarts: 0, worst: [] },
+    } as never);
+    render(Dashboard, { contextId: PROD });
+
+    await expect.element(page.getByText('Talos')).toBeVisible();
+    expect(page.getByText('Pods need attention').elements()).toHaveLength(0);
+});
+
+// Deleting the evicted pods the panel lists should make it say so, rather than
+// leave the old count up until the next poll half a minute later.
+test('a delete in this cluster reads the dashboard again, and one in another does not', async () => {
+    const { changes } = await import('../state/changes.svelte');
+    render(Dashboard, { contextId: PROD });
+    await expect.element(page.getByText('Talos')).toBeVisible();
+    const before = vi.mocked(ResourceService.Overview).mock.calls.length;
+
+    changes.touched('/home/u/.kube/config::admin@staging');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(vi.mocked(ResourceService.Overview).mock.calls.length).toBe(before);
+
+    changes.touched(PROD);
+    await expect.poll(() => vi.mocked(ResourceService.Overview).mock.calls.length).toBe(before + 1);
+});

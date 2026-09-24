@@ -94,6 +94,18 @@ export const views = {
         bump();
     },
 
+    /**
+     * Sets a list's search to some text, whether or not its tab is on screen,
+     * clearing the node and namespace filters so nothing else hides the rows
+     * it matches. For the dashboard's "show me the evicted pods", which wants
+     * every one of them across the cluster.
+     */
+    focusQuery(tabId: string, query: string): void {
+        const view = remembered.get(tabId) ?? blank();
+        remembered.set(tabId, { ...view, query, node: '', namespaces: [] });
+        bump();
+    },
+
     remember(tabId: string, view: TabView): void {
         remembered.set(tabId, { ...view, namespaces: [...view.namespaces] });
     },

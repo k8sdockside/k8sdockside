@@ -32,6 +32,8 @@ function key(ref: ObjectRef): string {
 
 class Changes {
     private revs = $state<Record<string, number>>({});
+    /** Writes per cluster, deletes included -- see writes. */
+    private clusters = $state<Record<string, number>>({});
 
     /**
      * How many times this object has been written since the app started. The
@@ -45,6 +47,25 @@ class Changes {
     changed(ref: ObjectRef): void {
         const k = key(ref);
         this.revs[k] = (this.revs[k] ?? 0) + 1;
+        this.touched(ref.contextId);
+    }
+
+    /**
+     * How many times anything in this cluster has been written or deleted
+     * from here. For views that summarise a whole cluster rather than show
+     * one object -- the dashboard, whose counts go stale the moment a pod is
+     * deleted and would otherwise wait for the next poll to say so.
+     */
+    writes(contextId: string): number {
+        return this.clusters[contextId] ?? 0;
+    }
+
+    /**
+     * Says something in a cluster changed without naming an object to
+     * re-read: a delete or an eviction, where the object is gone.
+     */
+    touched(contextId: string): void {
+        this.clusters[contextId] = (this.clusters[contextId] ?? 0) + 1;
     }
 }
 

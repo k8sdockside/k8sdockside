@@ -76,6 +76,32 @@ type Stat struct {
 	Total int    `json:"total"`
 }
 
+// PodTrouble counts the pods on a cluster that need someone to look at them.
+type PodTrouble struct {
+	// Evicted pods are left behind by the kubelet as Failed with reason
+	// Evicted, and stay until something deletes them.
+	Evicted int `json:"evicted"`
+	// Failed is every other pod in phase Failed.
+	Failed int `json:"failed"`
+	// CrashLooping pods have a container that is not coming up on its own:
+	// CrashLoopBackOff, an image that cannot be pulled, and the like.
+	CrashLooping int `json:"crashLooping"`
+	// Restarting is how many pods have restarted a container at all, and
+	// Restarts how many restarts they add up to.
+	Restarting int `json:"restarting"`
+	Restarts   int `json:"restarts"`
+	// Worst is the handful of pods most worth opening, worst first.
+	Worst []PodIssue `json:"worst"`
+}
+
+// PodIssue is one pod on the dashboard's attention list.
+type PodIssue struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+	Reason    string `json:"reason"`
+	Restarts  int    `json:"restarts"`
+}
+
 // Event is a cluster event as shown on the dashboard and in the events table.
 type Event struct {
 	Type    string `json:"type"`
@@ -95,6 +121,10 @@ type Overview struct {
 	Distribution string   `json:"distribution"`
 	Namespaces   []string `json:"namespaces"`
 	Stats        []Stat   `json:"stats"`
+	// Pods is what is wrong with the cluster's pods, beyond the running count
+	// the Pods tile already gives: a tile that says 180/240 does not say that
+	// fifty of the sixty are evicted.
+	Pods PodTrouble `json:"pods"`
 	// Events is the same Table the events tab renders, capped to what the
 	// dashboard has room for, so both are sorted and sortable by the same code
 	// rather than by two implementations that can disagree.

@@ -310,6 +310,8 @@ export interface Overview {
     distribution: string;
     namespaces: string[];
     stats: kube.Stat[];
+    /** What is wrong with the cluster's pods, beyond the running count. */
+    pods: Omit<kube.PodTrouble, 'worst'> & { worst: kube.PodIssue[] };
     /** The same shape a resource tab renders, so both sort through one path. */
     events: Table;
 }
@@ -485,6 +487,14 @@ export function adoptOverview(overview: kube.Overview): Overview {
         distribution: overview.distribution,
         namespaces: [...(overview.namespaces ?? [])],
         stats: [...(overview.stats ?? [])],
+        pods: {
+            evicted: overview.pods?.evicted ?? 0,
+            failed: overview.pods?.failed ?? 0,
+            crashLooping: overview.pods?.crashLooping ?? 0,
+            restarting: overview.pods?.restarting ?? 0,
+            restarts: overview.pods?.restarts ?? 0,
+            worst: [...(overview.pods?.worst ?? [])],
+        },
         events: adoptTable(overview.events),
     };
 }

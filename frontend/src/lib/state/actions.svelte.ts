@@ -244,9 +244,10 @@ class Actions {
      * -- a method you can only call through a string index -- reads worse than
      * the rename.
      *
-     * It does not signal a change, unlike every other action here: there is no
-     * object left to re-read, and asking the describe panel to try would show
-     * the user a 404 where their object used to be.
+     * It does not signal the object as changed, unlike every other action
+     * here: there is no object left to re-read, and asking the describe panel
+     * to try would show the user a 404 where their object used to be. It does
+     * say the cluster changed, for the views that count what is in it.
      */
     async remove(ref: ObjectRef): Promise<void> {
         try {
@@ -254,6 +255,7 @@ class Actions {
         } catch (err) {
             throw message(err);
         }
+        changes.touched(ref.contextId);
     }
 
     /**
@@ -266,6 +268,7 @@ class Actions {
     async removeMany(contextId: string, kind: string, refs: RowRef[]): Promise<BulkReport> {
         try {
             const report = await ActionService.DeleteMany(contextId, kind, refs);
+            if (report.done > 0) changes.touched(contextId);
             // Null rather than empty is what Go sends for none.
             return { done: report.done, failures: report.failures ?? [] };
         } catch (err) {
@@ -353,6 +356,7 @@ class Actions {
         } catch (err) {
             throw message(err);
         }
+        changes.touched(ref.contextId);
     }
 
     /** Approves or denies a certificate signing request. */

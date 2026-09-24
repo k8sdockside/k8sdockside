@@ -11,6 +11,8 @@
     import Icon from './Icon.svelte';
     import SortableTable from './SortableTable.svelte';
     import { detail } from '../state/detail.svelte';
+    import { changes } from '../state/changes.svelte';
+    import { untrack } from 'svelte';
 
     interface Props {
         contextId: string;
@@ -111,6 +113,32 @@
         };
     });
 
+    /**
+     * How long after a write to read once more. A deleted pod that was
+     * running takes its grace period to go, so the read straight after the
+     * delete can still count it; the second one is what settles.
+     */
+    const SETTLE_MS = 5_000;
+
+    // A delete, an eviction or an edit made from this app re-reads the page
+    // at once rather than leaving the counts wrong until the next poll --
+    // deleting the evicted pods the panel lists should make it say so. Only
+    // for this cluster, and not on arriving at a cluster: that is the load
+    // above's to do.
+    let seen = untrack(() => ({ id: contextId, writes: changes.writes(contextId) }));
+    $effect(() => {
+        const id = contextId;
+        const writes = changes.writes(id);
+        if (id !== seen.id || writes === seen.writes) {
+            seen = { id, writes };
+            return;
+        }
+        seen = { id, writes };
+        untrack(refresh);
+        const later = setTimeout(refresh, SETTLE_MS);
+        return () => clearTimeout(later);
+    });
+
     /** Reads the counters again now, for the refresh button. */
     function refresh(): void {
         attempt++;
@@ -121,6 +149,23 @@
         const seconds = Math.round((Date.now() - at.getTime()) / 1000);
         if (seconds < 45) return 'just now';
         return `at ${at.toLocaleTimeString()}`;
+    }
+
+    /**
+     * How loudly the pods panel speaks: pods that are gone or will not start
+     * are an error, restarts on their own a warning, and nothing at all hides
+     * the panel.
+     */
+    let podTone = $derived.by(() => {
+        const pods = overview?.pods;
+        if (!pods) return null;
+        if (pods.evicted + pods.failed + pods.crashLooping > 0) return 'error';
+        if (pods.restarting > 0) return 'warn';
+        return null;
+    });
+
+    function plural(n: number, one: string, many: string = one + 's'): string {
+        return `${n} ${n === 1 ? one : many}`;
     }
 
     function statTone(stat: kube.Stat): string {
@@ -178,6 +223,85 @@
                 </button>
             {/each}
         </section>
+
+        <!-- The Pods tile says how many are not running; this says why, and
+             points at them. Evicted pods in particular linger until someone
+             deletes them, so a pile of them is news the counter hides. -->
+        {#if podTone}
+            {@const pods = overview.pods}
+            <section class="attention {podTone}" aria-label="Pods needing attention">
+                <h2>
+                    <Icon name="alert" size={13} />
+                    Pods need attention
+                </h2>
+                <div class="chips">
+                    {#if pods.evicted > 0}
+                        <button
+                            class="chip error"
+                            onclick={() => workspace.showPodsMatching(contextId, 'Evicted')}
+                            title="Show the evicted pods"
+                        >
+                            <span class="n">{pods.evicted}</span> evicted
+                        </button>
+                    {/if}
+                    {#if pods.failed > 0}
+                        <button
+                            class="chip error"
+                            onclick={() => workspace.showPodsMatching(contextId, '')}
+                            title="Open Pods"
+                        >
+                            <span class="n">{pods.failed}</span> failed
+                        </button>
+                    {/if}
+                    {#if pods.crashLooping > 0}
+                        <button
+                            class="chip error"
+                            onclick={() => workspace.showPodsMatching(contextId, '')}
+                            title="Open Pods"
+                        >
+                            <span class="n">{pods.crashLooping}</span> not starting
+                        </button>
+                    {/if}
+                    {#if pods.restarting > 0}
+                        <button
+                            class="chip warn"
+                            onclick={() => workspace.showPodsMatching(contextId, '')}
+                            title="Open Pods and sort by Restarts to see them"
+                        >
+                            <span class="n">{pods.restarting}</span>
+                            {pods.restarting === 1 ? 'pod' : 'pods'} restarted · {plural(pods.restarts, 'restart')}
+                        </button>
+                    {/if}
+                </div>
+                {#if pods.worst.length > 0}
+                    <ul class="worst">
+                        {#each pods.worst as pod (pod.namespace + '/' + pod.name)}
+                            <li>
+                                <button
+                                    onclick={() =>
+                                        void detail.open({
+                                            contextId,
+                                            kind: 'pods',
+                                            namespace: pod.namespace,
+                                            name: pod.name,
+                                        })}
+                                    title="Open {pod.name}"
+                                >
+                                    <span class="reason {pod.reason === 'Restarting' ? 'warn' : 'error'}"
+                                        >{pod.reason}</span
+                                    >
+                                    <span class="name">{pod.name}</span>
+                                    <span class="ns">{pod.namespace}</span>
+                                    {#if pod.restarts > 0}
+                                        <span class="restarts">{plural(pod.restarts, 'restart')}</span>
+                                    {/if}
+                                </button>
+                            </li>
+                        {/each}
+                    </ul>
+                {/if}
+            </section>
+        {/if}
 
         <!-- Capacity, allocatable, requests, limits and live usage, all
              against each other. Reads the API server for everything but the
@@ -388,6 +512,131 @@
         margin: 4px 0 0;
         font-size: 12px;
         color: var(--text-dim);
+    }
+
+    /* Coloured by its worst news, so it is the first thing on the page read
+       as trouble -- and absent entirely on a cluster with none. */
+    .attention {
+        --tone: var(--warn);
+        border: 1px solid color-mix(in srgb, var(--tone) 45%, var(--border));
+        border-left: 3px solid var(--tone);
+        background: color-mix(in srgb, var(--tone) 7%, var(--bg-panel));
+        border-radius: var(--radius);
+        padding: 12px 14px;
+        margin: 0 0 26px;
+    }
+
+    .attention.error {
+        --tone: var(--error);
+    }
+
+    .attention h2 {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--tone);
+        margin-bottom: 10px;
+    }
+
+    .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .chip {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 5px;
+        padding: 4px 10px;
+        font: inherit;
+        font-size: 12px;
+        color: var(--text-dim);
+        background: var(--bg-panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+    }
+
+    .chip:hover {
+        border-color: var(--ctx-color, var(--accent));
+        color: var(--text);
+    }
+
+    .chip .n {
+        font-size: 15px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .chip.error .n {
+        color: var(--error);
+    }
+
+    .chip.warn .n {
+        color: var(--warn);
+    }
+
+    .worst {
+        list-style: none;
+        margin: 10px 0 0;
+        padding: 0;
+        display: grid;
+        gap: 1px;
+    }
+
+    .worst button {
+        display: grid;
+        grid-template-columns: 130px minmax(0, 1fr) auto auto;
+        gap: 12px;
+        align-items: baseline;
+        width: 100%;
+        padding: 3px 6px;
+        font: inherit;
+        font-size: 12px;
+        text-align: left;
+        color: var(--text);
+        background: transparent;
+        border: 0;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+    }
+
+    .worst button:hover {
+        background: var(--bg-hover);
+    }
+
+    .worst .reason {
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .worst .reason.error {
+        color: var(--error);
+    }
+
+    .worst .reason.warn {
+        color: var(--warn);
+    }
+
+    .worst .name {
+        font-family: var(--mono);
+        font-size: 11.5px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .worst .ns,
+    .worst .restarts {
+        color: var(--text-faint);
+        white-space: nowrap;
+    }
+
+    .worst .restarts {
+        font-variant-numeric: tabular-nums;
     }
 
     /* The events panel is the shared table; it only needs a frame and a bound

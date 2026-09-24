@@ -98,6 +98,7 @@ func (w *Watcher) Overview(kc Context) (Overview, error) {
 		Cluster:   kc.Cluster,
 		Server:    kc.Server,
 		Stats:     []Stat{},
+		Pods:      PodTrouble{Worst: []PodIssue{}},
 		Events:    Table{Kind: KindEvents, Columns: []string{}, Rows: []Row{}},
 	}
 
@@ -142,6 +143,7 @@ func (w *Watcher) Overview(kc Context) (Overview, error) {
 				podsRunning++
 			}
 		}
+		out.Pods = podTrouble(pods)
 
 		deployTotal, deployReady := 0, 0
 		if deployments, _, err := c.list(ctx, KindDeployments, metav1.ListOptions{}); err == nil {
