@@ -97,6 +97,17 @@
                 title: 'Rescan the kubeconfig files and folders, and recheck the clusters already looked at',
             },
             'separator',
+            {
+                label: 'Fleet health',
+                run: () => workspace.openFleet(),
+                title: 'Every connected cluster’s nodes, pods, warnings and credentials on one page',
+            },
+            {
+                label: 'Compare across clusters…',
+                run: () => workspace.openCompare(),
+                title: 'One object in two clusters, side by side',
+            },
+            'separator',
             { label: 'Expand all contexts', run: () => workspace.expandAll() },
             { label: 'Collapse all contexts', run: () => workspace.collapseAll() },
             'separator',

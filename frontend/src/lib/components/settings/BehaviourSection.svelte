@@ -1,7 +1,8 @@
 <!--
   What the app does on its own: what it reopens at launch, which parts of the
   sidebar tree start folded, whether it asks before dropping a kubeconfig
-  source, and whether it looks for new releases.
+  source, whether it looks for new releases, and whether cluster alerts become
+  system notifications.
 
   Where a panel appears is not here any more. Every view is a tab now, including
   the describe panel, and a tab's place is where it was dragged to -- a
@@ -15,8 +16,52 @@
     import SettingsRow from './SettingsRow.svelte';
     import SettingsSection from './SettingsSection.svelte';
     import Toggle from './Toggle.svelte';
+    import * as NotifyService from '../../../../bindings/github.com/k8sdockside/k8sdockside/internal/services/notifyservice.js';
 
     let overrides = $derived(workspace.foldingOverrideCount);
+
+    /**
+     * Whether the system will take the app's notifications, asked when this
+     * section is shown. Null until it has answered, or when it could not be
+     * asked at all.
+     */
+    let notifyStatus = $state<{ available: boolean; authorized: boolean; reason: string } | null>(null);
+    $effect(() => {
+        if (session.server) return;
+        let live = true;
+        (async () => {
+            try {
+                const status = await NotifyService.Status();
+                if (live) notifyStatus = status;
+            } catch {
+                // Said as nothing: the toggle still works for the bell.
+            }
+        })();
+        return () => {
+            live = false;
+        };
+    });
+
+    async function setNotifications(on: boolean): Promise<void> {
+        workspace.setDesktopNotifications(on);
+        if (!on || !notifyStatus?.available || notifyStatus.authorized) return;
+        // Asked as it is turned on, when the answer is wanted.
+        try {
+            const authorized = await NotifyService.RequestPermission();
+            notifyStatus = { ...notifyStatus, authorized };
+        } catch {
+            // The status line says what the system thinks.
+        }
+    }
+
+    let notifyHint = $derived.by(() => {
+        const base =
+            'When a connected cluster gets worse — a node not ready, pods crashing or evicted, credentials about to expire — say so as a system notification, as well as on the bell. Only clusters connected in this window are watched.';
+        if (!notifyStatus) return base;
+        if (!notifyStatus.available) return `${base} This build cannot post them: ${notifyStatus.reason}`;
+        if (!notifyStatus.authorized) return `${base} The system has not allowed them yet; turning this on asks.`;
+        return base;
+    });
 </script>
 
 <SettingsSection title="Behaviour">
@@ -53,6 +98,14 @@
                 checked={workspace.checkForUpdates}
                 label="Check for new versions"
                 onchange={(v) => workspace.setCheckForUpdates(v)}
+            />
+        </SettingsRow>
+
+        <SettingsRow label="Cluster alerts as notifications" hint={notifyHint}>
+            <Toggle
+                checked={workspace.desktopNotifications}
+                label="Cluster alerts as notifications"
+                onchange={(v) => void setNotifications(v)}
             />
         </SettingsRow>
     {/if}

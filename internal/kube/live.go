@@ -291,6 +291,9 @@ func describeLive(ctx context.Context, c *clusterClient, u *unstructured.Unstruc
 	d.field("Labels", indented(joinMap(u.GetLabels())))
 	d.field("Annotations", indented(joinMap(stripLastApplied(u.GetAnnotations()))))
 	d.blank()
+	if u.GetKind() == "Pod" && u.GetAPIVersion() == "v1" {
+		describeRestarts(d, u)
+	}
 
 	body := map[string]any{}
 	// stringData is here for a revealed Secret: readableSecret moves the

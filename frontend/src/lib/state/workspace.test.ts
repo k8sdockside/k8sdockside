@@ -1172,6 +1172,8 @@ describe('preferences', () => {
             contextSort: 'name',
             showLineNumbers: true,
             checkForUpdates: true,
+            desktopNotifications: true,
+            dateTime: { clock: 'system', dates: 'system', zone: 'local', ages: 'relative' },
             metricsRange: 60,
             terminal: {
                 mode: 'app',

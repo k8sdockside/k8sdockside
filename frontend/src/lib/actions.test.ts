@@ -11,14 +11,20 @@ describe('what every object can do', () => {
     test.each(['configmaps', 'secrets', 'clusterroles', 'persistentvolumes'])(
         '%s can be edited and deleted',
         (kind) => {
-            expect(ids(kind)).toEqual(['edit', 'delete']);
+            expect(ids(kind)).toEqual(['edit', 'compare', 'delete']);
         },
     );
 
     // A custom resource is an object like any other. Nothing here is compiled
     // in per kind, so a CRD nobody has heard of gets the same two.
     test('so can a custom resource', () => {
-        expect(ids(customKindFor('certificates.cert-manager.io'))).toEqual(['edit', 'delete']);
+        expect(ids(customKindFor('certificates.cert-manager.io'))).toEqual(['edit', 'compare', 'delete']);
+    });
+
+    // An event is one moment in one cluster; there is no copy of it anywhere
+    // else to compare it with.
+    test('an event cannot be compared with another cluster', () => {
+        expect(ids('events')).not.toContain('compare');
     });
 
     // A Helm release is a Secret the backend decodes rather than a Kubernetes
@@ -47,7 +53,7 @@ describe('what every object can do', () => {
 
 describe('what particular kinds can do', () => {
     test('a pod offers its logs, and to be evicted rather than deleted', () => {
-        expect(ids('pods')).toEqual(['edit', 'logs', 'shell', 'forward', 'evict', 'delete']);
+        expect(ids('pods')).toEqual(['edit', 'logs', 'shell', 'forward', 'evict', 'compare', 'delete']);
     });
 
     // A workload's logs are every container of every pod its selector finds,
@@ -67,7 +73,7 @@ describe('what particular kinds can do', () => {
     test('a node can be cordoned and drained, and says what is on it first', () => {
         // Pods comes before both: "what is actually running here" is the
         // question asked immediately before cordoning or draining.
-        expect(ids('nodes')).toEqual(['edit', 'shell', 'nodepods', 'cordon', 'drain', 'delete']);
+        expect(ids('nodes')).toEqual(['edit', 'shell', 'nodepods', 'cordon', 'drain', 'compare', 'delete']);
     });
 
     // A shell on a node is a privileged pod created on it rather than an exec,
@@ -80,7 +86,7 @@ describe('what particular kinds can do', () => {
     // A service has no containers to exec into: what it has is ports, which
     // land on the pods behind it.
     test('a service offers a forward but no shell', () => {
-        expect(ids('services')).toEqual(['edit', 'forward', 'delete']);
+        expect(ids('services')).toEqual(['edit', 'forward', 'compare', 'delete']);
     });
 
     // Nothing here runs a container, so there is nothing to open a shell in.
@@ -96,7 +102,7 @@ describe('what particular kinds can do', () => {
     });
 
     test('a statefulset can be scaled, restarted and rolled back', () => {
-        expect(ids('statefulsets')).toEqual(['edit', 'logs', 'shell', 'forward', 'scale', 'restart', 'undo', 'delete']);
+        expect(ids('statefulsets')).toEqual(['edit', 'logs', 'shell', 'forward', 'scale', 'restart', 'undo', 'compare', 'delete']);
     });
 
     // Only a Deployment's rollout can be paused: the other two have no such
@@ -111,6 +117,7 @@ describe('what particular kinds can do', () => {
             'restart',
             'undo',
             'pause',
+            'compare',
             'delete',
         ]);
     });
@@ -118,7 +125,7 @@ describe('what particular kinds can do', () => {
     // A DaemonSet runs one pod per node, so there is no replica count to set --
     // but it does roll, and keeps a history to roll back through.
     test('a daemonset restarts and rolls back but does not scale', () => {
-        expect(ids('daemonsets')).toEqual(['edit', 'logs', 'shell', 'forward', 'restart', 'undo', 'delete']);
+        expect(ids('daemonsets')).toEqual(['edit', 'logs', 'shell', 'forward', 'restart', 'undo', 'compare', 'delete']);
     });
 
     // A ReplicaSet's history is its Deployment's; rolling back is done there.
@@ -127,7 +134,7 @@ describe('what particular kinds can do', () => {
     });
 
     test('a cron job can be run now and suspended', () => {
-        expect(ids('cronjobs')).toEqual(['edit', 'logs', 'trigger', 'suspend', 'delete']);
+        expect(ids('cronjobs')).toEqual(['edit', 'logs', 'trigger', 'suspend', 'compare', 'delete']);
     });
 
     test('a job can be suspended but not run again', () => {
@@ -137,7 +144,7 @@ describe('what particular kinds can do', () => {
 
     // Both answers ask first: neither can be taken back.
     test('a signing request can be approved or denied, after a question', () => {
-        expect(ids('certificatesigningrequests')).toEqual(['edit', 'approve', 'deny', 'delete']);
+        expect(ids('certificatesigningrequests')).toEqual(['edit', 'approve', 'deny', 'compare', 'delete']);
         for (const action of actionsFor('certificatesigningrequests')) {
             if (action.id === 'approve' || action.id === 'deny') expect(action.form).toBe('confirm');
         }
@@ -151,7 +158,7 @@ describe('what particular kinds can do', () => {
     // A ReplicaSet has a replica count, but rolling one means nothing: the
     // Deployment above it owns the template that a restart would stamp.
     test('a replicaset scales but does not restart', () => {
-        expect(ids('replicasets')).toEqual(['edit', 'logs', 'shell', 'forward', 'scale', 'delete']);
+        expect(ids('replicasets')).toEqual(['edit', 'logs', 'shell', 'forward', 'scale', 'compare', 'delete']);
     });
 });
 

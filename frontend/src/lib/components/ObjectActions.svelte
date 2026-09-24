@@ -376,6 +376,10 @@
             workspace.openShell(object);
             return;
         }
+        if (action.id === 'compare') {
+            workspace.openCompare({ ...object });
+            return;
+        }
         if (action.id === 'nodepods') {
             workspace.showPodsOnNode(object.contextId, object.name);
             return;

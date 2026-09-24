@@ -13,6 +13,7 @@
   than from here -- so what is left is what this build is.
 -->
 <script lang="ts">
+    import { formatTime } from '../../datetime.svelte';
     import { SettingsService } from '../../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import type { About } from '../../../../bindings/github.com/k8sdockside/k8sdockside/internal/services/models.js';
     import { session } from '../../state/session.svelte';
@@ -88,9 +89,7 @@
     });
 
     function timeOf(iso: string): string {
-        const date = new Date(iso);
-        if (Number.isNaN(date.getTime())) return '';
-        return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        return formatTime(iso);
     }
 </script>
 

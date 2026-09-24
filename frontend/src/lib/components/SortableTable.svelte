@@ -10,6 +10,7 @@
   knows what it is listing and what an empty one means.
 -->
 <script lang="ts">
+    import { timeCell } from '../datetime.svelte';
     import type { Row } from '../state/adopt';
     import type { Snippet } from 'svelte';
     import { clampColumnWidth, MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, visibleColumns } from '../columns';
@@ -341,7 +342,7 @@
                 {#each shown as column (column.index)}
                     {@const value = row.cells[column.index]}
                     <td class={value?.tone} style={sized(column.key)}>
-                        {#if cell}{@render cell(row, column.index)}{:else}{value?.text ?? ''}{/if}
+                        {#if cell}{@render cell(row, column.index)}{:else if value?.at}{@const shown = timeCell(value.text, value.at)}<span title={shown.title}>{shown.text}</span>{:else}{value?.text ?? ''}{/if}
                     </td>
                 {/each}
             </tr>

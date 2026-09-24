@@ -79,6 +79,7 @@
         }
         if (typeof msg.event === 'string') {
             if (msg.event === 'theme') applyTheme(msg.data);
+            if (msg.event === 'datetime') applyDateTime(msg.data);
             emit(msg.event, msg.data);
         }
     });
@@ -102,8 +103,139 @@
         measure();
     }
 
+    /* How the user wants dates and times written, and the helpers that write
+       them so. The same rules as the app's own frontend/src/lib/datetime.svelte.ts,
+       which this must be kept in step with: a plugin that formats through
+       these writes a time exactly as the app beside it does. An app older
+       than 0.1.10 sends none, and the defaults -- the locale's own -- apply. */
+    var dateTime = { clock: 'system', dates: 'system', zone: 'local', ages: 'relative' };
+
+    function applyDateTime(next) {
+        if (!next) return;
+        dateTime = {
+            clock: next.clock || 'system',
+            dates: next.dates || 'system',
+            zone: next.zone || 'local',
+            ages: next.ages || 'relative',
+        };
+    }
+
+    function toDate(when) {
+        var d = when instanceof Date ? when : new Date(when);
+        return isNaN(d.getTime()) ? null : d;
+    }
+
+    function tz() {
+        return dateTime.zone === 'utc' ? 'UTC' : undefined;
+    }
+
+    function ymd(d) {
+        var out = { y: '', m: '', d: '' };
+        new Intl.DateTimeFormat('en-CA', { timeZone: tz(), year: 'numeric', month: '2-digit', day: '2-digit' })
+            .formatToParts(d)
+            .forEach(function (p) {
+                if (p.type === 'year') out.y = p.value;
+                if (p.type === 'month') out.m = p.value;
+                if (p.type === 'day') out.d = p.value;
+            });
+        return out;
+    }
+
+    var format = {
+        /** The settings in force: { clock, dates, zone, ages }. */
+        settings: function () {
+            return { clock: dateTime.clock, dates: dateTime.dates, zone: dateTime.zone, ages: dateTime.ages };
+        },
+        /** A date, as the user chose to see dates written. */
+        date: function (when) {
+            var d = toDate(when);
+            if (!d) return '';
+            var p = ymd(d);
+            switch (dateTime.dates) {
+                case 'iso':
+                    return p.y + '-' + p.m + '-' + p.d;
+                case 'dmy':
+                    return p.d + '.' + p.m + '.' + p.y;
+                case 'mdy':
+                    return p.m + '/' + p.d + '/' + p.y;
+                case 'long':
+                    return d.toLocaleDateString(undefined, { timeZone: tz(), day: 'numeric', month: 'short', year: 'numeric' });
+                default:
+                    return d.toLocaleDateString(undefined, { timeZone: tz() });
+            }
+        },
+        /** A day without its year, for an axis. */
+        day: function (when) {
+            var d = toDate(when);
+            if (!d) return '';
+            var p = ymd(d);
+            switch (dateTime.dates) {
+                case 'iso':
+                    return p.m + '-' + p.d;
+                case 'dmy':
+                    return p.d + '.' + p.m;
+                case 'mdy':
+                    return p.m + '/' + p.d;
+                default:
+                    return d.toLocaleDateString(undefined, { timeZone: tz(), day: 'numeric', month: 'short' });
+            }
+        },
+        /** A time of day; { seconds: true } adds the seconds. */
+        time: function (when, opts) {
+            var d = toDate(when);
+            if (!d) return '';
+            var o = { timeZone: tz(), hour: '2-digit', minute: '2-digit' };
+            if (opts && opts.seconds) o.second = '2-digit';
+            if (dateTime.clock === '24h') o.hourCycle = 'h23';
+            if (dateTime.clock === '12h') o.hourCycle = 'h12';
+            return d.toLocaleTimeString(undefined, o);
+        },
+        /** A date and a time, marked UTC when that is the zone. */
+        dateTime: function (when, opts) {
+            var d = toDate(when);
+            if (!d) return '';
+            var text = format.date(d) + ' ' + format.time(d, opts);
+            return dateTime.zone === 'utc' ? text + ' UTC' : text;
+        },
+        /**
+         * How long ago, as the app's tables write it: "45s", "2m5s", "15m",
+         * "3h20m", "12h", "3d4h", "12d". Seconds for the first ten minutes;
+         * redraw every second while something that young is on screen.
+         */
+        age: function (when, now) {
+            var d = toDate(when);
+            if (!d) return '';
+            var s = Math.max(0, Math.floor(((now === undefined ? Date.now() : now) - d.getTime()) / 1000));
+            if (s < 60) return s + 's';
+            if (s < 600) return s % 60 ? Math.floor(s / 60) + 'm' + (s % 60) + 's' : s / 60 + 'm';
+            var minutes = Math.floor(s / 60);
+            if (minutes < 60) return minutes + 'm';
+            if (minutes < 60 * 48) {
+                var h = Math.floor(minutes / 60);
+                var m = minutes % 60;
+                return h < 10 && m > 0 ? h + 'h' + m + 'm' : h + 'h';
+            }
+            var days = Math.floor(minutes / (60 * 24));
+            var hours = Math.floor((minutes % (60 * 24)) / 60);
+            return days < 10 && hours > 0 ? days + 'd' + hours + 'h' : days + 'd';
+        },
+        /**
+         * A moment the way the app's tables show one: its age, or the moment
+         * itself when the user chose that. Returns { text, title }, the title
+         * being the other form, for a tooltip.
+         */
+        moment: function (when) {
+            var d = toDate(when);
+            if (!d) return { text: '', title: '' };
+            var age = format.age(d);
+            var exact = format.dateTime(d, { seconds: true });
+            return dateTime.ages === 'absolute' ? { text: format.dateTime(d), title: age + ' ago' } : { text: age, title: exact };
+        },
+    };
+
     var ready = call('hello').then(function (context) {
         applyTheme(context.theme);
+        applyDateTime(context.datetime);
         if (context.sectionId) {
             // The frame's own height is the page's height; a page that sets
             // height: 100% on html/body would otherwise measure itself forever.
@@ -118,7 +250,12 @@
         /**
          * Resolves once the app has answered, with what this page is looking at:
          * { pluginId, viewId, sectionId, object, contextId, contextName,
-         *   readable, write, registries, services, actions, plugin, theme }.
+         *   readable, write, registries, services, actions, plugin, theme,
+         *   datetime }.
+         *
+         * `datetime` is how the user wants dates and times written:
+         * { clock, dates, zone, ages }. Write them with `format` rather than
+         * reading it yourself.
          *
          * `object` is { kind, namespace, name } for a section in an object's
          * detail view, and null for a view that is a tab of its own.
@@ -363,7 +500,18 @@
             },
         },
 
-        /** Listens for pushes from the app. Events: 'theme'. Returns an unsubscribe function. */
+        /**
+         * Writes dates and times the way the user chose to see them, in the
+         * app and in every plugin: format.date(when), format.time(when,
+         * { seconds }), format.dateTime(when, { seconds }), format.day(when),
+         * format.age(when), format.moment(when) -> { text, title }, and
+         * format.settings(). `when` is a Date, an RFC3339 string or
+         * milliseconds. Follows the user's changes as they make them; listen
+         * for 'datetime' to redraw.
+         */
+        format: format,
+
+        /** Listens for pushes from the app. Events: 'theme', 'datetime'. Returns an unsubscribe function. */
         on: function (event, fn) {
             (listeners[event] = listeners[event] || []).push(fn);
             return function () {

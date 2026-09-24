@@ -1,8 +1,9 @@
 <!-- The overview tab: what the cluster is, how much of it is healthy, and what has gone wrong lately. -->
 <script lang="ts">
+    import { formatDate, formatTime } from '../datetime.svelte';
     import { ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
-    import { adoptOverview, type Overview } from '../state/adopt';
+    import { adoptCredentials, adoptOverview, type Credentials, type Overview } from '../state/adopt';
     import { workspace } from '../state/workspace.svelte';
     import { clusters } from '../state/health.svelte';
     import MetricsPanel from '../charts/MetricsPanel.svelte';
@@ -10,8 +11,12 @@
     import ErrorState from './ErrorState.svelte';
     import Icon from './Icon.svelte';
     import SortableTable from './SortableTable.svelte';
+    import EventTimeline from './EventTimeline.svelte';
     import { detail } from '../state/detail.svelte';
     import { changes } from '../state/changes.svelte';
+    import { actions } from '../state/actions.svelte';
+    import { notices } from '../state/notices.svelte';
+    import { credentialTone, inDays } from '../fleet/alerts';
     import { untrack } from 'svelte';
 
     interface Props {
@@ -144,11 +149,92 @@
         attempt++;
     }
 
+    /**
+     * When this context's credentials run out. Read once per cluster rather
+     * than on every refresh: certificates are dated in days.
+     */
+    let credentials = $state<Credentials | null>(null);
+    $effect(() => {
+        const id = contextId;
+        credentials = null;
+        let live = true;
+        (async () => {
+            try {
+                const result = adoptCredentials(await ResourceService.Credentials(id, true));
+                if (live) credentials = result;
+            } catch {
+                // The header simply goes without the line.
+            }
+        })();
+        return () => {
+            live = false;
+        };
+    });
+
+    /** The credential that runs out first, of those that say when. */
+    let soonest = $derived(credentials?.items.find((item) => item.notAfter) ?? null);
+
+    function credentialsTitle(items: kube.Credential[]): string {
+        return items
+            .map((item) => {
+                const what = item.subject ? `${item.kind} — ${item.subject}` : item.kind;
+                if (item.error) return `${what}: ${item.error}`;
+                if (!item.notAfter) return `${what}: ${item.note}`;
+                return `${what}: ${formatDate(item.notAfter)} (${inDays(item.daysLeft)})`;
+            })
+            .join('\n');
+    }
+
+    /**
+     * Whether the evicted pods' clean-up is asking to be confirmed, and
+     * whether it is under way.
+     */
+    let askingCleanup = $state(false);
+    let cleaning = $state(false);
+
+    /**
+     * Deletes every evicted pod in the cluster. The list is read fresh rather
+     * than taken from the panel, which names only the worst few; the delete
+     * goes through the same bulk delete the pods list uses, so the report and
+     * the refusals read the same.
+     */
+    async function deleteEvicted(): Promise<void> {
+        if (cleaning) return;
+        cleaning = true;
+        try {
+            const refs = (await ResourceService.EvictedPods(contextId)) ?? [];
+            if (refs.length === 0) {
+                notices.inform('No evicted pods left to delete');
+                return;
+            }
+            const report = await actions.removeMany(contextId, 'pods', refs);
+            if (report.failures.length === 0) {
+                notices.inform(`${plural(report.done, 'evicted pod')} deleted`);
+            } else {
+                const first = report.failures[0]!;
+                notices.fail(
+                    `${report.done} of ${refs.length} evicted pods deleted; ${first.namespace}/${first.name}: ${first.error}`,
+                );
+            }
+        } catch (err) {
+            notices.fail(err instanceof Error ? err.message : String(err));
+        } finally {
+            cleaning = false;
+            askingCleanup = false;
+        }
+    }
+
+    /** A pod's last stop, as the attention list says it: why, and how long ago. */
+    function lastStop(pod: kube.PodIssue): string {
+        if (!pod.lastTermination) return '';
+        return pod.lastRestart ? `${pod.lastTermination} · ${pod.lastRestart} ago` : pod.lastTermination;
+    }
+
     /** "just now", or the clock time the counters were last read. */
     function updatedAt(at: Date): string {
         const seconds = Math.round((Date.now() - at.getTime()) / 1000);
         if (seconds < 45) return 'just now';
-        return `at ${at.toLocaleTimeString()}`;
+        return `at ${formatTime(at, { seconds: true })}`;
     }
 
     /**
@@ -197,6 +283,20 @@
                 {#if overview.server}<div><dt>Server</dt><dd class="selectable">{overview.server}</dd></div>{/if}
                 <div><dt>Version</dt><dd>{overview.version}</dd></div>
                 {#if overview.distribution}<div><dt>Distribution</dt><dd>{overview.distribution}</dd></div>{/if}
+                <!-- The first of this context's credentials to run out: an
+                     admin certificate that expires takes every tab with it,
+                     and nothing else warns. The rest are in the tooltip. -->
+                {#if soonest && credentials}
+                    {@const tone = credentialTone(soonest.daysLeft, soonest.notAfter)}
+                    <div class="cred {tone ?? ''}" title={credentialsTitle(credentials.items)}>
+                        <dt>{soonest.kind}</dt>
+                        <dd>
+                            {soonest.daysLeft < 0 ? 'expired' : 'expires'}
+                            {inDays(soonest.daysLeft)}
+                            {#if tone}<Icon name="alert" size={11} />{/if}
+                        </dd>
+                    </div>
+                {/if}
             </dl>
         </header>
 
@@ -262,17 +362,49 @@
                             <span class="n">{pods.crashLooping}</span> not starting
                         </button>
                     {/if}
-                    {#if pods.restarting > 0}
+                    {#if pods.restartedRecently > 0}
                         <button
                             class="chip warn"
+                            onclick={() => workspace.showPodsMatching(contextId, '')}
+                            title="Pods that restarted a container in the last hour — failing now, rather than once some time ago"
+                        >
+                            <span class="n">{pods.restartedRecently}</span> restarted in the last hour
+                        </button>
+                    {/if}
+                    {#if pods.restarting > 0}
+                        <button
+                            class="chip quiet"
                             onclick={() => workspace.showPodsMatching(contextId, '')}
                             title="Open Pods and sort by Restarts to see them"
                         >
                             <span class="n">{pods.restarting}</span>
-                            {pods.restarting === 1 ? 'pod' : 'pods'} restarted · {plural(pods.restarts, 'restart')}
+                            {pods.restarting === 1 ? 'pod' : 'pods'} ever restarted · {plural(pods.restarts, 'restart')}
                         </button>
                     {/if}
                 </div>
+                <!-- Evicted pods are records of pods that are already gone:
+                     the kubelet stopped them and keeps the object only so
+                     someone can read why. Deleting them loses that record and
+                     nothing else, which is why one button does all of them. -->
+                {#if pods.evicted > 0}
+                    <div class="cleanup">
+                        {#if askingCleanup}
+                            <p class="question">
+                                Delete all {plural(pods.evicted, 'evicted pod')}? They are not running; this removes the
+                                records of why they were evicted.
+                            </p>
+                            <button class="plain" onclick={() => (askingCleanup = false)} disabled={cleaning}>Cancel</button>
+                            <button class="danger" onclick={deleteEvicted} disabled={cleaning}>
+                                {cleaning ? 'Deleting…' : 'Delete'}
+                            </button>
+                        {:else}
+                            <button class="plain" onclick={() => (askingCleanup = true)}>
+                                <Icon name="trash" size={12} />
+                                Delete {plural(pods.evicted, 'evicted pod')}
+                            </button>
+                        {/if}
+                    </div>
+                {/if}
                 {#if pods.worst.length > 0}
                     <ul class="worst">
                         {#each pods.worst as pod (pod.namespace + '/' + pod.name)}
@@ -287,13 +419,21 @@
                                         })}
                                     title="Open {pod.name}"
                                 >
-                                    <span class="reason {pod.reason === 'Restarting' ? 'warn' : 'error'}"
-                                        >{pod.reason}</span
+                                    <span
+                                        class="reason {pod.trouble === 'restarting' || pod.trouble === 'restarted' ? 'warn' : 'error'}"
+                                        class:faded={pod.trouble === 'restarted'}>{pod.reason}</span
                                     >
                                     <span class="name">{pod.name}</span>
                                     <span class="ns">{pod.namespace}</span>
                                     {#if pod.restarts > 0}
                                         <span class="restarts">{plural(pod.restarts, 'restart')}</span>
+                                    {:else}
+                                        <span class="restarts"></span>
+                                    {/if}
+                                    {#if lastStop(pod) || pod.message}
+                                        <span class="why" title={pod.message || lastStop(pod)}>
+                                            {lastStop(pod) || pod.message}
+                                        </span>
                                     {/if}
                                 </button>
                             </li>
@@ -313,6 +453,11 @@
              events say what went wrong. That is the order someone reads them
              in. -->
         <MetricsPanel {contextId} attach="dashboard" title="Metrics" />
+
+        <!-- The events again, drawn against time, which is what shows the
+             order things went wrong in. The table under it is the newest few
+             as rows. -->
+        <EventTimeline {contextId} namespaces={overview.namespaces} refreshKey={attempt} />
 
         <section class="events">
             <h2>
@@ -588,6 +733,7 @@
     .worst button {
         display: grid;
         grid-template-columns: 130px minmax(0, 1fr) auto auto;
+        grid-auto-rows: auto;
         gap: 12px;
         align-items: baseline;
         width: 100%;
@@ -637,6 +783,91 @@
 
     .worst .restarts {
         font-variant-numeric: tabular-nums;
+    }
+
+    /* Why it last stopped, under the name: the restart count says how often,
+       this says what to fix. */
+    .worst .why {
+        grid-column: 2 / -1;
+        margin-top: -2px;
+        font-size: 11px;
+        color: var(--text-dim);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .worst .reason.faded {
+        opacity: 0.7;
+        font-weight: 500;
+    }
+
+    .chip.quiet .n {
+        color: var(--text-dim);
+    }
+
+    .cleanup {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+    }
+
+    .cleanup .question {
+        margin: 0;
+        font-size: 12px;
+        color: var(--text);
+        flex-basis: 100%;
+    }
+
+    .cleanup button {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 24px;
+        padding: 0 10px;
+        font: inherit;
+        font-size: 11.5px;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+    }
+
+    .cleanup .plain {
+        color: var(--text-dim);
+        background: var(--bg-panel);
+        border: 1px solid var(--border);
+    }
+
+    .cleanup .plain:hover:not(:disabled) {
+        color: var(--text);
+    }
+
+    .cleanup .danger {
+        color: #fff;
+        background: var(--error);
+        border: 1px solid var(--error);
+    }
+
+    .cleanup button:disabled {
+        opacity: 0.6;
+        cursor: default;
+    }
+
+    .head .cred.warn dd {
+        color: var(--warn);
+        font-weight: 600;
+    }
+
+    .head .cred.error dd {
+        color: var(--error);
+        font-weight: 600;
+    }
+
+    .head .cred dd {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
     }
 
     /* The events panel is the shared table; it only needs a frame and a bound

@@ -19,6 +19,7 @@
         { id: 'appearance', label: 'Appearance', icon: 'sun' },
         { id: 'themes', label: 'Themes', icon: 'display' },
         { id: 'startpage', label: 'Start page', icon: 'image' },
+        { id: 'datetime', label: 'Dates and times', icon: 'clock' },
         { id: 'plugins', label: 'Plugins', icon: 'puzzle' },
         { id: 'behaviour', label: 'Behaviour', icon: 'sliders' },
         { id: 'terminal', label: 'Terminal', icon: 'terminal' },
@@ -48,6 +49,7 @@
     import TerminalSection from './TerminalSection.svelte';
     import PluginsSection from './PluginsSection.svelte';
     import ThemesSection from './ThemesSection.svelte';
+    import DateTimeSection from './DateTimeSection.svelte';
 
     let active = $state<SectionId>(startSection());
 
@@ -105,6 +107,8 @@
             <ThemesSection />
         {:else if active === 'startpage'}
             <StartPageSection />
+        {:else if active === 'datetime'}
+            <DateTimeSection />
         {:else if active === 'plugins'}
             <PluginsSection />
         {:else if active === 'behaviour'}

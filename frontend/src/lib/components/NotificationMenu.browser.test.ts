@@ -292,3 +292,70 @@ test('Escape closes the panel and returns focus to the bell', async () => {
     await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
     expect(document.activeElement).toBe(bell().element());
 });
+
+// A cluster alert opens into its details: the whole of what it said, every
+// object it is about -- the notification could only name three -- and where
+// to go next.
+test('a cluster alert opens into its details, and each object in it opens', async () => {
+    const { fleet } = await import('../state/fleet.svelte');
+    const { detail } = await import('../state/detail.svelte');
+    Status.mockResolvedValue({ current: 'v1', latest: null, newer: false, unread: false, checkedAt: '', error: '', install: '', download: '' });
+    const pods = ['a', 'b', 'c', 'd'].map((n) => ({
+        label: `api-${n}`,
+        detail: 'apps · CrashLoopBackOff · Error (exit 1)',
+        ref: { kind: 'pods', namespace: 'apps', name: `api-${n}` },
+    }));
+    fleet.alerts = [
+        {
+            id: 'alert-x',
+            contextId: 'ctx',
+            tone: 'error',
+            title: '4 pods not starting',
+            body: 'api-a, api-b, api-c and 1 more',
+            at: Date.now(),
+            read: false,
+            items: pods,
+            action: { kind: 'list', label: 'Open Pods', list: 'pods' },
+        },
+    ];
+    render(NotificationMenu);
+
+    await page.getByRole('button', { name: /Notifications/ }).click();
+    await page.getByRole('button', { name: /4 pods not starting/ }).click();
+
+    // Every pod, not only the three the notification named.
+    await expect.element(page.getByRole('button', { name: /api-d/ })).toBeVisible();
+    await expect.element(page.getByRole('button', { name: /Open Pods/ })).toBeVisible();
+    expect(fleet.alerts[0]!.read).toBe(true);
+
+    await page.getByRole('button', { name: /api-d/ }).click();
+    expect(detail.target).toMatchObject({ contextId: 'ctx', kind: 'pods', namespace: 'apps', name: 'api-d' });
+    fleet.clear();
+});
+
+// Clicking the system notification brings the window forward and asks for
+// that alert: the bell opens on it, details showing.
+test('a revealed alert opens the bell on its details', async () => {
+    const { fleet } = await import('../state/fleet.svelte');
+    Status.mockResolvedValue({ current: 'v1', latest: null, newer: false, unread: false, checkedAt: '', error: '', install: '', download: '' });
+    fleet.alerts = [
+        {
+            id: 'alert-y',
+            contextId: 'ctx',
+            tone: 'error',
+            title: 'Node worker-3 is not ready',
+            body: 'worker-3 — 2 of 3 nodes ready.',
+            at: Date.now(),
+            read: false,
+            items: [{ label: 'worker-3', detail: 'Not ready', ref: { kind: 'nodes', namespace: '', name: 'worker-3' } }],
+            action: { kind: 'list', label: 'Open Nodes', list: 'nodes' },
+        },
+    ];
+    render(NotificationMenu);
+
+    fleet.reveal('alert-y');
+
+    await expect.element(page.getByRole('button', { name: /Open Nodes/ })).toBeVisible();
+    await expect.element(page.getByText('worker-3 — 2 of 3 nodes ready.')).toBeVisible();
+    fleet.clear();
+});

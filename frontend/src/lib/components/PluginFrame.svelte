@@ -13,6 +13,7 @@
   /plugin-ui/_sdk/k8sdockside.js; see internal/plugins/sdk.
 -->
 <script lang="ts">
+    import { dateTimeSettings } from '../datetime.svelte';
     import { onDestroy, untrack } from 'svelte';
     import {
         MetricsService,
@@ -275,6 +276,10 @@
                         authorUrl: p.authorUrl ?? '',
                     },
                     theme: currentTheme(),
+                    // How the user wants dates and times written, so a page
+                    // can write them the way the app does. The SDK's format
+                    // helpers read it; see datetime.svelte.ts.
+                    datetime: { ...dateTimeSettings() },
                 };
             case 'actions': {
                 // What this plugin offers on an object right now -- the section's
@@ -479,6 +484,19 @@
             (err: unknown) => post({ id, error: err instanceof Error ? err.message : String(err) }),
         );
     }
+
+    // A change of how dates are written reaches the page the same way, so its
+    // times change with the app's rather than at its next reload. Skipped on
+    // the first run, which is before the page has said hello.
+    let datetimeSeen = false;
+    $effect(() => {
+        const next = { ...dateTimeSettings() };
+        if (!datetimeSeen) {
+            datetimeSeen = true;
+            return;
+        }
+        post({ event: 'datetime', data: next });
+    });
 
     // A theme change repaints the page too: the app's root is watched, and the
     // tokens re-posted whenever applyTheme writes it.

@@ -1486,3 +1486,54 @@ func TestTheBackgroundRoundTrips(t *testing.T) {
 		t.Errorf("cleared folder = %q", got)
 	}
 }
+
+func TestDatesAndTimesAreFilledInAndRepaired(t *testing.T) {
+	path := tempSettings(t)
+	body := `{"preferences":{"dateTime":{"clock":"36h","dates":"iso","zone":"mars","ages":"absolute"}}}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := openAt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := DateTime{Clock: ClockSystem, Dates: DatesISO, Zone: ZoneLocal, Ages: AgesAbsolute}
+	if got := store.Get().Preferences.DateTime; got != want {
+		t.Errorf("dateTime = %+v, want %+v", got, want)
+	}
+
+	fresh := DateTime{Clock: ClockSystem, Dates: DatesSystem, Zone: ZoneLocal, Ages: AgesRelative}
+	if got := openIn(t).Get().Preferences.DateTime; got != fresh {
+		t.Errorf("a fresh install's dateTime = %+v, want %+v", got, fresh)
+	}
+}
+
+func TestDatesAndTimesRoundTrip(t *testing.T) {
+	path := tempSettings(t)
+	store, err := openAt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefs := store.Get().Preferences
+	prefs.DateTime = DateTime{Clock: Clock24, Dates: DatesDMY, Zone: ZoneUTC, Ages: AgesAbsolute}
+	if _, err := store.SetPreferences(prefs); err != nil {
+		t.Fatal(err)
+	}
+	again, err := openAt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := again.Get().Preferences.DateTime; got != prefs.DateTime {
+		t.Errorf("dateTime = %+v, want %+v", got, prefs.DateTime)
+	}
+
+	// Something the window sends that nothing knows is put back, not kept.
+	prefs.DateTime.Clock = "sundial"
+	saved, err := store.SetPreferences(prefs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Preferences.DateTime.Clock != ClockSystem {
+		t.Errorf("clock = %q, want %q", saved.Preferences.DateTime.Clock, ClockSystem)
+	}
+}

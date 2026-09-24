@@ -161,6 +161,65 @@ func (s *ResourceService) Overview(contextID string) (kube.Overview, error) {
 	return s.watcher.Overview(ctx)
 }
 
+// Health is one cluster's health in a few numbers -- nodes, pod trouble and
+// recent warnings -- for the fleet view, the sidebar and the notifications,
+// which ask every connected cluster for it on a timer.
+func (s *ResourceService) Health(contextID string) (kube.ClusterHealth, error) {
+	ctx, err := s.resolve(contextID)
+	if err != nil {
+		return kube.ClusterHealth{ContextID: contextID, Error: err.Error()}, err
+	}
+	return s.watcher.Health(ctx)
+}
+
+// Credentials reports when a context's credentials expire: the client
+// certificate, the cluster CA and any token in the kubeconfig, and with
+// server set the certificate the API server presents. No exec plugin is run
+// and no credential of the user's is sent -- see kube.CheckCredentials.
+func (s *ResourceService) Credentials(contextID string, server bool) (kube.Credentials, error) {
+	ctx, err := s.resolve(contextID)
+	if err != nil {
+		return kube.Credentials{ContextID: contextID, Items: []kube.Credential{}, Error: err.Error()}, err
+	}
+	return kube.CheckCredentials(ctx, server), nil
+}
+
+// EvictedPods lists every evicted pod in a cluster, for the dashboard's
+// clean-up button. The deleting itself goes through ActionService.DeleteMany,
+// like any other bulk delete.
+func (s *ResourceService) EvictedPods(contextID string) ([]kube.ObjectRef, error) {
+	ctx, err := s.resolve(contextID)
+	if err != nil {
+		return []kube.ObjectRef{}, err
+	}
+	return s.watcher.EvictedPods(ctx)
+}
+
+// EventTimeline is the events of the last `minutes` minutes, placed in time,
+// for the dashboard's timeline. An empty namespace means every namespace.
+func (s *ResourceService) EventTimeline(contextID, namespace string, minutes int) (kube.Timeline, error) {
+	ctx, err := s.resolve(contextID)
+	if err != nil {
+		return kube.Timeline{Events: []kube.TimelineEvent{}, Error: err.Error()}, err
+	}
+	return s.watcher.EventTimeline(ctx, namespace, minutes)
+}
+
+// Compare reads one object from each of two places -- usually the same name
+// in two clusters -- and diffs them, with what always differs between copies
+// left out. A side that cannot be read is reported in the result rather than
+// failing the call: "it is not there at all" is one of the answers a
+// comparison exists to give.
+func (s *ResourceService) Compare(left, right kube.CompareSide) kube.Comparison {
+	return kube.Compare(func(side kube.CompareSide) (string, error) {
+		ctx, err := s.resolve(side.ContextID)
+		if err != nil {
+			return "", err
+		}
+		return s.watcher.ComparableYAML(ctx, side.Kind, side.Namespace, side.Name)
+	}, left, right)
+}
+
 // Access is the payload behind the access overview: every role and binding the
 // caller may read, and who the cluster says the caller is. A cluster that lets
 // the caller read only some of it answers with what it could, and says in

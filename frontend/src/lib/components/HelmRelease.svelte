@@ -12,6 +12,7 @@
   all four at once would be a scroll rather than a view.
 -->
 <script lang="ts">
+    import { formatDateTime } from '../datetime.svelte';
     import { openSearchPanel } from '@codemirror/search';
     import { EditorView, lineNumbers } from '@codemirror/view';
     import { untrack } from 'svelte';
@@ -148,7 +149,7 @@
         if (!stamp) return '—';
         const at = new Date(stamp);
         if (Number.isNaN(at.getTime())) return stamp;
-        return at.toLocaleString();
+        return formatDateTime(at);
     }
 </script>
 

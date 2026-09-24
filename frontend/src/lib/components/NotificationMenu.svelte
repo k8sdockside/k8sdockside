@@ -7,17 +7,25 @@
   is something unread; opening it shows what; "Mark as read" puts the dot away
   for that release, and it stays away across restarts until a newer one is out.
 
-  The only news it carries today is a new release. Drawn by the app rather than
-  the platform for the reason the menus are -- see MenuBar.svelte.
+  It carries two kinds of news: what has got worse on a connected cluster --
+  the alerts the fleet store raises, see fleet.svelte.ts -- and a new release.
+  The cluster alerts come first, because they are about something happening
+  now. Drawn by the app rather than the platform for the reason the menus are
+  -- see MenuBar.svelte.
 
   The web version keeps the bell, as the fixed place news would arrive, but has
   no release news to put in it: the server is upgraded by whoever runs it, not
   from a browser. So there it is quiet, and offers no check.
 -->
 <script lang="ts">
+    import { formatDate, formatDateTime, formatTime } from '../datetime.svelte';
+    import { detail } from '../state/detail.svelte';
+    import type { AlertItem } from '../fleet/alerts';
     import { onMount } from 'svelte';
     import { session } from '../state/session.svelte';
     import { updates } from '../state/updates.svelte';
+    import { fleet, type ClusterAlert } from '../state/fleet.svelte';
+    import { DASHBOARD } from '../catalogue';
     import { workspace } from '../state/workspace.svelte';
     import Icon from './Icon.svelte';
     import { notices } from '../state/notices.svelte';
@@ -34,7 +42,77 @@
     });
 
     const latest = $derived(updates.latest);
-    const label = $derived(updates.unread ? 'Notifications, 1 unread' : 'Notifications');
+    const unread = $derived(fleet.unread + (updates.unread ? 1 : 0));
+    const label = $derived(unread > 0 ? `Notifications, ${unread} unread` : 'Notifications');
+    /** The unread dot takes the colour of the worst unread news. */
+    const dot = $derived(
+        fleet.alerts.some((a) => !a.read && a.tone === 'error')
+            ? 'error'
+            : fleet.unread > 0
+              ? 'warn'
+              : updates.unread
+                ? 'news'
+                : null,
+    );
+
+    function clusterName(contextId: string): string {
+        const context = workspace.contexts.find((c) => c.id === contextId);
+        return context ? workspace.displayName(context) : contextId;
+    }
+
+    /** The alert whose details are open, if any. One at a time. */
+    let expanded = $state<string | null>(null);
+
+    /** How many of an alert's objects are listed before "and N more". */
+    const ITEMS_SHOWN = 12;
+
+    function toggleAlert(alert: ClusterAlert): void {
+        expanded = expanded === alert.id ? null : alert.id;
+        if (expanded) fleet.markRead(alert.id);
+    }
+
+    /** Opens one object an alert is about, in the detail panel. */
+    function openItem(alert: ClusterAlert, item: AlertItem): void {
+        if (!item.ref) return;
+        close();
+        void detail.open({ contextId: alert.contextId, ...item.ref });
+    }
+
+    /** Goes where the alert's details point: its list, or the dashboard. */
+    function follow(alert: ClusterAlert): void {
+        close();
+        const action = alert.action;
+        if (action.kind === 'list') {
+            if (action.list === 'pods') workspace.showPodsMatching(alert.contextId, action.query ?? '');
+            else workspace.openTab(alert.contextId, action.list);
+        } else {
+            workspace.openTab(alert.contextId, DASHBOARD);
+        }
+    }
+
+    function openDashboard(alert: ClusterAlert): void {
+        close();
+        workspace.openTab(alert.contextId, DASHBOARD);
+    }
+
+    // A clicked system notification opens the bell on that alert, with its
+    // details showing and in view.
+    $effect(() => {
+        const request = fleet.revealed;
+        if (!request) return;
+        request.nonce;
+        open = true;
+        expanded = request.id;
+        requestAnimationFrame(() => {
+            panelEl?.querySelector(`[data-alert="${CSS.escape(request.id)}"]`)?.scrollIntoView({ block: 'nearest' });
+        });
+    });
+
+    function openFleet(): void {
+        close();
+        fleet.markAllRead();
+        workspace.openFleet();
+    }
 
     function close(): void {
         open = false;
@@ -75,16 +153,12 @@
 
     /** A date as the user would write it, or nothing for one that is not one. */
     function dayOf(iso: string): string {
-        const date = new Date(iso);
-        if (Number.isNaN(date.getTime())) return '';
-        return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+        return formatDate(iso);
     }
 
     /** A time of day, for "checked at". */
     function timeOf(iso: string): string {
-        const date = new Date(iso);
-        if (Number.isNaN(date.getTime())) return '';
-        return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        return formatTime(iso);
     }
 
     // Focus the first control, so the panel is usable without the mouse that
@@ -112,7 +186,7 @@
         onclick={() => (open = !open)}
     >
         <Icon name="bell" size={15} />
-        {#if updates.unread}<span class="badge"></span>{/if}
+        {#if dot}<span class="badge {dot}"></span>{/if}
     </button>
 
     {#if open}
@@ -127,7 +201,91 @@
             bind:this={panelEl}
             onkeydown={onKeyDown}
         >
-            <p class="heading">Notifications</p>
+            <p class="heading">Clusters</p>
+
+            {#if fleet.alerts.length > 0}
+                <ul class="alerts">
+                    {#each fleet.alerts as alert (alert.id)}
+                        {@const isOpen = expanded === alert.id}
+                        <li class="alert {alert.tone}" class:unread={!alert.read} class:expanded={isOpen} data-alert={alert.id}>
+                            <div class="alert-head">
+                                <button
+                                    class="open"
+                                    onclick={() => toggleAlert(alert)}
+                                    aria-expanded={isOpen}
+                                    title={isOpen ? 'Hide the details' : 'Show the details'}
+                                >
+                                    <span class="mark" aria-hidden="true"></span>
+                                    <span class="text">
+                                        <span class="title">{alert.title}</span>
+                                        <span class="detail">
+                                            {clusterName(alert.contextId)} · {timeOf(new Date(alert.at).toISOString())}
+                                        </span>
+                                        {#if alert.body && !isOpen}<span class="detail body">{alert.body}</span>{/if}
+                                    </span>
+                                    <Icon name={isOpen ? 'chevron-up' : 'chevron-down'} size={12} />
+                                </button>
+                                <button class="dismiss" onclick={() => fleet.dismiss(alert.id)} aria-label="Dismiss" title="Dismiss">
+                                    <Icon name="close" size={11} />
+                                </button>
+                            </div>
+                            {#if isOpen}
+                                <!-- The details: the whole of what it said, when
+                                     and where, every object it is about -- the
+                                     notification could only name three -- and
+                                     where to go next. -->
+                                <div class="alert-details">
+                                    {#if alert.body}<p class="full">{alert.body}</p>{/if}
+                                    <dl>
+                                        <div><dt>Cluster</dt><dd>{clusterName(alert.contextId)}</dd></div>
+                                        <div><dt>When</dt><dd>{formatDateTime(alert.at, { seconds: true })}</dd></div>
+                                    </dl>
+                                    {#if alert.items.length > 0}
+                                        <ul class="items">
+                                            {#each alert.items.slice(0, ITEMS_SHOWN) as item, i (i)}
+                                                <li>
+                                                    {#if item.ref}
+                                                        <button class="item-link" onclick={() => openItem(alert, item)} title="Open {item.label}">
+                                                            <span class="item-label">{item.label}</span>
+                                                            {#if item.detail}<span class="item-detail">{item.detail}</span>{/if}
+                                                        </button>
+                                                    {:else}
+                                                        <span class="item-label">{item.label}</span>
+                                                        {#if item.detail}<span class="item-detail">{item.detail}</span>{/if}
+                                                    {/if}
+                                                </li>
+                                            {/each}
+                                        </ul>
+                                        {#if alert.items.length > ITEMS_SHOWN}
+                                            <p class="more">And {alert.items.length - ITEMS_SHOWN} more.</p>
+                                        {/if}
+                                    {/if}
+                                    <div class="actions">
+                                        <button onclick={() => follow(alert)}><Icon name="link" size={12} /> {alert.action.label}</button>
+                                        {#if alert.action.kind !== 'dashboard'}
+                                            <button onclick={() => openDashboard(alert)}><Icon name="dashboard" size={12} /> Dashboard</button>
+                                        {/if}
+                                    </div>
+                                </div>
+                            {/if}
+                        </li>
+                    {/each}
+                </ul>
+                <div class="row-actions">
+                    <button onclick={openFleet}><Icon name="gauge" size={12} /> Fleet health</button>
+                    {#if fleet.unread > 0}
+                        <button onclick={() => fleet.markAllRead()}><Icon name="check" size={12} /> Mark all read</button>
+                    {/if}
+                    <button onclick={() => fleet.clear()}><Icon name="trash" size={12} /> Clear</button>
+                </div>
+            {:else}
+                <p class="empty">
+                    Nothing has changed for the worse on a connected cluster.
+                    <button class="inline" onclick={openFleet}>Fleet health</button>
+                </p>
+            {/if}
+
+            <p class="heading releases">Releases</p>
 
             {#if updates.available && latest}
                 <article class="item" class:unread={updates.unread}>
@@ -230,6 +388,15 @@
         box-shadow: 0 0 0 2px var(--bg-sidebar);
     }
 
+    /* A cluster alert takes a status colour: unlike a release, it is a fault. */
+    .badge.warn {
+        background: var(--warn);
+    }
+
+    .badge.error {
+        background: var(--error);
+    }
+
     .panel {
         position: absolute;
         outline: none;
@@ -237,12 +404,224 @@
         /* Anchored to the trigger's right edge: this sits at the right end of
            the title bar, and a panel growing rightwards would leave the window. */
         right: 0;
-        width: 320px;
+        width: 360px;
+        max-height: min(560px, 80vh);
+        overflow: auto;
         padding: 6px;
         border: 1px solid var(--border);
         border-radius: var(--radius);
         background: var(--bg-raised);
         box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+    }
+
+    .heading.releases {
+        margin-top: 12px;
+    }
+
+    .alerts {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 2px;
+    }
+
+    .alert {
+        border-radius: var(--radius-sm);
+        background: var(--bg-panel);
+    }
+
+    .alert.expanded {
+        box-shadow: inset 0 0 0 1px var(--border);
+    }
+
+    .alert-head {
+        display: flex;
+        align-items: flex-start;
+    }
+
+    .alert-details {
+        padding: 0 10px 10px 22px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-size: 11.5px;
+    }
+
+    .alert-details .full {
+        margin: 0;
+        color: var(--text);
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+    }
+
+    .alert-details dl {
+        margin: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px 14px;
+    }
+
+    .alert-details dl div {
+        display: flex;
+        gap: 6px;
+    }
+
+    .alert-details dt {
+        color: var(--text-faint);
+    }
+
+    .alert-details dd {
+        margin: 0;
+        color: var(--text-dim);
+    }
+
+    .items {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .items li > .item-label,
+    .items li > .item-detail {
+        display: block;
+        padding: 0 6px;
+    }
+
+    .item-link {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        width: 100%;
+        padding: 4px 6px;
+        text-align: left;
+        border-radius: var(--radius-sm);
+        font: inherit;
+        color: inherit;
+    }
+
+    .item-link:hover {
+        background: var(--bg-hover);
+    }
+
+    .item-label {
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: var(--text);
+    }
+
+    .item-link:hover .item-label {
+        color: var(--accent);
+    }
+
+    .item-detail {
+        font-size: 11px;
+        color: var(--text-faint);
+        overflow-wrap: anywhere;
+    }
+
+    .more {
+        margin: 0;
+        color: var(--text-faint);
+    }
+
+    .alert .open {
+        flex: 1;
+        min-width: 0;
+        display: grid;
+        grid-template-columns: 10px minmax(0, 1fr) auto;
+        align-items: start;
+        gap: 6px;
+        padding: 7px 4px 7px 6px;
+        text-align: left;
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: 0;
+        cursor: pointer;
+        border-radius: var(--radius-sm);
+    }
+
+    .alert .open:hover {
+        background: var(--bg-hover);
+    }
+
+    .alert .open > :global(svg) {
+        margin-top: 3px;
+        color: var(--text-faint);
+    }
+
+    .alert .text {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .alert.unread .mark {
+        background: var(--warn);
+    }
+
+    .alert.error.unread .mark {
+        background: var(--error);
+    }
+
+    .alert.error .title {
+        color: var(--error);
+    }
+
+    .alert .body {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .dismiss {
+        flex: none;
+        display: grid;
+        place-items: center;
+        width: 22px;
+        height: 22px;
+        margin: 4px 4px 0 0;
+        border-radius: var(--radius-sm);
+        color: var(--text-faint);
+    }
+
+    .dismiss:hover {
+        background: var(--bg-hover);
+        color: var(--text);
+    }
+
+    .row-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 6px;
+    }
+
+    .row-actions button {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 9px;
+        border-radius: var(--radius-sm);
+        background: var(--bg-raised);
+        box-shadow: inset 0 0 0 1px var(--border);
+        font-size: 11px;
+        color: var(--text-dim);
+    }
+
+    .row-actions button:hover {
+        background: var(--bg-hover);
+        color: var(--text);
+    }
+
+    .inline {
+        font: inherit;
+        color: var(--accent);
+        text-decoration: underline;
+        text-underline-offset: 2px;
     }
 
     .heading {
@@ -285,7 +664,8 @@
         color: var(--text);
     }
 
-    .item.unread .title {
+    .item.unread .title,
+    .alert.unread .title {
         font-weight: 600;
     }
 

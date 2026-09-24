@@ -58,8 +58,15 @@ vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services'
         ChartVersions: vi.fn().mockResolvedValue([]),
     },
     KubeconfigService: { Sync: vi.fn().mockResolvedValue([]), Files: vi.fn().mockResolvedValue([]) },
+    ActionService: {
+        DeleteMany: vi.fn().mockResolvedValue({ done: 0, failures: [] }),
+        Delete: vi.fn().mockResolvedValue(undefined),
+    },
     ResourceService: {
         Overview: vi.fn(),
+        Credentials: vi.fn().mockResolvedValue({ contextId: '', items: [], error: '' }),
+        EventTimeline: vi.fn().mockResolvedValue({ from: '', to: '', events: [], truncated: false, error: '' }),
+        EvictedPods: vi.fn().mockResolvedValue([]),
         Budget: vi.fn().mockResolvedValue({ scope: { kind: 'cluster', name: '' }, amounts: [], usage: { source: '', error: '' } }),
         Describe: vi.fn().mockResolvedValue(''),
         Ping: vi.fn().mockResolvedValue(undefined),
@@ -117,7 +124,7 @@ vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services'
 // The cluster dashboard's counters and events are the way into the rest of
 // the cluster: a tile opens the list it counts, and an event opens itself.
 const { workspace } = await import('../state/workspace.svelte');
-const { ResourceService } = await import('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services');
+const { ResourceService, ActionService } = await import('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services');
 const Dashboard = (await import('./Dashboard.svelte')).default;
 
 const PROD = '/home/u/.kube/config::admin@prod';
@@ -269,9 +276,9 @@ test('evicted pods are called out and lead to the pods tab searched for them', a
     render(Dashboard, { contextId: PROD });
 
     await expect.element(page.getByText('Pods need attention')).toBeVisible();
-    await expect.element(page.getByText('3 pods restarted · 11 restarts')).toBeVisible();
+    await expect.element(page.getByText('3 pods ever restarted · 11 restarts')).toBeVisible();
 
-    await page.getByRole('button', { name: /42 evicted/ }).click();
+    await page.getByRole('button', { name: /^42 evicted/ }).click();
     expect(workspace.tabs.map((t) => [t.contextId, t.kind])).toContainEqual([PROD, 'pods']);
 
     await page.getByRole('button', { name: /loki-0/ }).click();
@@ -303,4 +310,96 @@ test('a delete in this cluster reads the dashboard again, and one in another doe
 
     changes.touched(PROD);
     await expect.poll(() => vi.mocked(ResourceService.Overview).mock.calls.length).toBe(before + 1);
+});
+
+const TROUBLED = {
+    ...OVERVIEW,
+    pods: {
+        evicted: 2,
+        failed: 0,
+        crashLooping: 0,
+        restarting: 1,
+        restarts: 4,
+        restartedRecently: 1,
+        worst: [
+            {
+                namespace: 'apps', name: 'api-7d9', trouble: 'restarting', reason: 'Restarting', restarts: 4,
+                message: '', lastTermination: 'OOMKilled (exit 137)', lastRestart: '12m',
+            },
+            {
+                namespace: 'monitoring', name: 'loki-0', trouble: 'evicted', reason: 'Evicted', restarts: 0,
+                message: 'The node was low on resource: memory.', lastTermination: '', lastRestart: '',
+            },
+        ],
+    },
+};
+
+// A restart count says how often; the last termination says what to fix.
+test('a restarting pod says why it last stopped, and an evicted one why it was evicted', async () => {
+    vi.mocked(ResourceService.Overview).mockResolvedValue(TROUBLED as never);
+    render(Dashboard, { contextId: PROD });
+
+    await expect.element(page.getByText('OOMKilled (exit 137) · 12m ago')).toBeVisible();
+    await expect.element(page.getByText('The node was low on resource: memory.')).toBeVisible();
+    await expect.element(page.getByText('restarted in the last hour')).toBeVisible();
+});
+
+// Evicted pods are records of pods already gone; one button clears them, after
+// a question, through the same bulk delete the pods list uses.
+test('the evicted pods can be deleted in one go, after a question', async () => {
+    vi.mocked(ResourceService.Overview).mockResolvedValue(TROUBLED as never);
+    const refs = [
+        { namespace: 'monitoring', name: 'loki-0' },
+        { namespace: 'monitoring', name: 'loki-1' },
+    ];
+    vi.mocked(ResourceService.EvictedPods).mockResolvedValue(refs as never);
+    vi.mocked(ActionService.DeleteMany).mockResolvedValue({ done: 2, failures: [] } as never);
+    render(Dashboard, { contextId: PROD });
+
+    await page.getByRole('button', { name: 'Delete 2 evicted pods' }).click();
+    // Nothing is deleted until the question is answered.
+    expect(ActionService.DeleteMany).not.toHaveBeenCalled();
+    await page.getByRole('button', { name: 'Delete', exact: true }).click();
+
+    await expect.poll(() => vi.mocked(ActionService.DeleteMany).mock.calls.length).toBe(1);
+    expect(ActionService.DeleteMany).toHaveBeenCalledWith(PROD, 'pods', refs);
+});
+
+// An admin certificate that expires takes every tab on the cluster with it,
+// and nothing else says so beforehand.
+test('a client certificate close to expiry is called out in the header', async () => {
+    vi.mocked(ResourceService.Credentials).mockResolvedValue({
+        contextId: PROD,
+        items: [
+            { kind: 'Client certificate', subject: 'admin', notAfter: '2026-10-01T00:00:00Z', daysLeft: 6, note: '', error: '' },
+        ],
+        error: '',
+    } as never);
+    render(Dashboard, { contextId: PROD });
+
+    await expect.element(page.getByText('Client certificate')).toBeVisible();
+    await expect.element(page.getByText(/expires\s+in 6 days/)).toBeVisible();
+});
+
+test('the event timeline draws each event and opens its report', async () => {
+    vi.mocked(ResourceService.EventTimeline).mockResolvedValue({
+        from: new Date(Date.now() - 3600_000).toISOString(),
+        to: new Date().toISOString(),
+        events: [
+            {
+                at: new Date(Date.now() - 60_000).toISOString(), first: new Date(Date.now() - 600_000).toISOString(),
+                type: 'Warning', reason: 'BackOff', object: 'Pod/web-1', objectNamespace: 'default',
+                message: 'Back-off restarting', count: 9, namespace: 'default', name: 'web-1.abc',
+            },
+        ],
+        truncated: false,
+        error: '',
+    } as never);
+    render(Dashboard, { contextId: PROD });
+
+    const mark = page.getByRole('button', { name: 'BackOff: Pod/web-1' });
+    await expect.element(mark).toBeInTheDocument();
+    await mark.click();
+
+    expect(detail.target).toEqual({ contextId: PROD, kind: 'events', namespace: 'default', name: 'web-1.abc' });
 });

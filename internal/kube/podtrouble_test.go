@@ -2,6 +2,7 @@ package kube
 
 import (
 	"testing"
+	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -57,6 +58,9 @@ func TestPodTroubleCountsAndRanks(t *testing.T) {
 			t.Errorf("worst[%d] = %s, want %s", i, got.Worst[i].Name, name)
 		}
 	}
+	if got.Worst[0].Trouble != TroubleCrashLoop || got.Worst[1].Trouble != TroubleFailed || got.Worst[2].Trouble != TroubleEvicted {
+		t.Errorf("troubles = %s, %s, %s", got.Worst[0].Trouble, got.Worst[1].Trouble, got.Worst[2].Trouble)
+	}
 	if got.Worst[0].Reason != "CrashLoopBackOff" || got.Worst[1].Reason != "Failed" || got.Worst[2].Reason != "Evicted" {
 		t.Errorf("reasons = %s, %s, %s", got.Worst[0].Reason, got.Worst[1].Reason, got.Worst[2].Reason)
 	}
@@ -80,5 +84,67 @@ func TestPodTroubleEmpty(t *testing.T) {
 	got := podTrouble(nil)
 	if got.Worst == nil || len(got.Worst) != 0 {
 		t.Errorf("worst = %#v, want an empty list", got.Worst)
+	}
+}
+
+// A restart count is a total since the pod was made. What tells a pod falling
+// over now from one that fell over once last month is when, and why.
+func TestPodTroubleTellsRecentRestartsFromOldOnes(t *testing.T) {
+	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	restarted := func(name string, ago time.Duration, reason string, exit int64) unstructured.Unstructured {
+		return troublePod("apps", name, map[string]any{
+			"phase": "Running",
+			"containerStatuses": []any{map[string]any{
+				"name":         "app",
+				"restartCount": int64(2),
+				"lastState": map[string]any{"terminated": map[string]any{
+					"reason":     reason,
+					"exitCode":   exit,
+					"finishedAt": now.Add(-ago).Format(time.RFC3339),
+				}},
+			}},
+		})
+	}
+	pods := []unstructured.Unstructured{
+		restarted("old", 30*24*time.Hour, "Error", 1),
+		restarted("fresh", 10*time.Minute, "OOMKilled", 137),
+	}
+
+	got := podTroubleAt(pods, now)
+
+	if got.Restarting != 2 || got.RestartedRecently != 1 {
+		t.Fatalf("restarting/recently = %d/%d, want 2/1", got.Restarting, got.RestartedRecently)
+	}
+	if got.Worst[0].Name != "fresh" || got.Worst[0].Reason != "Restarting" {
+		t.Errorf("first = %s (%s), want fresh (Restarting)", got.Worst[0].Name, got.Worst[0].Reason)
+	}
+	if got.Worst[0].LastTermination != "OOMKilled (exit 137)" || got.Worst[0].LastRestart != "10m" {
+		t.Errorf("fresh last = %q %q", got.Worst[0].LastTermination, got.Worst[0].LastRestart)
+	}
+	if got.Worst[1].Reason != "Restarted" || got.Worst[1].LastTermination != "Error (exit 1)" {
+		t.Errorf("old = %s %q", got.Worst[1].Reason, got.Worst[1].LastTermination)
+	}
+}
+
+func TestPodTroubleKeepsTheEvictionMessage(t *testing.T) {
+	got := podTrouble([]unstructured.Unstructured{
+		troublePod("apps", "gone", map[string]any{
+			"phase": "Failed", "reason": "Evicted", "message": "The node was low on resource: memory.",
+		}),
+	})
+	if got.Worst[0].Message != "The node was low on resource: memory." {
+		t.Errorf("message = %q", got.Worst[0].Message)
+	}
+}
+
+// A time cell reads as an age, but carries the moment too, so the window can
+// write it the way the user likes dates written.
+func TestTimeCellCarriesTheMoment(t *testing.T) {
+	at := time.Date(2026, 9, 24, 10, 30, 0, 0, time.FixedZone("CEST", 2*60*60))
+	if got := timeCell(at).At; got != "2026-09-24T08:30:00Z" {
+		t.Errorf("at = %q, want the moment in UTC", got)
+	}
+	if got := timeCell(time.Time{}).At; got != "" {
+		t.Errorf("no time carries %q", got)
 	}
 }

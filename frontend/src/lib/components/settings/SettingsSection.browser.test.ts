@@ -107,6 +107,7 @@ test('the sections are ordered with the everyday ones first and About last', asy
         'Appearance',
         'Themes',
         'Start page',
+        'Dates and times',
         'Plugins',
         'Behaviour',
         'Terminal',

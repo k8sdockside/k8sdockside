@@ -153,8 +153,16 @@
         {/if}
 
         <!-- Separated from the kubeconfig controls beside it: those act on the
-             list below, this opens a view of its own. -->
+             list below, these open views of their own. -->
         <span class="divider"></span>
+        <button
+            class="action"
+            onclick={() => workspace.openFleet()}
+            title="Fleet health: every connected cluster on one page"
+            aria-label="Fleet health"
+        >
+            <Icon name="gauge" size={15} />
+        </button>
         <button
             class="action"
             onclick={() => workspace.openHelp()}

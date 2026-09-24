@@ -21,10 +21,13 @@
     import Welcome from './lib/components/Welcome.svelte';
     import { PLUGIN_RECHECK_MS, workspace } from './lib/state/workspace.svelte';
     import { clusters } from './lib/state/health.svelte';
+    import { fleet } from './lib/state/fleet.svelte';
+    import { DASHBOARD } from './lib/catalogue';
     import { notices } from './lib/state/notices.svelte';
     import { session } from './lib/state/session.svelte';
     import { rowMetrics } from './lib/density';
     import { applyTheme } from './lib/theme/apply';
+    import { setDateTimeSettings } from './lib/datetime.svelte';
 
     onMount(() => {
         // Which version this is -- the desktop app or the web one -- and who
@@ -32,6 +35,20 @@
         // hears otherwise, and the parts that differ follow the answer.
         void session.load();
         workspace.load();
+
+        // The clusters connected here, read on a timer for the fleet view,
+        // the sidebar's marks and the alerts. Handed what it needs from the
+        // workspace rather than reaching for it -- see fleet.svelte.ts.
+        return fleet.start({
+            watched: () => workspace.connectedContexts.map((c) => c.id),
+            all: () => workspace.contexts.map((c) => c.id),
+            nameOf: (id) => {
+                const context = workspace.contexts.find((c) => c.id === id);
+                return context ? workspace.displayName(context) : id;
+            },
+            notify: () => workspace.desktopNotifications && !session.server,
+            open: (id) => workspace.openTab(id, DASHBOARD),
+        });
     });
 
     // Zoom is applied as CSS on the app's own element, not through the window.
@@ -70,6 +87,12 @@
     $effect(() => {
         const theme = workspace.activeTheme;
         if (theme) applyTheme(theme);
+    });
+
+    // How dates and times are written, put in force for every component that
+    // formats one -- and, through PluginFrame, for every plugin page.
+    $effect(() => {
+        setDateTimeSettings(workspace.settings.preferences.dateTime);
     });
 
     // The density preference, written onto the root as the two custom

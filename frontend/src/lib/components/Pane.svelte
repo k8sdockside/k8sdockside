@@ -23,6 +23,8 @@
         SETTINGS,
         HELP,
         KUBERNETES,
+        FLEET,
+        COMPARE,
         iconFor,
         isPluginOverview,
         singularFor,
@@ -56,6 +58,8 @@
     import SettingsView from './settings/SettingsView.svelte';
     import HelpPage from './HelpPage.svelte';
     import KubernetesPage from './KubernetesPage.svelte';
+    import FleetView from './FleetView.svelte';
+    import CompareView from './CompareView.svelte';
 
     interface Props {
         pane: PaneId;
@@ -120,6 +124,8 @@
         if (tab.kind === SETTINGS) return 'Application settings';
         if (tab.kind === HELP) return 'How to use K8s Dockside';
         if (tab.kind === KUBERNETES) return 'A primer on Kubernetes and its terms';
+        if (tab.kind === FLEET) return 'Every cluster connected in this window, at a glance';
+        if (tab.kind === COMPARE) return 'One object in two clusters, side by side';
         return null;
     }
 
@@ -371,6 +377,10 @@
                             <HelpPage />
                         {:else if active.kind === KUBERNETES}
                             <KubernetesPage />
+                        {:else if active.kind === FLEET}
+                            <FleetView />
+                        {:else if active.kind === COMPARE}
+                            <CompareView />
                         {:else if active.kind === DASHBOARD}
                             <Dashboard contextId={active.contextId} />
                         {:else if active.kind === PORT_FORWARDS}

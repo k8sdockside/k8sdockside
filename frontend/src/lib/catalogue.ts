@@ -38,8 +38,22 @@ export const SETTINGS = '__settings__';
 export const HELP = '__help__';
 export const KUBERNETES = '__kubernetes__';
 
+/**
+ * The fleet view: every cluster's health on one page -- nodes, pods in
+ * trouble, recent warnings and credentials about to expire -- so fifteen
+ * clusters do not mean fifteen dashboards to open. It belongs to the window
+ * rather than to a cluster, like Settings, because it is about all of them.
+ */
+export const FLEET = '__fleet__';
+
+/**
+ * The comparison view: one object in two clusters, diffed. Window-level for
+ * the same reason as the fleet view -- it is about two clusters, not one.
+ */
+export const COMPARE = '__compare__';
+
 /** Every tab kind that belongs to the window rather than to a cluster. */
-export const APP_KINDS: readonly string[] = [SETTINGS, HELP, KUBERNETES];
+export const APP_KINDS: readonly string[] = [SETTINGS, HELP, KUBERNETES, FLEET, COMPARE];
 
 /**
  * Helm releases: a kind the sidebar offers that no Kubernetes API serves. It is
@@ -445,6 +459,8 @@ export function labelFor(kind: string): string {
     if (kind === SETTINGS) return 'Settings';
     if (kind === HELP) return 'Help';
     if (kind === KUBERNETES) return 'Kubernetes primer';
+    if (kind === FLEET) return 'Fleet health';
+    if (kind === COMPARE) return 'Compare';
 
     const known = BY_KIND.get(kind);
     if (known) return known.label;
@@ -468,6 +484,8 @@ export function iconFor(kind: string): string {
     if (kind === SETTINGS) return 'settings';
     if (kind === HELP) return 'help';
     if (kind === KUBERNETES) return 'book';
+    if (kind === FLEET) return 'gauge';
+    if (kind === COMPARE) return 'columns';
 
     const known = BY_KIND.get(kind);
     if (known) return known.icon;

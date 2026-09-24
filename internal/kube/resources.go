@@ -40,6 +40,10 @@ type Cell struct {
 	// Links, where a cell lists addresses worth opening in a browser. Text
 	// carries the same entries joined with ", ", for the filter and the sort.
 	Links []Link `json:"links,omitempty"`
+	// At is the moment a time cell stands for, RFC3339, so the window can
+	// write it as the user likes dates written -- or show it on hover when the
+	// cell reads as an age. Empty for every other cell.
+	At string `json:"at,omitempty"`
 	// Sort is compared in place of Text where the two do not share an order.
 	// An age reads "3d" but belongs in seconds; a volume reads "500Mi" but
 	// belongs in bytes. Sorting the text would put "5m" before "2h" before
@@ -90,6 +94,11 @@ type PodTrouble struct {
 	// Restarts how many restarts they add up to.
 	Restarting int `json:"restarting"`
 	Restarts   int `json:"restarts"`
+	// RestartedRecently is how many of those restarted within the last hour.
+	// A restart count is a total since the pod was made, so a pod that fell
+	// over once a month ago reads the same as one falling over now; this is
+	// the number that tells them apart.
+	RestartedRecently int `json:"restartedRecently"`
 	// Worst is the handful of pods most worth opening, worst first.
 	Worst []PodIssue `json:"worst"`
 }
@@ -98,8 +107,20 @@ type PodTrouble struct {
 type PodIssue struct {
 	Namespace string `json:"namespace"`
 	Name      string `json:"name"`
-	Reason    string `json:"reason"`
-	Restarts  int    `json:"restarts"`
+	// Trouble is which kind of trouble it is, one of the Trouble* constants.
+	// Reason is the words for it, which for a failed pod or one that will not
+	// start are the kubelet's and so cannot be told apart by themselves.
+	Trouble  string `json:"trouble"`
+	Reason   string `json:"reason"`
+	Restarts int    `json:"restarts"`
+	// Message is what the kubelet said about a failed or evicted pod -- "The
+	// node was low on resource: memory" -- empty for the rest.
+	Message string `json:"message"`
+	// LastTermination is why a container last stopped, as "OOMKilled" or
+	// "Error (exit 1)", and LastRestart how long ago that was. Both are
+	// empty for a pod that has never restarted.
+	LastTermination string `json:"lastTermination"`
+	LastRestart     string `json:"lastRestart"`
 }
 
 // Event is a cluster event as shown on the dashboard and in the events table.

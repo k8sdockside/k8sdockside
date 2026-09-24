@@ -43,7 +43,7 @@ type Built struct {
 	Resync func()
 }
 
-// New wires the fifteen services the frontend calls and returns them ready to
+// New wires the sixteen services the frontend calls and returns them ready to
 // register with the application.
 func New(settings *appconfig.Store, opts Options) Built {
 	configs := NewKubeconfigService(settings)
@@ -87,6 +87,10 @@ func New(settings *appconfig.Store, opts Options) Built {
 	prefs := NewSettingsService(settings)
 	looks := NewThemeService(settings)
 	backdrops := NewBackgroundService(settings)
+	// The cluster alerts, posted as the system's own notifications. It reads
+	// nothing and decides nothing -- the window compares one reading of a
+	// cluster with the last and says what to post -- so it borrows nothing.
+	alerts := &NotifyService{disabled: opts.Server}
 
 	// Every service that opens a stream files it under whoever opened it, so
 	// the web version can deliver the stream's events to that user alone.
@@ -124,6 +128,7 @@ func New(settings *appconfig.Store, opts Options) Built {
 			application.NewService(tunnels),
 			application.NewService(finder),
 			application.NewService(news),
+			application.NewService(alerts),
 			application.NewService(&SessionService{server: opts.Server}),
 		},
 		PluginViews: solutions.assetMiddleware(),

@@ -458,6 +458,14 @@ type Preferences struct {
 	// nil is how a file that has never said either way is told apart from an
 	// explicit no.
 	CheckForUpdates *bool `json:"checkForUpdates"`
+	// DesktopNotifications posts the cluster alerts -- a node gone NotReady,
+	// pods starting to crash, a certificate about to expire -- as the
+	// system's own notifications, as well as on the bell in the title bar.
+	// Only the clusters connected in this window are watched, so nothing is
+	// woken up for it.
+	//
+	// Nullable for the same reason CheckForUpdates is: the default is on.
+	DesktopNotifications *bool `json:"desktopNotifications"`
 	// Terminal is how a shell opens: in the dock or in the terminal emulator
 	// the user already has, which shell to try, and what a node shell is made
 	// of. See Terminal.
@@ -468,6 +476,60 @@ type Preferences struct {
 	// Background is the picture behind the start page: which pictures, how
 	// often it changes, and whether one of them is kept. See Background.
 	Background Background `json:"background"`
+	// DateTime is how dates and times are written, in the app and in every
+	// plugin's pages, which are handed the same choice. See DateTime.
+	DateTime DateTime `json:"dateTime"`
+}
+
+// How a time of day is written.
+const (
+	// ClockSystem follows the operating system's locale. The default.
+	ClockSystem = "system"
+	Clock24     = "24h"
+	Clock12     = "12h"
+)
+
+// How a date is written.
+const (
+	// DatesSystem follows the operating system's locale. The default.
+	DatesSystem = "system"
+	// DatesISO is 2026-09-24: unambiguous, and sorts as text.
+	DatesISO = "iso"
+	// DatesDMY is 24.09.2026.
+	DatesDMY = "dmy"
+	// DatesMDY is 09/24/2026.
+	DatesMDY = "mdy"
+	// DatesLong is 24 Sep 2026, with the month in words.
+	DatesLong = "long"
+)
+
+// Which clock times are read on.
+const (
+	// ZoneLocal is this machine's time zone. The default.
+	ZoneLocal = "local"
+	// ZoneUTC is UTC, which is what the cluster's own logs and events say.
+	ZoneUTC = "utc"
+)
+
+// How a moment in a table is shown.
+const (
+	// AgesRelative is how long ago: "5m", "3d". What kubectl shows, and the
+	// default.
+	AgesRelative = "relative"
+	// AgesAbsolute is the moment itself, written as the rest of this says.
+	AgesAbsolute = "absolute"
+)
+
+// DateTime is how dates and times are written.
+//
+// Strings rather than enums, for the reason Density is one: the file stays
+// readable, and a value from a hand-edited file that nothing knows is put back
+// to the default rather than failing the whole file.
+type DateTime struct {
+	Clock string `json:"clock"`
+	Dates string `json:"dates"`
+	Zone  string `json:"zone"`
+	Ages  string `json:"ages"`
 }
 
 // The places the start page's picture can come from.
@@ -642,6 +704,7 @@ func Defaults() Settings {
 			Terminal:    DefaultTerminal(),
 			Helm:        DefaultHelm(),
 			Background:  Background{Source: BackgroundBuiltin, Palette: BackgroundPaletteVaried},
+			DateTime:    normaliseDateTime(DateTime{}),
 		},
 		PortForwards: []PortForward{},
 	}
@@ -1199,6 +1262,11 @@ func (s *Store) SetPreferences(p Preferences) (Settings, error) {
 			check := *p.CheckForUpdates
 			p.CheckForUpdates = &check
 		}
+		if p.DesktopNotifications != nil {
+			notify := *p.DesktopNotifications
+			p.DesktopNotifications = &notify
+		}
+		p.DateTime = normaliseDateTime(p.DateTime)
 		d.Preferences = p
 	})
 }
@@ -1461,14 +1529,16 @@ func normalise(s Settings) Settings {
 	s.Preferences.Terminal = normaliseTerminal(s.Preferences.Terminal)
 	s.Preferences.Helm = normaliseHelm(s.Preferences.Helm)
 	s.Preferences.Background = normaliseBackground(s.Preferences.Background)
+	s.Preferences.DateTime = normaliseDateTime(s.Preferences.DateTime)
 	s.BackgroundFolder = strings.TrimSpace(s.BackgroundFolder)
 	if s.PortForwards == nil {
 		s.PortForwards = []PortForward{}
 	}
 	s.Updates.ReadVersion = strings.TrimSpace(s.Updates.ReadVersion)
-	// RestoreTabs, ShowLineNumbers and CheckForUpdates are deliberately not
-	// defaulted: nil is a value in its own right for each, meaning "never
-	// chosen", and it is resolved to true where it is read.
+	// RestoreTabs, ShowLineNumbers, CheckForUpdates and DesktopNotifications
+	// are deliberately not defaulted: nil is a value in its own right for
+	// each, meaning "never chosen", and it is resolved to true where it is
+	// read.
 	return s
 }
 
@@ -1771,6 +1841,32 @@ func normaliseHelm(h Helm) Helm {
 // normaliseBackground repairs a source nothing answers to and an interval
 // outside what anyone would choose. The pinned picture is kept as written --
 // see Background.Pinned.
+// normaliseDateTime puts anything it does not know back to the default, so
+// every reader can switch on the constants alone.
+func normaliseDateTime(d DateTime) DateTime {
+	switch d.Clock {
+	case ClockSystem, Clock24, Clock12:
+	default:
+		d.Clock = ClockSystem
+	}
+	switch d.Dates {
+	case DatesSystem, DatesISO, DatesDMY, DatesMDY, DatesLong:
+	default:
+		d.Dates = DatesSystem
+	}
+	switch d.Zone {
+	case ZoneLocal, ZoneUTC:
+	default:
+		d.Zone = ZoneLocal
+	}
+	switch d.Ages {
+	case AgesRelative, AgesAbsolute:
+	default:
+		d.Ages = AgesRelative
+	}
+	return d
+}
+
 func normaliseBackground(b Background) Background {
 	switch b.Source {
 	case BackgroundBuiltin, BackgroundFolder, BackgroundNone:
@@ -1841,6 +1937,10 @@ func clone(s Settings) Settings {
 	if s.Preferences.CheckForUpdates != nil {
 		check := *s.Preferences.CheckForUpdates
 		out.Preferences.CheckForUpdates = &check
+	}
+	if s.Preferences.DesktopNotifications != nil {
+		notify := *s.Preferences.DesktopNotifications
+		out.Preferences.DesktopNotifications = &notify
 	}
 	out.Preferences.Terminal.Shells = slices.Clone(s.Preferences.Terminal.Shells)
 	out.PortForwards = slices.Clone(s.PortForwards)

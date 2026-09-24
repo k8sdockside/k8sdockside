@@ -5,6 +5,8 @@
 // chart that makes you count decimal places. Every value on screen -- the axis,
 // the legend, the tooltip -- goes through here so the three always agree.
 
+import { formatDay, formatTime as clockTime } from '../datetime.svelte';
+
 /**
  * The units a value can be written in.
  *
@@ -123,20 +125,17 @@ function trim(value: number): string {
     return fraction ? `${grouped}.${fraction}` : grouped;
 }
 
-/** A moment on the time axis, as a clock reading. */
+/** A moment on the time axis, as a clock reading, in the user's clock and zone. */
 export function formatTime(unixSeconds: number): string {
-    return new Date(unixSeconds * 1000).toLocaleTimeString(undefined, {
-        hour: '2-digit',
-        minute: '2-digit',
-    });
+    return clockTime(unixSeconds * 1000);
 }
 
 /** A moment for the tooltip, where the date matters on a long range. */
 export function formatMoment(unixSeconds: number, spanMinutes: number): string {
-    const at = new Date(unixSeconds * 1000);
-    const clock = at.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const at = unixSeconds * 1000;
+    const clock = clockTime(at, { seconds: true });
     if (spanMinutes <= 24 * 60) return clock;
-    return `${at.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${clock}`;
+    return `${formatDay(at)} ${clock}`;
 }
 
 /**

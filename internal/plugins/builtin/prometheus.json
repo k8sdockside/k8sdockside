@@ -269,6 +269,15 @@
             "query": "sum by (container) (container_memory_working_set_bytes{namespace=\"$namespace\",pod=\"$name\",container!=\"\",container!=\"POD\"})"
         },
         {
+            "id": "pod-restarts",
+            "label": "Restarts",
+            "attach": "pods",
+            "unit": "count",
+            "legend": "container",
+            "description": "Needs kube-state-metrics. Restarts per container in each five minutes. Steps that keep coming are a crash loop happening now; a single step is one restart, and the pod's report says why it stopped.",
+            "query": "sum by (container) (increase(kube_pod_container_status_restarts_total{namespace=\"$namespace\",pod=\"$name\"}[5m]))"
+        },
+        {
             "id": "pod-memory-commitment",
             "label": "Memory requested vs used",
             "attach": "pods",
@@ -483,6 +492,23 @@
             "query": "sum by (phase) (kube_pod_status_phase)"
         },
         {
+            "id": "cluster-restarts",
+            "label": "Pods restarting",
+            "attach": "dashboard",
+            "unit": "count",
+            "description": "Needs kube-state-metrics. Container restarts per pod in each fifteen minutes, for the eight pods restarting most. A line that keeps stepping up is a pod failing now; the restart count in the pods list cannot tell that apart from one that failed once last month.",
+            "query": "topk(8, sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total[15m])) > 0)"
+        },
+        {
+            "id": "cluster-oom-kills",
+            "label": "Containers last killed for memory",
+            "attach": "dashboard",
+            "unit": "count",
+            "legend": "namespace",
+            "description": "Needs kube-state-metrics. How many containers in each namespace last stopped because they ran out of memory. A namespace that climbs here has limits set below what its pods actually use.",
+            "query": "sum by (namespace) (kube_pod_container_status_last_terminated_reason{reason=\"OOMKilled\"}) > 0"
+        },
+        {
             "id": "apiserver-requests",
             "label": "API server requests",
             "attach": "dashboard",
@@ -587,6 +613,15 @@
             "legend": "pod",
             "description": "Working set of the eight largest pods in this namespace — what the kernel would have to reclaim, which is what the OOM killer looks at.",
             "query": "topk(8, sum by (pod) (container_memory_working_set_bytes{namespace=\"$name\",container!=\"\",container!=\"POD\"}))"
+        },
+        {
+            "id": "namespace-restarts",
+            "label": "Pods restarting",
+            "attach": "namespaces",
+            "unit": "count",
+            "legend": "pod",
+            "description": "Needs kube-state-metrics. Container restarts per pod in each fifteen minutes, for the eight pods in this namespace restarting most.",
+            "query": "topk(8, sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=\"$name\"}[15m])) > 0)"
         },
         {
             "id": "namespace-storage",

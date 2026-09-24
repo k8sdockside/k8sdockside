@@ -14,6 +14,7 @@ import type * as appconfig from '../../../bindings/github.com/k8sdockside/k8sdoc
 import { DEFAULT_THEME_ID } from '../theme/apply';
 import type { ColumnPrefs } from '../columns';
 import type { PaneId } from './panes';
+import { DEFAULT_DATETIME, type DateTimeSettings } from '../datetime.svelte';
 
 /** One pane as the settings file holds it. See ./panes.ts for what a pane is. */
 export interface SavedPane {
@@ -259,6 +260,10 @@ export interface Settings {
         showLineNumbers: boolean;
         /** Whether the app asks GitHub, on its own, if a newer release is out. */
         checkForUpdates: boolean;
+        /** Whether cluster alerts are posted as the system's notifications too. */
+        desktopNotifications: boolean;
+        /** How dates and times are written, in the app and in plugins' pages. */
+        dateTime: DateTimeSettings;
         /** How far back a metrics chart looks, in minutes. */
         metricsRange: number;
         /** How a shell opens, and what it opens with. */
@@ -311,7 +316,7 @@ export interface Overview {
     namespaces: string[];
     stats: kube.Stat[];
     /** What is wrong with the cluster's pods, beyond the running count. */
-    pods: Omit<kube.PodTrouble, 'worst'> & { worst: kube.PodIssue[] };
+    pods: PodTrouble;
     /** The same shape a resource tab renders, so both sort through one path. */
     events: Table;
 }
@@ -378,6 +383,16 @@ export function adoptSettings(settings: appconfig.Settings): Settings {
             // On by default, and nullable on the Go side for the same reason
             // again: an older file must not read as having switched it off.
             checkForUpdates: settings.preferences?.checkForUpdates ?? true,
+            // On by default, nullable on the Go side for the same reason.
+            desktopNotifications: settings.preferences?.desktopNotifications ?? true,
+            // Normalised by the store, so an unknown value never arrives; an
+            // empty one is a file older than the setting.
+            dateTime: {
+                clock: (settings.preferences?.dateTime?.clock || DEFAULT_DATETIME.clock) as DateTimeSettings['clock'],
+                dates: (settings.preferences?.dateTime?.dates || DEFAULT_DATETIME.dates) as DateTimeSettings['dates'],
+                zone: (settings.preferences?.dateTime?.zone || DEFAULT_DATETIME.zone) as DateTimeSettings['zone'],
+                ages: (settings.preferences?.dateTime?.ages || DEFAULT_DATETIME.ages) as DateTimeSettings['ages'],
+            },
             // Zero from the store means never chosen. An hour is long enough to
             // show a rollout and short enough to still show a spike.
             metricsRange: settings.preferences?.metricsRange || 60,
@@ -487,14 +502,83 @@ export function adoptOverview(overview: kube.Overview): Overview {
         distribution: overview.distribution,
         namespaces: [...(overview.namespaces ?? [])],
         stats: [...(overview.stats ?? [])],
-        pods: {
-            evicted: overview.pods?.evicted ?? 0,
-            failed: overview.pods?.failed ?? 0,
-            crashLooping: overview.pods?.crashLooping ?? 0,
-            restarting: overview.pods?.restarting ?? 0,
-            restarts: overview.pods?.restarts ?? 0,
-            worst: [...(overview.pods?.worst ?? [])],
-        },
+        pods: adoptPodTrouble(overview.pods),
         events: adoptTable(overview.events),
+    };
+}
+
+/** What is wrong with a cluster's pods, with the lists Go may send as null. */
+export type PodTrouble = Omit<kube.PodTrouble, 'worst'> & { worst: kube.PodIssue[] };
+
+export function adoptPodTrouble(pods: kube.PodTrouble | null | undefined): PodTrouble {
+    return {
+        evicted: pods?.evicted ?? 0,
+        failed: pods?.failed ?? 0,
+        crashLooping: pods?.crashLooping ?? 0,
+        restarting: pods?.restarting ?? 0,
+        restarts: pods?.restarts ?? 0,
+        restartedRecently: pods?.restartedRecently ?? 0,
+        worst: (pods?.worst ?? []).map((issue) => ({ ...issue })),
+    };
+}
+
+/** One cluster's health, as the fleet view and the alerts read it. */
+export type ClusterHealth = Omit<kube.ClusterHealth, 'notReadyNodes' | 'pods' | 'warningReasons'> & {
+    notReadyNodes: string[];
+    pods: PodTrouble;
+    warningReasons: kube.ReasonCount[];
+};
+
+export function adoptHealth(health: kube.ClusterHealth): ClusterHealth {
+    return {
+        contextId: health.contextId,
+        nodesReady: health.nodesReady,
+        nodesTotal: health.nodesTotal,
+        notReadyNodes: [...(health.notReadyNodes ?? [])],
+        podsRunning: health.podsRunning,
+        podsTotal: health.podsTotal,
+        pods: adoptPodTrouble(health.pods),
+        warnings: health.warnings,
+        warningReasons: (health.warningReasons ?? []).map((r) => ({ ...r })),
+        error: health.error,
+    };
+}
+
+/** When a context's credentials expire, soonest first. */
+export type Credentials = Omit<kube.Credentials, 'items'> & { items: kube.Credential[] };
+
+export function adoptCredentials(credentials: kube.Credentials): Credentials {
+    return {
+        contextId: credentials.contextId,
+        items: (credentials.items ?? []).map((item) => ({ ...item })),
+        error: credentials.error,
+    };
+}
+
+/** A cluster's events over a window, newest first. */
+export type Timeline = Omit<kube.Timeline, 'events'> & { events: kube.TimelineEvent[] };
+
+export function adoptTimeline(timeline: kube.Timeline): Timeline {
+    return {
+        from: timeline.from,
+        to: timeline.to,
+        events: (timeline.events ?? []).map((e) => ({ ...e })),
+        truncated: timeline.truncated,
+        error: timeline.error,
+    };
+}
+
+/** Two copies of an object, and the difference between them. */
+export type Comparison = Omit<kube.Comparison, 'lines'> & { lines: kube.DiffLine[] };
+
+export function adoptComparison(comparison: kube.Comparison): Comparison {
+    return {
+        left: comparison.left,
+        right: comparison.right,
+        leftError: comparison.leftError,
+        rightError: comparison.rightError,
+        lines: (comparison.lines ?? []).map((l) => ({ ...l })),
+        same: comparison.same,
+        changes: comparison.changes,
     };
 }

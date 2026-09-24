@@ -165,7 +165,8 @@ through `window.k8sdockside`. Each call is a promise; a failure rejects with an
 | The overview | `summary()` — whether the cluster has what `requires` names; `charts({ minutes })` — the plugin's Prometheus charts as numbers |
 | Changing | `patch({ kind, namespace, name, patch })`, `create({ kind, namespace, object })`, `run(actionId, ref)` — the user sees each one and confirms it |
 | Moving around the app | `open(ref)`, `openView(id)`, `edit(ref)`, `logs(ref)`, `openUrl(url)` |
-| Staying in step | `on('theme', fn)`, `resize(height)` in a panel |
+| Staying in step | `on('theme', fn)`, `on('datetime', fn)`, `resize(height)` in a panel |
+| Dates and times | `format.date(when)`, `format.time(when)`, `format.dateTime(when)`, `format.age(when)`, `format.moment(when)` — written the way the user chose in **Settings → Dates and times**, as the app writes them (0.1.10 and newer; check it exists) |
 | Registries | `registry.lookup({ image })` — the tags an image's registry lists and what its tag points at now, asked by the app for an image the cluster runs (0.0.25 and newer; needs `"ui": { "registries": true }`) |
 | Services in the cluster | `services.get({ service, path, query })`, `services.json(...)` — a GET to a Service the manifest declares, made by the app through the API server (0.0.27 and newer; needs `"ui": { "services": [...] }`) |
 | Remembering | `storage.get(key)`, `storage.set(key, value)`, `storage.remove(key)`, `storage.keys()` — kept by the app per plugin and per cluster, across restarts (0.0.19 and newer; check it exists) |

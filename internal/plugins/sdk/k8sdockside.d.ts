@@ -178,6 +178,51 @@ declare namespace K8sDockside {
         authorUrl?: string;
     }
 
+    /**
+     * How the user wants dates and times written -- one choice for the app
+     * and every plugin, made in Settings -> Dates and times. Write them with
+     * `format` rather than reading this yourself.
+     */
+    interface DateTimeSettings {
+        /** `system` follows the locale; `24h` and `12h` override it. */
+        clock: 'system' | '24h' | '12h';
+        /** `system`, `iso` (2026-09-24), `dmy` (24.09.2026), `mdy` (09/24/2026) or `long` (24 Sep 2026). */
+        dates: 'system' | 'iso' | 'dmy' | 'mdy' | 'long';
+        /** `local` is the user's machine; `utc` is UTC, marked as such. */
+        zone: 'local' | 'utc';
+        /** Whether a moment in a table reads as how long ago (`relative`) or as the moment (`absolute`). */
+        ages: 'relative' | 'absolute';
+    }
+
+    /** A moment: a Date, an RFC3339 string, or milliseconds since the epoch. */
+    type When = Date | string | number;
+
+    /** Writes dates and times as the user chose. Every method answers `''` for something that is not a date. */
+    interface Format {
+        /** The settings in force. */
+        settings(): DateTimeSettings;
+        /** A date: `2026-09-24`, `24.09.2026`, ... */
+        date(when: When): string;
+        /** A day without its year, for an axis: `09-24`, `24 Sep`, ... */
+        day(when: When): string;
+        /** A time of day. */
+        time(when: When, opts?: { seconds?: boolean }): string;
+        /** A date and a time, followed by `UTC` when that is the zone. */
+        dateTime(when: When, opts?: { seconds?: boolean }): string;
+        /**
+         * How long ago, as the app's tables write it: `45s`, `2m5s`, `15m`,
+         * `3h20m`, `12h`, `3d4h`, `12d`. Seconds for the first ten minutes, so
+         * redraw every second while something that young is on screen. `now`
+         * defaults to the current time.
+         */
+        age(when: When, now?: number): string;
+        /**
+         * A moment the way the app's tables show one: its age, or the moment
+         * itself when the user chose that, with the other form as `title`.
+         */
+        moment(when: When): { text: string; title: string };
+    }
+
     /** What `ready()` resolves with. */
     interface Context {
         /** The plugin's id from its manifest. */
@@ -221,6 +266,11 @@ declare namespace K8sDockside {
         plugin?: PluginInfo;
         /** The theme at the moment the page loaded. See `on('theme')` for changes. */
         theme: Theme;
+        /**
+         * How dates and times are written, at the moment the page loaded. See
+         * `on('datetime')` for changes. Absent on an app older than 0.1.10.
+         */
+        datetime?: DateTimeSettings;
     }
 
     // ----- actions ------------------------------------------------------------
@@ -527,6 +577,8 @@ declare namespace K8sDockside {
     interface Events {
         /** The user changed theme. The new tokens are already on `:root` when this is called. */
         theme: Theme;
+        /** The user changed how dates and times are written. `format` already follows it. */
+        datetime: DateTimeSettings;
     }
 
     /** Stops what returned it. */
@@ -669,6 +721,13 @@ declare namespace K8sDockside {
          * refused by the app with a notice (the promise still resolves).
          */
         openUrl(url: string): Promise<null>;
+
+        /**
+         * Writes dates and times as the user chose, the same way the app
+         * does. Absent on an app older than 0.1.10: check for it, and fall
+         * back to `toLocaleString` without it.
+         */
+        format?: Format;
 
         /** Listens for pushes from the app. Returns a function that stops listening. */
         on<E extends keyof Events>(event: E, listener: (data: Events[E]) => void): Unsubscribe;

@@ -70,6 +70,8 @@ import {
     SETTINGS,
     HELP,
     KUBERNETES,
+    FLEET,
+    COMPARE,
     APP_KINDS,
     PLUGINS_GROUP,
     DEFINITIONS_GROUP,
@@ -81,6 +83,9 @@ import {
     registerPluginViews,
 } from '../catalogue';
 import { clusters } from './health.svelte';
+import { fleet } from './fleet.svelte';
+import { compare, type CompareTarget } from './compare.svelte';
+import { DEFAULT_DATETIME, type DateTimeSettings } from '../datetime.svelte';
 import { notices } from './notices.svelte';
 import { session } from './session.svelte';
 import { detail, type DetailTarget } from './detail.svelte';
@@ -285,6 +290,8 @@ function defaultSettings(): Settings {
             contextSort: 'name',
             showLineNumbers: true,
             checkForUpdates: true,
+            desktopNotifications: true,
+            dateTime: { ...DEFAULT_DATETIME },
             metricsRange: 60,
             terminal: {
                 mode: 'app',
@@ -701,6 +708,7 @@ class Workspace {
     restoreTabsOnLaunch = $derived(this.settings.preferences.restoreTabs);
     confirmSourceRemoval = $derived(this.settings.preferences.confirmSourceRemoval);
     checkForUpdates = $derived(this.settings.preferences.checkForUpdates);
+    desktopNotifications = $derived(this.settings.preferences.desktopNotifications);
     /** Whether the sidebar groups contexts under the kubeconfig they came from. */
     showKubeconfigNames = $derived(this.settings.preferences.showKubeconfigNames);
     /**
@@ -961,6 +969,7 @@ class Workspace {
         }
         this.expanded = this.expanded.filter((id) => id !== contextId);
         clusters.forget(contextId);
+        fleet.forget(contextId);
         // What it served and which plugins it had go too: a context opened
         // again is asked afresh, which is how a product installed while it was
         // let go of gets its plugin back.
@@ -1389,6 +1398,20 @@ class Workspace {
     /** Opens the Kubernetes primer, or focuses it if already open. */
     openKubernetesPrimer(): void {
         this.openAppTab(KUBERNETES);
+    }
+
+    /** Opens the fleet view, every cluster's health on one page. */
+    openFleet(): void {
+        this.openAppTab(FLEET);
+    }
+
+    /**
+     * Opens the comparison view, set to compare one object with the same
+     * object in another cluster when one is given.
+     */
+    openCompare(target?: CompareTarget): void {
+        if (target) compare.against(target);
+        this.openAppTab(COMPARE);
     }
 
     /**
@@ -3039,6 +3062,15 @@ class Workspace {
 
     setCheckForUpdates(checkForUpdates: boolean): void {
         this.updatePreferences({ checkForUpdates });
+    }
+
+    setDesktopNotifications(desktopNotifications: boolean): void {
+        this.updatePreferences({ desktopNotifications });
+    }
+
+    /** Changes one or more of how dates and times are written. */
+    setDateTime(patch: Partial<DateTimeSettings>): void {
+        this.updatePreferences({ dateTime: { ...this.settings.preferences.dateTime, ...patch } });
     }
 
     setShowKubeconfigNames(showKubeconfigNames: boolean): void {

@@ -31,6 +31,7 @@ export type ActionId =
     | 'vmmigrate'
     | 'cordon'
     | 'drain'
+    | 'compare'
     | 'delete'
     | 'values'
     | 'rollback'
@@ -78,6 +79,13 @@ const SHELL: Action = { id: 'shell', label: 'Shell', icon: 'terminal', form: 'im
  */
 const FORWARD: Action = { id: 'forward', label: 'Forward', icon: 'forward', form: 'ports' };
 const SCALE: Action = { id: 'scale', label: 'Scale', icon: 'scale', form: 'number' };
+/**
+ * The same object in another cluster, diffed. Offered on everything that is
+ * an object someone set up -- which is everything but an event, a record of
+ * one moment in one cluster that has no counterpart anywhere else.
+ */
+const COMPARE: Action = { id: 'compare', label: 'Compare', icon: 'columns', form: 'immediate' };
+const NOT_COMPARABLE = ['events'];
 const RESTART: Action = { id: 'restart', label: 'Restart', icon: 'repeat', form: 'immediate' };
 /**
  * Back to an earlier revision of a workload: `kubectl rollout undo`. It asks
@@ -329,6 +337,7 @@ export function actionsFor(kind: string): Action[] {
     if (kind === 'pods') out.push(EVICT);
     if (kind === CSRS) out.push(APPROVE, DENY);
     if (kind === 'nodes') out.push(NODE_PODS, CORDON, DRAIN);
+    if (!NOT_COMPARABLE.includes(kind)) out.push(COMPARE);
     out.push(DELETE);
     return out;
 }

@@ -23,6 +23,7 @@
     import { session } from '../state/session.svelte';
     import { workspace, type Health } from '../state/workspace.svelte';
     import { clusters } from '../state/health.svelte';
+    import { fleet } from '../state/fleet.svelte';
     import type { Plugin } from '../plugins/types';
     import Icon from './Icon.svelte';
     import PluginMark from './PluginMark.svelte';
@@ -40,6 +41,12 @@
 
     let color = $derived(workspace.colorOf(context.id));
     let health = $derived(clusters.of(context.id));
+    /**
+     * What the fleet's last reading found wrong here, for the mark beside the
+     * name. Only while connected: a disconnected cluster's last reading is
+     * history, and a mark on it would be a mark nobody is keeping current.
+     */
+    let trouble = $derived(workspace.isConnected(context.id) ? fleet.trouble(context.id) : null);
     let expanded = $derived(workspace.isExpanded(context.id));
     let selected = $derived(workspace.selectedContextId === context.id);
     // The focused tab rather than the main pane's: a list dragged into another
@@ -428,6 +435,21 @@
                 aria-label="Remove {workspace.displayName(context)}"
             >
                 <Icon name="close" size={12} />
+            </button>
+        {/if}
+
+        <!-- What the fleet found wrong: evicted or crashing pods, nodes down,
+             credentials running out. A count rather than a word, because the
+             row has no room for one, with the words in the tooltip; it opens
+             the dashboard, which is where they are explained. -->
+        {#if trouble}
+            <button
+                class="trouble {trouble.tone}"
+                onclick={() => workspace.openTab(context.id, DASHBOARD_ITEM.kind)}
+                title={trouble.summary}
+                aria-label="{workspace.displayName(context)}: {trouble.summary}"
+            >
+                {trouble.count > 99 ? '99+' : trouble.count}
             </button>
         {/if}
 
@@ -873,6 +895,35 @@
         50% {
             opacity: 0.25;
         }
+    }
+
+    .trouble {
+        flex: 0 0 auto;
+        min-width: 16px;
+        height: 15px;
+        padding: 0 4px;
+        margin-right: 2px;
+        font: inherit;
+        font-size: 9.5px;
+        font-weight: 700;
+        line-height: 15px;
+        font-variant-numeric: tabular-nums;
+        border-radius: 8px;
+        border: 0;
+        cursor: pointer;
+        color: var(--bg);
+    }
+
+    .trouble.warn {
+        background: var(--warn);
+    }
+
+    .trouble.error {
+        background: var(--error);
+    }
+
+    .trouble:hover {
+        filter: brightness(1.1);
     }
 
     /* A triangle rather than a red dot: in a list of twenty clusters a broken

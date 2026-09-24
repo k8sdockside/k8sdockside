@@ -10,10 +10,14 @@
 		<string>icons</string>
 		<key>CFBundleIconName</key>
 		<string>appicon</string>
+		<!-- The development build's own identity, apart from the installed
+		     app's: macOS hands a clicked notification to whichever app holds
+		     the identifier, and with one shared it went to the installed app
+		     rather than to the `make dev` process that posted it. -->
 		<key>CFBundleIdentifier</key>
-		<string>io.github.rogerwesterbo.k8sdockside</string>
+		<string>io.github.rogerwesterbo.k8sdockside.dev</string>
 		<key>CFBundleName</key>
-		<string>K8s Dockside</string>
+		<string>K8s Dockside (dev)</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>

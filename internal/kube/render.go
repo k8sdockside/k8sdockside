@@ -83,7 +83,7 @@ func timeCell(t time.Time) Cell {
 	if seconds < 0 {
 		seconds = 0
 	}
-	return Cell{Text: age(int(seconds / 60)), Tone: "info", Sort: strconv.FormatInt(seconds, 10)}
+	return Cell{Text: age(int(seconds / 60)), Tone: "info", Sort: strconv.FormatInt(seconds, 10), At: t.UTC().Format(time.RFC3339)}
 }
 
 // durationCell renders an elapsed span, which sorts by its own length.
