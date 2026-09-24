@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Argo CD overrides</title>
+        <link rel="stylesheet" href="argo.css" />
+        <!-- The bridge to the app. Served by k8sdockside itself, always at this path. -->
+        <script src="/plugin-ui/_sdk/k8sdockside.js"></script>
+    </head>
+    <body class="page page-section">
+        <p id="error" class="banner error" hidden></p>
+        <div id="root" class="section-root">
+            <p class="faint">Reading…</p>
+        </div>
+        <!-- Classic scripts, not type="module": a sandboxed frame has an opaque
+             origin, so a module would be a cross-origin load. -->
+        <script src="model.js"></script>
+        <script src="kit.js"></script>
+        <script src="overrides.js"></script>
+        <script src="override-editor.js"></script>
+        <script src="overrides-view.js"></script>
+        <script src="overrides-panel.js"></script>
+    </body>
+</html>

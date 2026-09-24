@@ -19,7 +19,7 @@
             "url": "https://github.com/argoproj/argo-cd"
         }
     ],
-    "description": "Argo CD keeps a cluster matching what is in Git. An Application is one thing it is keeping in sync, and carries two answers worth reading together: whether the cluster matches Git (sync), and whether what is deployed is actually working (health). The overview leads with the applications that need you and the button that fixes each; the application board shows every application at once, and one of them in full — what it deploys, where from, and what its last sync did.",
+    "description": "Argo CD keeps a cluster matching what is in Git. An Application is one thing it is keeping in sync, and carries two answers worth reading together: whether the cluster matches Git (sync), and whether what is deployed is actually working (health). The overview leads with the applications that need you and the button that fixes each; the application board shows every application at once, and one of them in full — what it deploys, where from, and what its last sync did. Every Application also has an Overrides panel for what `argocd app set` changes — the target revision, Helm parameters, values and value files, Kustomize images and replicas — which says first whether an ApplicationSet or a parent app of apps will put the change back, and every ApplicationSet has the same for its template.",
     "requires": [
         {
             "kind": "crd:applications.argoproj.io",
@@ -199,6 +199,20 @@
             "kind": "crd:applications.argoproj.io",
             "entry": "app.html",
             "height": 260
+        },
+        {
+            "id": "overrides",
+            "label": "Overrides",
+            "kind": "crd:applications.argoproj.io",
+            "entry": "overrides.html",
+            "height": 380
+        },
+        {
+            "id": "appset-overrides",
+            "label": "Template overrides",
+            "kind": "crd:applicationsets.argoproj.io",
+            "entry": "overrides.html",
+            "height": 420
         }
     ]
 }

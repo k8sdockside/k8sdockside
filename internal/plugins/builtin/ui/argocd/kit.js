@@ -63,6 +63,8 @@
         image: ['M4 5h16v14H4z', 'M4 15l4-4 4 4 3-3 5 5'],
         filter: ['M4 5h16l-6 7v6l-4 2v-8z'],
         stack: ['M12 3l9 5-9 5-9-5z', 'M3 13l9 5 9-5'],
+        plus: ['M12 5v14', 'M5 12h14'],
+        sliders: ['M4 7h10', 'M18 7h2', 'M4 17h4', 'M12 17h8', 'M16 5v4', 'M8 15v4'],
     };
 
     function icon(name, className) {

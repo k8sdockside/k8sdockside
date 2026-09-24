@@ -33,7 +33,15 @@
         notice: '',
         // How wide the drawer was dragged; empty is the stylesheet's width.
         width: '',
+        // Whether the drawer's Overrides section is open: '1', or empty.
+        overrides: '',
     };
+
+    // The drawer's Overrides section: the same view the detail panel has
+    // (overrides-view.js), for the application in the drawer. Kept across the
+    // drawer's redraws -- it holds whatever is being typed into it -- and
+    // made afresh only when another application is chosen.
+    var ov = { key: '', view: null, fold: null };
 
     var $ = function (id) {
         return document.getElementById(id);
@@ -50,7 +58,7 @@
 
     // The selection and the filters live in the frame's own hash, so switching
     // tabs away and back -- which unloads the page -- comes back to them.
-    var REMEMBERED = ['group', 'health', 'sync', 'project', 'selected', 'width'];
+    var REMEMBERED = ['group', 'health', 'sync', 'project', 'selected', 'width', 'overrides'];
 
     function saveHash() {
         var parts = [];
@@ -284,6 +292,46 @@
         );
     }
 
+    /**
+     * The Overrides section for an application: a fold holding its Overrides
+     * view, read only while the fold is open.
+     */
+    function overridesFold(app) {
+        if (ov.key === app.key && ov.fold) return ov.fold;
+        dropOverrides();
+        var ref = A.appRef(app);
+        var view = window.ArgoOverridesView.create({
+            sdk: sdk,
+            ref: ref,
+            read: function () {
+                return sdk.get(ref);
+            },
+            write: !!state.ctx.write,
+            onError: fail,
+        });
+        var fold = el('details', 'drawer-fold');
+        var summary = el('summary', 'drawer-section', 'Overrides');
+        summary.appendChild(el('span', 'faint', ' target revision, Helm and Kustomize'));
+        fold.appendChild(summary);
+        fold.appendChild(view.node);
+        fold.open = state.overrides === '1';
+        if (fold.open) view.start();
+        fold.addEventListener('toggle', function () {
+            state.overrides = fold.open ? '1' : '';
+            saveHash();
+            if (fold.open) view.start();
+            else view.stop();
+        });
+        ov = { key: app.key, view: view, fold: fold };
+        return fold;
+    }
+
+    function dropOverrides() {
+        if (ov.view) ov.view.stop();
+        if (ov.fold && ov.fold.parentNode) ov.fold.parentNode.removeChild(ov.fold);
+        ov = { key: '', view: null, fold: null };
+    }
+
     function drawDrawer(model) {
         var drawer = $('drawer');
         var app = state.selected && model.apps.find(function (a) {
@@ -291,8 +339,23 @@
         });
         drawer.hidden = !app;
         document.body.classList.toggle('drawer-open', !!app);
-        if (!app) return;
-        drawer.textContent = '';
+        if (!app) {
+            dropOverrides();
+            return;
+        }
+
+        // Everything is drawn afresh except the Overrides section, which is
+        // left where it is: taking it out and putting it back would lose the
+        // caret, and a redraw can come at any moment the cluster changes.
+        var fold = overridesFold(app);
+        var kept = fold.parentNode === drawer ? fold : null;
+        Array.prototype.slice.call(drawer.childNodes).forEach(function (n) {
+            if (n !== kept) drawer.removeChild(n);
+        });
+        var placeholder = el('div', '');
+        var out = document.createDocumentFragment();
+        var target = drawer;
+        drawer = out;
 
         var head = el('header', 'drawer-head ' + (A.HEALTH_TONE[app.health] || 'muted'));
         var title = el('div', 'drawer-title');
@@ -367,6 +430,9 @@
         if (app.sources > 1) route.appendChild(el('div', 'route-note', 'and ' + (app.sources - 1) + ' more source' + (app.sources > 2 ? 's' : '')));
         drawer.appendChild(route);
 
+        // What `argocd app set` would change, right under where it comes from.
+        drawer.appendChild(placeholder);
+
         // What it deploys.
         var resHead = el('h3', 'drawer-section', 'What it deploys');
         resHead.appendChild(el('span', 'faint', ' ' + app.resources.length + (app.outOfSync ? ' · ' + app.outOfSync + ' out of sync' : '')));
@@ -375,7 +441,6 @@
             var treeBox = el('div', 'tree-box');
             treeBox.id = 'tree-box';
             drawer.appendChild(treeBox);
-            drawTree();
         } else {
             drawer.appendChild(el('p', 'quiet', 'Argo CD has not reported any resources for it yet.'));
         }
@@ -449,6 +514,22 @@
                 drawer.appendChild(imgs);
             }
         }
+
+        // Into the page, around the Overrides section.
+        var kids = Array.prototype.slice.call(out.childNodes);
+        var at = kids.indexOf(placeholder);
+        if (kept) {
+            kids.slice(0, at).forEach(function (n) {
+                target.insertBefore(n, kept);
+            });
+            kids.slice(at + 1).forEach(function (n) {
+                target.appendChild(n);
+            });
+        } else {
+            out.replaceChild(fold, placeholder);
+            target.appendChild(out);
+        }
+        drawTree();
     }
 
     // ----- putting it together -----------------------------------------------
@@ -521,7 +602,8 @@
         if (state.model) drawGroups(state.model);
     });
     document.addEventListener('keydown', function (event) {
-        if (event.key === 'Escape' && state.selected) {
+        var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement && document.activeElement.tagName) || '');
+        if (event.key === 'Escape' && state.selected && !typing) {
             state.selected = '';
             saveHash();
             if (state.model) {

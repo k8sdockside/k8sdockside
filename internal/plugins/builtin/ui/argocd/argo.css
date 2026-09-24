@@ -1875,3 +1875,343 @@ body.page-section {
         transition: none !important;
     }
 }
+
+/* ----- overrides ------------------------------------------------------------- */
+
+.ov-root {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ov-owner {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+}
+
+.ov-set {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ov-made {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.ov-tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--a-soft);
+    overflow-x: auto;
+}
+
+.ov-tab {
+    border: 0;
+    border-radius: 6px 6px 0 0;
+    background: transparent;
+    color: var(--a-dim);
+    padding: 6px 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+}
+
+.ov-tab.on {
+    color: var(--a-text);
+    border-bottom-color: var(--a-accent);
+}
+
+.ov-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.ov-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    max-width: 520px;
+}
+
+.ov-grid.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: none;
+}
+
+.ov-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ov-label {
+    font-size: 11.5px;
+    color: var(--a-faint);
+}
+
+.ov-input,
+.ov-values {
+    width: 100%;
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--a-text);
+    background: var(--a-panel);
+    border: 1px solid var(--a-border);
+    border-radius: 7px;
+    padding: 5px 9px;
+}
+
+.ov-input.mono,
+.ov-values {
+    font-family: var(--a-mono);
+    font-size: 12px;
+}
+
+.ov-input:focus,
+.ov-values:focus {
+    outline: 2px solid color-mix(in srgb, var(--a-accent) 55%, transparent);
+    outline-offset: 0;
+    border-color: var(--a-accent);
+}
+
+.ov-values {
+    resize: vertical;
+    line-height: 1.5;
+    min-height: 80px;
+}
+
+.ov-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--a-panel);
+    border: 1px solid var(--a-soft);
+}
+
+.ov-section-title {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--a-faint);
+    font-weight: 650;
+}
+
+.ov-section .ov-input,
+.ov-section .ov-values {
+    background: var(--a-bg);
+}
+
+.ov-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ov-group-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.ov-group-title {
+    font-weight: 600;
+    font-size: 12.5px;
+}
+
+.ov-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.ov-row {
+    display: grid;
+    gap: 6px;
+    align-items: center;
+}
+
+.ov-row.single {
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.ov-row.pair {
+    grid-template-columns: minmax(0, 1fr) 90px auto;
+}
+
+.ov-row.param {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto;
+}
+
+.ov-force {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11.5px;
+    color: var(--a-dim);
+    white-space: nowrap;
+}
+
+.ov-remove {
+    color: var(--a-faint);
+}
+
+.ov-remove:hover:not(:disabled) {
+    color: var(--a-error);
+}
+
+.ov-add {
+    align-self: flex-start;
+}
+
+.ov-none {
+    margin: 0;
+}
+
+.ov-hint {
+    margin: 0;
+}
+
+.ov-note {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--a-dim);
+}
+
+.ov-pre {
+    margin: 0;
+    max-height: 200px;
+    overflow: auto;
+    font-family: var(--a-mono);
+    font-size: 11.5px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    background: var(--a-bg);
+    border: 1px solid var(--a-soft);
+    color: var(--a-dim);
+}
+
+.ov-fold {
+    border: 1px solid var(--a-soft);
+    border-radius: 10px;
+    padding: 8px 12px;
+}
+
+.ov-fold > summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 12.5px;
+}
+
+.ov-fold[open] > summary {
+    margin-bottom: 10px;
+}
+
+.ov-fold .ov-section {
+    border: 0;
+    padding: 0;
+    background: none;
+}
+
+.ov-gen {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.ov-gen.nested {
+    margin-left: 14px;
+    padding-left: 10px;
+    border-left: 2px solid var(--a-soft);
+}
+
+.ov-gen-head {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+}
+
+.ov-table {
+    border-collapse: collapse;
+    font-size: 11.5px;
+}
+
+.ov-table th {
+    text-align: left;
+    color: var(--a-faint);
+    font-weight: 600;
+    padding: 2px 14px 4px 0;
+    border-bottom: 1px solid var(--a-soft);
+}
+
+.ov-table td {
+    padding: 3px 14px 3px 0;
+    border-bottom: 1px solid var(--a-soft);
+}
+
+/* Not sticky: a panel grows to fit what it holds, so the buttons are never
+   out of view, and a background of its own would show against the detail
+   view the panel sits on. */
+.ov-foot {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 0 2px;
+    border-top: 1px solid var(--a-soft);
+}
+
+.ov-changes {
+    margin: 0;
+    padding: 0 0 0 16px;
+    font-size: 12px;
+    color: var(--a-text);
+    font-family: var(--a-mono);
+}
+
+.ov-changes li {
+    margin: 1px 0;
+}
+
+.ov-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* The board drawer's Overrides section: a fold like the drawer's own
+   headings, holding the same view the detail panel has. */
+.drawer-fold {
+    margin-top: 6px;
+}
+
+.drawer-fold > summary {
+    cursor: pointer;
+    list-style: none;
+}
+
+.drawer-fold > summary::-webkit-details-marker {
+    display: none;
+}
+
+.drawer-fold > summary::before {
+    content: '▸ ';
+    color: var(--a-faint);
+}
+
+.drawer-fold[open] > summary::before {
+    content: '▾ ';
+}
+
+.drawer-fold .ov-grid.three {
+    grid-template-columns: minmax(0, 1fr);
+}

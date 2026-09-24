@@ -199,6 +199,24 @@ tasks:
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS"
       - cp "build/darwin/Info.dev.plist" "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Info.plist"
       - codesign --force --deep --sign - "{{.BIN_DIR}}/{{.APP_NAME}}.dev.app"
+      # Wait for the vite dev server before starting the app. The app itself
+      # gives it only five seconds (ten tries, half a second apart, fixed in
+      # Wails) and then fails with "unable to connect to frontend server" --
+      # which a cold start, re-bundling vite's dependency cache after an npm
+      # install, easily overruns. Up to a minute here; skipped when there is
+      # no dev server to wait for.
+      - |
+        if [ -n "$FRONTEND_DEVSERVER_URL" ]; then
+          i=0
+          until curl -s -o /dev/null "$FRONTEND_DEVSERVER_URL"; do
+            i=$((i + 1))
+            if [ "$i" -ge 120 ]; then
+              echo "the frontend dev server at $FRONTEND_DEVSERVER_URL has not answered in a minute; starting anyway"
+              break
+            fi
+            sleep 0.5
+          done
+        fi
       - '"{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS/{{.APP_NAME}}"'
 
   sign:
