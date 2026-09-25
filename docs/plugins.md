@@ -78,16 +78,20 @@ definitions.
 | Plugin | Category | By | Repository | Suggested for clusters serving |
 | --- | --- | --- | --- | --- |
 | cert-manager | Security | K8s Dockside | [k8sdockside/certmanager](https://github.com/k8sdockside/certmanager) | `crd:certificates.cert-manager.io` |
+| OpenBao & Vault | Security | K8s Dockside | [k8sdockside/openbao](https://github.com/k8sdockside/openbao) | `crd:vaultstaticsecrets.secrets.hashicorp.com`, or an OpenBao or Vault StatefulSet from their Helm charts |
 | Longhorn | Storage | K8s Dockside | [k8sdockside/longhorn](https://github.com/k8sdockside/longhorn) | `crd:volumes.longhorn.io` |
 | Rook Ceph | Storage | K8s Dockside | [k8sdockside/rookceph](https://github.com/k8sdockside/rookceph) | `crd:cephclusters.ceph.rook.io` |
+| CloudNativePG | Storage | K8s Dockside | [k8sdockside/cnpg](https://github.com/k8sdockside/cnpg) | `crd:clusters.postgresql.cnpg.io` |
 | MetalLB | Networking | K8s Dockside | [k8sdockside/metallb](https://github.com/k8sdockside/metallb) | `crd:ipaddresspools.metallb.io` |
 | Envoy Gateway | Networking | K8s Dockside | [k8sdockside/envoy](https://github.com/k8sdockside/envoy) | `crd:envoyproxies.gateway.envoyproxy.io` |
+| Gateway API | Networking | K8s Dockside | [k8sdockside/gatewayapi](https://github.com/k8sdockside/gatewayapi) | `crd:gateways.gateway.networking.k8s.io` |
 | Cilium | CNI | K8s Dockside | [k8sdockside/cilium](https://github.com/k8sdockside/cilium) | `crd:ciliumnetworkpolicies.cilium.io` |
 | Calico | CNI | K8s Dockside | [k8sdockside/calico](https://github.com/k8sdockside/calico) | `crd:ippools.crd.projectcalico.org` |
 | Kube-OVN | CNI | K8s Dockside | [k8sdockside/kubeovn](https://github.com/k8sdockside/kubeovn) | `crd:subnets.kubeovn.io` |
 | Flannel | CNI | K8s Dockside | [k8sdockside/flannel](https://github.com/k8sdockside/flannel) | its `kube-flannel` DaemonSet — it has no custom resources |
 | KubeVirt | Virtualization | K8s Dockside | [k8sdockside/kubevirt](https://github.com/k8sdockside/kubevirt) | `crd:virtualmachines.kubevirt.io` |
 | Vitistack | Platform | K8s Dockside | [k8sdockside/vitistack](https://github.com/k8sdockside/vitistack) | `crd:kubernetesclusters.vitistack.io` |
+| GPU & Accelerators | Platform | K8s Dockside | [k8sdockside/gpu](https://github.com/k8sdockside/gpu) | `crd:clusterpolicies.nvidia.com` (the GPU Operator), nodes labelled `nvidia.com/gpu.present=true`, or an NVIDIA device plugin DaemonSet |
 | Image inventory | Images | K8s Dockside | [k8sdockside/image-inventory](https://github.com/k8sdockside/image-inventory) | — works on any cluster |
 | Optimization advisor | Cost & efficiency | K8s Dockside | [k8sdockside/optimization](https://github.com/k8sdockside/optimization) | — works on any cluster |
 | Descheduler | Cost & efficiency | K8s Dockside | [k8sdockside/descheduler](https://github.com/k8sdockside/descheduler) | its descheduler CronJob or Deployment — it has no custom resources |

@@ -17,6 +17,28 @@
         "official": true
     },
     {
+        "id": "openbao",
+        "name": "OpenBao & Vault",
+        "tagline": "seal state, HA leaders, and which workloads get which secrets",
+        "category": "security",
+        "icon": "lock",
+        "description": "A padlock per server cluster, open or shut, with the unseal keys as slots and the leader and standbys as a small picture, and what needs a person worst first: a sealed node, no leader, a failing sync, a certificate about to expire. A secret flow from the server through the Vault Secrets Operator, External Secrets, CSI or the agent injector to the Kubernetes Secret and the workloads using it, and PKI certificates and leases on a timeline. Tells OpenBao and HashiCorp Vault apart on its own, and never reads a Secret, a key or a token. Panels on server pods, every other pod and the Secrets Operator's objects.",
+        "repo": "https://github.com/k8sdockside/openbao.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
+        "detect": ["crd:vaultstaticsecrets.secrets.hashicorp.com"],
+        "detectWorkloads": [
+            { "kind": "statefulsets", "selector": "app.kubernetes.io/name=openbao" },
+            { "kind": "statefulsets", "selector": "app.kubernetes.io/name=vault" }
+        ],
+        "links": [
+            { "label": "openbao.org", "url": "https://openbao.org" },
+            { "label": "Vault on Kubernetes", "url": "https://developer.hashicorp.com/vault/docs/platform/k8s" },
+            { "label": "GitHub", "url": "https://github.com/openbao/openbao" }
+        ],
+        "official": true
+    },
+    {
         "id": "longhorn",
         "name": "Longhorn",
         "tagline": "distributed block storage: volumes, replicas and the disks under them",
@@ -53,6 +75,24 @@
         "official": true
     },
     {
+        "id": "cnpg",
+        "name": "CloudNativePG",
+        "tagline": "PostgreSQL in Kubernetes: clusters, replication, backups and poolers",
+        "category": "storage",
+        "icon": "database",
+        "description": "A card per Postgres cluster with its state in words, its primary and standbys as a small picture, how old its last backup is against its own schedule and how far back a restore can reach. A topology of each cluster with the node and zone every instance runs on and the poolers and services in front, and every backup on a timeline with each failure's error in full. Back up now, hibernate, wake up and restart, each shown before it is made. Panels on Clusters, their pods and their volumes.",
+        "repo": "https://github.com/k8sdockside/cnpg.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
+        "detect": ["crd:clusters.postgresql.cnpg.io"],
+        "links": [
+            { "label": "cloudnative-pg.io", "url": "https://cloudnative-pg.io" },
+            { "label": "Documentation", "url": "https://cloudnative-pg.io/documentation/current/" },
+            { "label": "GitHub", "url": "https://github.com/cloudnative-pg/cloudnative-pg" }
+        ],
+        "official": true
+    },
+    {
         "id": "metallb",
         "name": "MetalLB",
         "tagline": "load balancer addresses for bare-metal clusters",
@@ -83,6 +123,23 @@
         "links": [
             { "label": "gateway.envoyproxy.io", "url": "https://gateway.envoyproxy.io" },
             { "label": "GitHub", "url": "https://github.com/envoyproxy/gateway" }
+        ],
+        "official": true
+    },
+    {
+        "id": "gatewayapi",
+        "name": "Gateway API",
+        "tagline": "where your traffic goes: Gateways, listeners, routes and backends, drawn as a map",
+        "category": "networking",
+        "icon": "route",
+        "description": "A traffic map from Gateway to listener to route to the Service behind it, with canary weights on the edges and a dashed red edge wherever the path breaks: a refused route, a missing Service, a namespace crossed without a ReferenceGrant. Type an address and see which listener and rule it lands on, what the filters do to it and where it ends up, by the Gateway API's own matching rules. Works with any implementation and only reads. Panels on Gateways, routes and Services.",
+        "repo": "https://github.com/k8sdockside/gatewayapi.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
+        "detect": ["crd:gateways.gateway.networking.k8s.io"],
+        "links": [
+            { "label": "gateway-api.sigs.k8s.io", "url": "https://gateway-api.sigs.k8s.io/" },
+            { "label": "GitHub", "url": "https://github.com/kubernetes-sigs/gateway-api" }
         ],
         "official": true
     },
@@ -242,6 +299,29 @@
         "links": [
             { "label": "Vitistack", "url": "https://github.com/vitistack" },
             { "label": "Source", "url": "https://github.com/k8sdockside/vitistack" }
+        ],
+        "official": true
+    },
+    {
+        "id": "gpu",
+        "name": "GPU & Accelerators",
+        "tagline": "GPUs and other devices, through device plugins or DRA",
+        "category": "platform",
+        "icon": "chip",
+        "description": "Every accelerator counted once, whether a device plugin or a DRA driver advertises it: how many are in use, how many are free and what pending pods are waiting for, by model and vendor, with the reasons in words. An inventory with a square per device on its node, coloured free, in use, shared or unhealthy, MIG instances drawn across it, and the pods using each. Panels on Nodes, Pods and ResourceClaims, and DCGM charts when there is a Prometheus.",
+        "repo": "https://github.com/k8sdockside/gpu.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
+        "detect": ["crd:clusterpolicies.nvidia.com"],
+        "detectWorkloads": [
+            { "kind": "nodes", "selector": "nvidia.com/gpu.present=true" },
+            { "kind": "daemonsets", "selector": "app=nvidia-device-plugin-daemonset" },
+            { "kind": "daemonsets", "selector": "app.kubernetes.io/name=nvidia-device-plugin" }
+        ],
+        "links": [
+            { "label": "Dynamic Resource Allocation", "url": "https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/" },
+            { "label": "NVIDIA GPU Operator", "url": "https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/latest/" },
+            { "label": "Source", "url": "https://github.com/k8sdockside/gpu" }
         ],
         "official": true
     }
