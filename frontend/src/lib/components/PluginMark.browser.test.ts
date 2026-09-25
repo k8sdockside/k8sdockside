@@ -74,6 +74,18 @@ test('every listed mark has a file behind it that will draw', async () => {
     }
 });
 
+// A mark copied from a plugin that ships a raster logo keeps its format.
+test('a raster mark is listed with its own extension and has a file behind it', async () => {
+    const { markFor } = await import('../plugins/marks');
+    const url = markFor('envoy-gateway');
+    expect(url).toBe('/plugin-marks/envoy-gateway.png');
+
+    const res = await fetch(url);
+    expect(res.ok, `envoy-gateway has no file at ${url}`).toBe(true);
+    const head = new Uint8Array(await res.arrayBuffer()).slice(0, 8);
+    expect(Array.from(head)).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+});
+
 test('a plugin the app carries nothing for is not asked for a file', async () => {
     const { markFor } = await import('../plugins/marks');
     expect(markFor('someone-elses-plugin')).toBe('');

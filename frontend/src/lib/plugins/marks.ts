@@ -19,41 +19,44 @@
 // plugin changes its logo. A copy going stale is harmless: the shipped file
 // wins once that plugin is installed.
 
-/** Plugin ids this app ships a mark for, as files under public/plugin-marks. */
-const MARKED = new Set([
+/** Plugin ids this app ships a mark for, and its file under public/plugin-marks. */
+const MARKED = new Map<string, string>([
     // argocd, built into the app
-    'argocd',
+    ['argocd', 'argocd.svg'],
     // Calico
-    'calico',
+    ['calico', 'calico.svg'],
     // cert-manager
-    'cert-manager',
+    ['cert-manager', 'cert-manager.svg'],
     // Cilium
-    'cilium',
+    ['cilium', 'cilium.svg'],
+    // Envoy Gateway
+    ['envoy-gateway', 'envoy-gateway.png'],
     // Flannel
-    'flannel',
+    ['flannel', 'flannel.svg'],
     // flux, built into the app
-    'flux',
+    ['flux', 'flux.svg'],
     // Image inventory
-    'image-inventory',
+    ['image-inventory', 'image-inventory.svg'],
     // Kube-OVN
-    'kubeovn',
+    ['kubeovn', 'kubeovn.svg'],
     // KubeVirt
-    'kubevirt',
+    ['kubevirt', 'kubevirt.svg'],
     // Longhorn
-    'longhorn',
+    ['longhorn', 'longhorn.svg'],
     // MetalLB
-    'metallb',
+    ['metallb', 'metallb.svg'],
     // Optimization advisor
-    'optimization',
+    ['optimization', 'optimization.svg'],
     // prometheus, built into the app
-    'prometheus',
+    ['prometheus', 'prometheus.svg'],
     // Rook Ceph
-    'rookceph',
+    ['rookceph', 'rookceph.svg'],
     // Vitistack
-    'vitistack',
+    ['vitistack', 'vitistack.svg'],
 ]);
 
 /** Where this app's own mark for a plugin is, or '' when it has none for it. */
 export function markFor(id: string): string {
-    return MARKED.has(id) ? `/plugin-marks/${id}.svg` : '';
+    const file = MARKED.get(id);
+    return file ? `/plugin-marks/${file}` : '';
 }

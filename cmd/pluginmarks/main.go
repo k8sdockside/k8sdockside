@@ -20,6 +20,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,7 +32,7 @@ import (
 
 const (
 	listing = "frontend/src/lib/plugins/marks.ts"
-	// Served at /plugin-marks/<id>.svg. Everything in public is copied to the
+	// Served at /plugin-marks/<id>.<ext>. Everything in public is copied to the
 	// site root as it is, so the address is the same in the desktop app and
 	// in server mode, and stays the same between builds.
 	assets = "frontend/public/plugin-marks"
@@ -58,9 +59,13 @@ const header = `// Which plugins the app carries a mark for, and where it is.
 // plugin changes its logo. A copy going stale is harmless: the shipped file
 // wins once that plugin is installed.
 
-/** Plugin ids this app ships a mark for, as files under public/plugin-marks. */
-const MARKED = new Set([
+/** Plugin ids this app ships a mark for, and its file under public/plugin-marks. */
+const MARKED = new Map<string, string>([
 `
+
+// markTypes are the formats a mark may be copied in -- the same as a plugin's
+// logo may be (internal/plugins.LogoTypes).
+var markTypes = []string{".svg", ".png", ".webp"}
 
 type manifest struct {
 	ID   string `json:"id"`
@@ -83,8 +88,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	type mark struct {
-		id, name string
-		svg      []byte
+		id, name, ext string
+		data          []byte
 	}
 	var marks []mark
 	var dropped []string
@@ -115,21 +120,24 @@ func run(args []string, stdout, stderr io.Writer) int {
 		if m.UI != nil && m.UI.Dir != "" {
 			uiDir = m.UI.Dir
 		}
-		svg, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(uiDir), filepath.FromSlash(m.Logo))) // #nosec G304,G703 -- same folder, and the path within it is the manifest's own logo field
+		ext := strings.ToLower(filepath.Ext(m.Logo))
+		if !slices.Contains(markTypes, ext) {
+			_, _ = fmt.Fprintf(stderr, "%s: its logo %s is not %s\n", m.ID, m.Logo, strings.Join(markTypes, ", "))
+			failed = true
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(uiDir), filepath.FromSlash(m.Logo))) // #nosec G304,G703 -- same folder, and the path within it is the manifest's own logo field
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "%s: %v\n", m.ID, err)
 			failed = true
 			continue
 		}
-		// Drawn through <img>, so it is parsed as XML: anything without a
-		// viewBox will not scale, and the page would show a broken image
-		// rather than an error.
-		if !strings.Contains(string(svg), "viewBox=") {
-			_, _ = fmt.Fprintf(stderr, "%s: its logo has no viewBox, so it will not scale\n", m.ID)
+		if msg := undrawable(ext, data); msg != "" {
+			_, _ = fmt.Fprintf(stderr, "%s: its logo %s\n", m.ID, msg)
 			failed = true
 			continue
 		}
-		marks = append(marks, mark{m.ID, m.Name, svg})
+		marks = append(marks, mark{m.ID, m.Name, ext, data})
 	}
 	if failed {
 		return 1
@@ -146,23 +154,29 @@ func run(args []string, stdout, stderr io.Writer) int {
 	// repository to be read from, so their marks live here as ordinary assets
 	// and have to survive a run that knows nothing about them.
 	named := map[string]string{}
-	var bytes int
+	var size int
 	for _, m := range marks {
-		if err := os.WriteFile(filepath.Join(assets, m.id+".svg"), m.svg, 0o600); err != nil {
+		// A plugin that changed its logo's format leaves no copy in the old
+		// one behind, which would otherwise list the id twice.
+		if err := removeMark(m.id); err != nil {
+			_, _ = fmt.Fprintf(stderr, "%v\n", err)
+			return 1
+		}
+		if err := os.WriteFile(filepath.Join(assets, m.id+m.ext), m.data, 0o600); err != nil {
 			_, _ = fmt.Fprintf(stderr, "%v\n", err)
 			return 1
 		}
 		named[m.id] = m.name
-		bytes += len(m.svg)
+		size += len(m.data)
 	}
 	for _, id := range dropped {
-		if err := os.Remove(filepath.Join(assets, id+".svg")); err != nil && !os.IsNotExist(err) {
+		if err := removeMark(id); err != nil {
 			_, _ = fmt.Fprintf(stderr, "%v\n", err)
 			return 1
 		}
 	}
 
-	ids, err := onDisk(assets)
+	files, err := onDisk(assets)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "%v\n", err)
 		return 1
@@ -170,19 +184,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	var out strings.Builder
 	out.WriteString(header)
-	for _, id := range ids {
+	for _, file := range files {
+		id := strings.TrimSuffix(file, filepath.Ext(file))
 		if name := named[id]; name != "" {
 			fmt.Fprintf(&out, "    // %s\n", name)
 		} else {
 			fmt.Fprintf(&out, "    // %s, built into the app\n", id)
 		}
-		fmt.Fprintf(&out, "    '%s',\n", id)
+		fmt.Fprintf(&out, "    ['%s', '%s'],\n", id, file)
 	}
 	out.WriteString(`]);
 
 /** Where this app's own mark for a plugin is, or '' when it has none for it. */
 export function markFor(id: string): string {
-    return MARKED.has(id) ? ` + "`/plugin-marks/${id}.svg`" + ` : '';
+    const file = MARKED.get(id);
+    return file ? ` + "`/plugin-marks/${file}`" + ` : '';
 }
 `)
 
@@ -190,24 +206,59 @@ export function markFor(id: string): string {
 		_, _ = fmt.Fprintf(stderr, "%v\n", err)
 		return 1
 	}
-	_, _ = fmt.Fprintf(stdout, "\nwrote %s: %d marks (%d refreshed, %d bytes of drawing)\n", listing, len(ids), len(marks), bytes)
+	_, _ = fmt.Fprintf(stdout, "\nwrote %s: %d marks (%d refreshed, %d bytes of drawing)\n", listing, len(files), len(marks), size)
 	return 0
 }
 
-// onDisk is every mark in the folder, by id, sorted -- the ones just written
-// and the ones that were already there.
+// undrawable says why a logo would not draw through <img>, or nothing.
+func undrawable(ext string, data []byte) string {
+	switch ext {
+	case ".svg":
+		// Parsed as XML: anything without a viewBox will not scale, and the
+		// page would show a broken image rather than an error.
+		if !bytes.Contains(data, []byte("viewBox=")) {
+			return "has no viewBox, so it will not scale"
+		}
+	case ".png":
+		// A file that went through a line-ending conversion loses the \r in
+		// its signature and no longer decodes, so this is checked in full.
+		if !bytes.HasPrefix(data, []byte("\x89PNG\r\n\x1a\n")) {
+			return "is not a valid PNG"
+		}
+	case ".webp":
+		if len(data) < 12 || string(data[:4]) != "RIFF" || string(data[8:12]) != "WEBP" {
+			return "is not a valid WebP"
+		}
+	}
+	return ""
+}
+
+// removeMark removes the copy of a plugin's mark in every format it may be in.
+func removeMark(id string) error {
+	for _, ext := range markTypes {
+		if err := os.Remove(filepath.Join(assets, id+ext)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+// onDisk is every mark file in the folder, sorted by id -- the ones just
+// written and the ones that were already there.
 func onDisk(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
-	var ids []string
+	var files []string
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".svg") {
+		if e.IsDir() || !slices.Contains(markTypes, strings.ToLower(filepath.Ext(e.Name()))) {
 			continue
 		}
-		ids = append(ids, strings.TrimSuffix(e.Name(), ".svg"))
+		files = append(files, e.Name())
 	}
-	slices.Sort(ids)
-	return ids, nil
+	slices.SortFunc(files, func(a, b string) int {
+		return strings.Compare(strings.TrimSuffix(a, filepath.Ext(a)), strings.TrimSuffix(b, filepath.Ext(b)))
+	})
+	return files, nil
 }
