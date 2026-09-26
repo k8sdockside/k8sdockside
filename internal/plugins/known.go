@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -147,10 +148,42 @@ type Probe struct {
 	// Namespace narrows the search; empty looks in every namespace, which is
 	// the right default for something that may be installed anywhere.
 	Namespace string `json:"namespace,omitzero"`
-	// Selector is the label selector that recognises it. Required: listing a
-	// whole kind and calling anything a match would suggest a plugin for every
-	// cluster that has DaemonSets at all.
+	// Selector is the label selector that recognises it. Required unless
+	// Field is set: listing a whole kind and calling anything a match would
+	// suggest a plugin for every cluster that has DaemonSets at all.
 	Selector string `json:"selector"`
+	// Field recognises it by what an object says rather than by its labels:
+	// a field path as a card takes, or one ending in a `{key}` map lookup for
+	// a key with dots in it -- `status.capacity{nvidia.com/gpu}` is a node
+	// with NVIDIA GPUs, whatever it is labelled. An object matches when the
+	// field holds one of Values, or, with no Values, anything but nothing or
+	// zero.
+	Field string `json:"field,omitzero"`
+	// Values the field must hold for an object to match. Needs Field.
+	Values []string `json:"values,omitzero"`
+}
+
+// matches reports whether a tally of a probe's kind, divided by its field,
+// found what the probe is looking for.
+func (p Probe) matches(tally kube.Tally) bool {
+	if p.Field == "" {
+		return tally.Total > 0
+	}
+	for value, n := range tally.Counts {
+		if n == 0 {
+			continue
+		}
+		if len(p.Values) > 0 {
+			if slices.Contains(p.Values, value) {
+				return true
+			}
+			continue
+		}
+		if value != "" && value != "0" {
+			return true
+		}
+	}
+	return false
 }
 
 func validateProbe(id string, p Probe) (Probe, error) {
@@ -160,8 +193,15 @@ func validateProbe(id string, p Probe) (Probe, error) {
 	if !kube.IsKnownKind(p.Kind) {
 		return p, fmt.Errorf("%s: detects the workload %q, which is not a kind this app can open", id, p.Kind)
 	}
-	if p.Selector == "" {
-		return p, fmt.Errorf("%s: a workload probe on %s needs a selector; without one every cluster with %s matches", id, p.Kind, p.Kind)
+	p.Field = strings.TrimSpace(p.Field)
+	if p.Selector == "" && p.Field == "" {
+		return p, fmt.Errorf("%s: a workload probe on %s needs a selector or a field; without one every cluster with %s matches", id, p.Kind, p.Kind)
+	}
+	if p.Field != "" && !kube.FieldPath(p.Field).ValidLookup() {
+		return p, fmt.Errorf("%s: workload probe on %s: %q is not a field path", id, p.Kind, p.Field)
+	}
+	if len(p.Values) > 0 && p.Field == "" {
+		return p, fmt.Errorf("%s: workload probe on %s gives values but no field to compare them with", id, p.Kind)
 	}
 	if err := checkFilter(p.Namespace, p.Selector); err != nil {
 		return p, fmt.Errorf("%s: workload probe on %s: %w", id, p.Kind, err)
@@ -180,12 +220,12 @@ func validateProbe(id string, p Probe) (Probe, error) {
 func (k Known) RunsIn(cl Cluster) (here, told bool) {
 	told = true
 	for _, probe := range k.DetectWorkloads {
-		tally, err := cl.CountBy(probe.Kind, probe.Namespace, probe.Selector, "")
+		tally, err := cl.CountBy(probe.Kind, probe.Namespace, probe.Selector, kube.FieldPath(probe.Field))
 		if err != nil {
 			told = false
 			continue
 		}
-		if tally.Total > 0 {
+		if probe.matches(tally) {
 			return true, true
 		}
 	}

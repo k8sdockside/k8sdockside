@@ -2,10 +2,12 @@ package plugins
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/k8sdockside/k8sdockside/internal/kube"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 // Most plugins are detected from the definitions the sidebar has already read:
@@ -102,7 +104,7 @@ func TestAWorkloadProbeNeedsAKindAndASelector(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if probe != (Probe{Kind: "daemonsets", Namespace: "kube-system", Selector: "app=acme"}) {
+	if !reflect.DeepEqual(probe, Probe{Kind: "daemonsets", Namespace: "kube-system", Selector: "app=acme"}) {
 		t.Errorf("a probe came back untrimmed: %+v", probe)
 	}
 }
@@ -220,5 +222,76 @@ func TestTheDeschedulerIsFoundByItsWorkloadItsPodsOrItsHelmRelease(t *testing.T)
 	// ought to be running.
 	if first := d.DetectWorkloads[0].Kind; first == "secrets" {
 		t.Errorf("the Helm release is probed first; the workloads are cheaper and more telling")
+	}
+}
+
+// objectCluster answers probes from real objects, tallied by the probe's own
+// field the way the watcher tallies them.
+type objectCluster struct {
+	objects map[string][]map[string]any
+}
+
+func (o *objectCluster) KindsServed(kinds []string) (map[string]bool, error) {
+	return map[string]bool{}, nil
+}
+
+func (o *objectCluster) CountBy(kind, _, selector string, path kube.FieldPath) (kube.Tally, error) {
+	tally := kube.Tally{Counts: map[string]int{}}
+	if selector != "" {
+		// None of these objects carries labels: a selector matches nothing.
+		return tally, nil
+	}
+	for _, object := range o.objects[kind] {
+		u := &unstructured.Unstructured{Object: object}
+		tally.Total++
+		tally.Counts[path.Value(u)]++
+	}
+	return tally, nil
+}
+
+func gpuNode(capacity map[string]any) map[string]any {
+	return map[string]any{"metadata": map[string]any{"name": "n"}, "status": map[string]any{"capacity": capacity}}
+}
+
+// A GPU is recognised by what a node advertises or a DRA driver publishes,
+// not only by labels a cluster may not have -- a machine with four H100s and
+// no GPU feature discovery is still a GPU cluster.
+func TestGPUIsDetectedByWhatTheClusterHas(t *testing.T) {
+	gpu, ok := FindKnown("gpu")
+	if !ok {
+		t.Fatal("gpu is not on the known list")
+	}
+	cases := []struct {
+		name    string
+		objects map[string][]map[string]any
+		want    bool
+	}{
+		{"a node advertising nvidia.com/gpu", map[string][]map[string]any{"nodes": {gpuNode(map[string]any{"cpu": "96", "nvidia.com/gpu": "4"})}}, true},
+		{"a node advertising amd.com/gpu", map[string][]map[string]any{"nodes": {gpuNode(map[string]any{"amd.com/gpu": "8"})}}, true},
+		{"a DRA driver publishing GPUs", map[string][]map[string]any{"resourceslices": {{"spec": map[string]any{"driver": "gpu.nvidia.com"}}}}, true},
+		{"a node whose device plugin lost every GPU", map[string][]map[string]any{"nodes": {gpuNode(map[string]any{"nvidia.com/gpu": "0"})}}, false},
+		{"a DRA driver for something else", map[string][]map[string]any{"resourceslices": {{"spec": map[string]any{"driver": "compute-domain.nvidia.com"}}}}, false},
+		{"CPU nodes only", map[string][]map[string]any{"nodes": {gpuNode(map[string]any{"cpu": "8"})}}, false},
+	}
+	for _, c := range cases {
+		here, told := gpu.RunsIn(&objectCluster{objects: c.objects})
+		if here != c.want || !told {
+			t.Errorf("%s: here=%v told=%v, want here=%v", c.name, here, told, c.want)
+		}
+	}
+}
+
+func TestAProbeNeedsASelectorOrAField(t *testing.T) {
+	if _, err := validateProbe("x", Probe{Kind: "nodes"}); err == nil {
+		t.Error("a probe with neither a selector nor a field was accepted")
+	}
+	if _, err := validateProbe("x", Probe{Kind: "nodes", Field: "status.capacity{nvidia.com/gpu}"}); err != nil {
+		t.Errorf("a field probe was refused: %v", err)
+	}
+	if _, err := validateProbe("x", Probe{Kind: "nodes", Field: "status.capacity{a b}"}); err == nil {
+		t.Error("a map key with a space in it was accepted")
+	}
+	if _, err := validateProbe("x", Probe{Kind: "nodes", Selector: "a=b", Values: []string{"x"}}); err == nil {
+		t.Error("values without a field were accepted")
 	}
 }

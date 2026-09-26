@@ -44,10 +44,29 @@ func (p FieldPath) conditionOf() (path []string, want string, ok bool) {
 	return strings.Split(string(p)[:open], "."), want, true
 }
 
+// mapKeyOf splits `status.capacity{nvidia.com/gpu}` into the path of the map
+// and the key wanted. It is the one way to reach a key with dots or slashes in
+// it -- an extended resource, a label -- which a dotted path would cut apart.
+// ok is false for any other shape.
+func (p FieldPath) mapKeyOf() (path []string, key string, ok bool) {
+	open := strings.IndexByte(string(p), '{')
+	if open <= 0 || !strings.HasSuffix(string(p), "}") {
+		return nil, "", false
+	}
+	key = string(p)[open+1 : len(p)-1]
+	if key == "" {
+		return nil, "", false
+	}
+	return strings.Split(string(p)[:open], "."), key, true
+}
+
 // Value reads this path out of one object, or "" when the object does not have
 // it -- which is an ordinary answer: a resource that has not been reconciled
 // yet has no status at all.
 func (p FieldPath) Value(u *unstructured.Unstructured) string {
+	if path, key, ok := p.mapKeyOf(); ok {
+		return nestedString(u, append(path, key)...)
+	}
 	if path, want, ok := p.conditionOf(); ok {
 		for _, raw := range nestedSlice(u, path...) {
 			cond := asMap(raw)
@@ -79,6 +98,30 @@ func (p FieldPath) Valid() bool {
 	}
 	for _, segment := range segments {
 		if !identifier(segment) {
+			return false
+		}
+	}
+	return true
+}
+
+// ValidLookup reports whether a path is one a workload probe may use: any path
+// Valid accepts, or a dotted path ending in a `{key}` lookup whose key is what
+// Kubernetes allows in an extended resource or label name. Only probes take
+// the lookup form -- cards keep to the two shapes their reference documents.
+func (p FieldPath) ValidLookup() bool {
+	path, key, ok := p.mapKeyOf()
+	if !ok {
+		return p.Valid()
+	}
+	for _, segment := range path {
+		if !identifier(segment) {
+			return false
+		}
+	}
+	for _, r := range key {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.', r == '/':
+		default:
 			return false
 		}
 	}

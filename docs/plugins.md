@@ -91,7 +91,7 @@ definitions.
 | Flannel | CNI | K8s Dockside | [k8sdockside/flannel](https://github.com/k8sdockside/flannel) | its `kube-flannel` DaemonSet — it has no custom resources |
 | KubeVirt | Virtualization | K8s Dockside | [k8sdockside/kubevirt](https://github.com/k8sdockside/kubevirt) | `crd:virtualmachines.kubevirt.io` |
 | Vitistack | Platform | K8s Dockside | [k8sdockside/vitistack](https://github.com/k8sdockside/vitistack) | `crd:kubernetesclusters.vitistack.io` |
-| GPU & Accelerators | Platform | K8s Dockside | [k8sdockside/gpu](https://github.com/k8sdockside/gpu) | `crd:clusterpolicies.nvidia.com` (the GPU Operator), nodes labelled `nvidia.com/gpu.present=true`, or an NVIDIA device plugin DaemonSet |
+| GPU & Accelerators | Platform | K8s Dockside | [k8sdockside/gpu](https://github.com/k8sdockside/gpu) | a node advertising `nvidia.com/gpu`, `amd.com/gpu` or another accelerator in its capacity, a DRA driver publishing GPUs (`gpu.nvidia.com`, `gpu.amd.com`, `gpu.intel.com`), `crd:clusterpolicies.nvidia.com` (the GPU Operator), nodes labelled `nvidia.com/gpu.present=true`, or an NVIDIA device plugin DaemonSet |
 | Image inventory | Images | K8s Dockside | [k8sdockside/image-inventory](https://github.com/k8sdockside/image-inventory) | — works on any cluster |
 | Optimization advisor | Cost & efficiency | K8s Dockside | [k8sdockside/optimization](https://github.com/k8sdockside/optimization) | — works on any cluster |
 | Descheduler | Cost & efficiency | K8s Dockside | [k8sdockside/descheduler](https://github.com/k8sdockside/descheduler) | its descheduler CronJob or Deployment — it has no custom resources |
