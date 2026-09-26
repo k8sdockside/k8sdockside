@@ -2,3 +2,7 @@
 /k8sdockside.d.ts
 /node_modules/
 *.tgz
+
+# The repository's .gitignore ignores every bin/ (build output); this one is
+# the package's command.
+!/bin/
