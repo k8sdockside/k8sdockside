@@ -2,7 +2,7 @@
 <script lang="ts">
     import { everyWhileVisible } from '../visibility';
     import { formatDate, formatTime } from '../datetime.svelte';
-    import { ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
+    import { KubeconfigService, ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
     import { adoptCredentials, adoptOverview, type Credentials, type Overview } from '../state/adopt';
     import { workspace } from '../state/workspace.svelte';
@@ -20,6 +20,8 @@
     import { actions } from '../state/actions.svelte';
     import { notices } from '../state/notices.svelte';
     import { credentialTone, inDays } from '../fleet/alerts';
+    import { session } from '../state/session.svelte';
+    import { message } from '../state/workspace/helpers';
     import { untrack } from 'svelte';
 
     interface Props {
@@ -178,6 +180,15 @@
     /** The credential that runs out first, of those that say when. */
     let soonest = $derived(credentials?.items.find((item) => item.notAfter) ?? null);
 
+    /** Shows the kubeconfig this context was read from, selected, in the file manager. */
+    async function revealKubeconfig(): Promise<void> {
+        try {
+            await KubeconfigService.RevealFile(contextId);
+        } catch (err) {
+            notices.fail(`Could not show the kubeconfig: ${message(err)}`);
+        }
+    }
+
     function credentialsTitle(items: kube.Credential[]): string {
         return items
             .map((item) => {
@@ -306,6 +317,18 @@
                             {soonest.daysLeft < 0 ? 'expired' : 'expires'}
                             {inDays(soonest.daysLeft)}
                             {#if tone}<Icon name="alert" size={11} />{/if}
+                            <!-- Where the credential lives, and so where it is
+                                 replaced. The web version has no files to show. -->
+                            {#if context?.file && !session.server}
+                                <button
+                                    class="reveal"
+                                    onclick={revealKubeconfig}
+                                    title="Show {context.file} in the file manager"
+                                >
+                                    <Icon name="file" size={11} />
+                                    Show kubeconfig
+                                </button>
+                            {/if}
                         </dd>
                     </div>
                 {/if}
@@ -886,6 +909,26 @@
         display: inline-flex;
         align-items: center;
         gap: 4px;
+    }
+
+    .head .cred .reveal {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-left: 6px;
+        padding: 1px 6px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: transparent;
+        color: var(--text-dim);
+        font: inherit;
+        font-weight: 400;
+        cursor: pointer;
+    }
+
+    .head .cred .reveal:hover {
+        color: var(--text);
+        border-color: var(--text-faint);
     }
 
     /* The events panel is the shared table; it only needs a frame and a bound

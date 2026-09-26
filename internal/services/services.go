@@ -112,6 +112,7 @@ func New(settings *appconfig.Store, opts Options) Built {
 	solutions.server = opts.Server
 	prefs.server = opts.Server
 	looks.server = opts.Server
+	configs.server = opts.Server
 	backdrops.server = opts.Server
 	// The web version is updated by whoever deploys it, not by the person
 	// using it: it never asks GitHub on its own there, only when somebody

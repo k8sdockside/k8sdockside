@@ -28,6 +28,8 @@ type KubeconfigService struct {
 	// extra are folders scanned on every sync beside the user's own sources,
 	// which the user cannot stop watching -- see Options.KubeconfigFolders.
 	extra []string
+	// server is set in the web version, which has no file manager to open.
+	server bool
 
 	mu    sync.RWMutex
 	files []kube.File
@@ -410,6 +412,26 @@ func (s *KubeconfigService) BrowseForFolder(ctx context.Context) ([]kube.File, e
 		return s.Files(), nil // cancelled
 	}
 	return s.AddFolder(ctx, path)
+}
+
+// RevealFile shows the kubeconfig file a context was read from in the file
+// manager, selected. It is where a context's credentials live, so it is where
+// a user goes once the dashboard says a token or certificate is running out.
+func (s *KubeconfigService) RevealFile(id string) error {
+	if s.server {
+		return errDesktopOnly
+	}
+	kc, ok := s.lookup(id)
+	if !ok {
+		return fmt.Errorf("no context %q in the kubeconfig files", id)
+	}
+	if kc.File == "" {
+		return fmt.Errorf("context %q was not read from a file", kc.Name)
+	}
+	if _, err := os.Stat(kc.File); err != nil {
+		return fmt.Errorf("the kubeconfig file is not there any more: %w", err)
+	}
+	return application.Get().Env.OpenFileManager(kc.File, true)
 }
 
 // lookup resolves a context ID against the last scan. It is unexported so it
