@@ -1,0 +1,52 @@
+{
+    "name": "@k8sdockside/plugin-sdk",
+    "version": "1.0.0",
+    "description": "Types, build tool and DOM helpers for K8s Dockside plugins written in TypeScript.",
+    "license": "Apache-2.0",
+    "author": "K8s Dockside",
+    "homepage": "https://github.com/k8sdockside/k8sdockside/tree/main/packages/plugin-sdk#readme",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/k8sdockside/k8sdockside.git",
+        "directory": "packages/plugin-sdk"
+    },
+    "keywords": ["k8sdockside", "kubernetes", "plugin", "sdk"],
+    "type": "module",
+    "engines": {
+        "node": ">=20"
+    },
+    "bin": {
+        "k8sdockside-plugin": "bin/k8sdockside-plugin.mjs"
+    },
+    "types": "./k8sdockside.d.ts",
+    "exports": {
+        ".": {
+            "types": "./k8sdockside.d.ts"
+        },
+        "./dom": {
+            "types": "./dom.d.ts",
+            "default": "./dom.js"
+        },
+        "./tsconfig.json": "./tsconfig.json",
+        "./package.json": "./package.json"
+    },
+    "files": [
+        "bin/",
+        "k8sdockside.d.ts",
+        "dom.js",
+        "dom.d.ts",
+        "tsconfig.json",
+        "README.md"
+    ],
+    "scripts": {
+        "sync": "node scripts/sync.mjs",
+        "prepack": "node scripts/sync.mjs",
+        "test": "node scripts/sync.mjs && node --test"
+    },
+    "dependencies": {
+        "esbuild": "0.28.2"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}

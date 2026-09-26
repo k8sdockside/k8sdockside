@@ -631,8 +631,9 @@ Plugins** names them before any of its views is opened.
 is a complete plugin written in TypeScript and built with esbuild — an overview,
 a view and a panel over core kinds, so it works on any cluster — meant to be
 copied as the start of your own. The bridge's types are
-`internal/plugins/sdk/k8sdockside.d.ts`; copy that file into a project to type
-`window.k8sdockside`.
+`internal/plugins/sdk/k8sdockside.d.ts`, published with the build tool as the
+npm package [`@k8sdockside/plugin-sdk`](../packages/plugin-sdk/README.md);
+extend its `tsconfig.json` to type `window.k8sdockside`.
 
 Anything that ends up as static files works — TypeScript, Svelte, Preact, Vue,
 Lit, plain DOM. Three things differ from building for a normal web page:

@@ -175,7 +175,8 @@ Every call, with what it takes and returns, is in
 [Views of its own](plugins.md#views-of-its-own) and
 [Panels on an object](plugins.md#panels-on-an-object). The TypeScript
 declarations — the most precise description there is — are
-[`internal/plugins/sdk/k8sdockside.d.ts`](../internal/plugins/sdk/k8sdockside.d.ts);
+[`internal/plugins/sdk/k8sdockside.d.ts`](../internal/plugins/sdk/k8sdockside.d.ts),
+published as [`@k8sdockside/plugin-sdk`](../packages/plugin-sdk/README.md);
 they are useful from plain JavaScript too, as your editor's hints.
 
 ## 5. TypeScript, or a framework
@@ -183,9 +184,11 @@ they are useful from plain JavaScript too, as your editor's hints.
 Copy [k8sdockside/image-inventory](https://github.com/k8sdockside/image-inventory):
 an overview, a view and a panel over core kinds, built with esbuild, with
 tests, a build that checks `ui/` is up to date, and CI that runs `plugincheck`.
-Its `src/k8sdockside.d.ts` types `k8sdockside` everywhere; refresh it from
-[the app's copy](../internal/plugins/sdk/k8sdockside.d.ts) when the bridge
-grows.
+It depends on [`@k8sdockside/plugin-sdk`](../packages/plugin-sdk/README.md),
+which brings the bridge's types (its `tsconfig.json` extends the SDK's), the
+`k8sdockside-plugin build | watch | check` command, and DOM helpers that put
+cluster data on the page as text. When the bridge grows, `npm update` brings
+the new types.
 
 Any tool that ends up as static files works — Svelte, Preact, Vue, Lit, plain
 DOM. Three things differ from building an ordinary web page:

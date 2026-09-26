@@ -1,0 +1,72 @@
+name: plugin-sdk
+
+# Tests packages/plugin-sdk on every change to it or to the types it ships,
+# and publishes @k8sdockside/plugin-sdk to npm on a tag:
+#
+#   git tag plugin-sdk-v1.0.1 && git push origin plugin-sdk-v1.0.1
+#
+# The tag must match "version" in packages/plugin-sdk/package.json. Publishing
+# uses npm's trusted publishing (OIDC): set it up once on npmjs.com, under the
+# package's Settings -> Trusted publishing, for this repository and this
+# workflow file. No token is stored here.
+
+on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - 'packages/plugin-sdk/**'
+      - 'internal/plugins/sdk/k8sdockside.d.ts'
+      - '.github/workflows/plugin-sdk.yml'
+    tags:
+      - 'plugin-sdk-v*'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'packages/plugin-sdk/**'
+      - 'internal/plugins/sdk/k8sdockside.d.ts'
+      - '.github/workflows/plugin-sdk.yml'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: packages/plugin-sdk
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm test
+      - name: Pack, to see what would be published
+        run: npm pack --dry-run
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/plugin-sdk-v')
+    needs: test
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # trusted publishing and provenance
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: The tag matches the package version
+        run: |
+          want="plugin-sdk-v$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$want" ]; then
+            echo "tag $GITHUB_REF_NAME, but package.json says $want" >&2
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm publish --provenance --access public

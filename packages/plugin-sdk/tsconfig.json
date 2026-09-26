@@ -1,0 +1,30 @@
+{
+    // The base for a plugin's own tsconfig.json:
+    //
+    //     { "extends": "@k8sdockside/plugin-sdk/tsconfig.json", "include": ["src"] }
+    //
+    // Type checking only: esbuild does the bundling (`k8sdockside-plugin
+    // build`), and `tsc --noEmit` makes sure what it bundles is sound. The
+    // "types" entry is what types `k8sdockside` and `window.k8sdockside` in
+    // every page, with no copy of the declarations in the plugin.
+    "compilerOptions": {
+        "target": "es2022",
+        "lib": ["es2022", "dom", "dom.iterable"],
+        "module": "preserve",
+        "moduleResolution": "bundler",
+        "types": ["@k8sdockside/plugin-sdk"],
+        "noEmit": true,
+        "isolatedModules": true,
+        "verbatimModuleSyntax": true,
+        "skipLibCheck": true,
+
+        "strict": true,
+        "noUncheckedIndexedAccess": true,
+        "noImplicitOverride": true,
+        "noImplicitReturns": true,
+        "noFallthroughCasesInSwitch": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "forceConsistentCasingInFileNames": true
+    }
+}

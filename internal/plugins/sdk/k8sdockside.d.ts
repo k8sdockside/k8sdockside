@@ -8,12 +8,16 @@
  *     <script src="/plugin-ui/_sdk/k8sdockside.js"></script>
  *
  * The copy kept in step with the bridge is the one beside it in the K8s
- * Dockside repository, internal/plugins/sdk/k8sdockside.d.ts. It is
- * self-contained on purpose -- no imports, no exports, only global
- * declarations -- so the file can be copied as it is into any plugin written
- * in TypeScript. Put it where your tsconfig's "include" sees it (or
- * `/// <reference path="k8sdockside.d.ts" />` it) and both `k8sdockside` and
- * `window.k8sdockside` are typed everywhere.
+ * Dockside repository, internal/plugins/sdk/k8sdockside.d.ts, and it is
+ * published as the npm package @k8sdockside/plugin-sdk. A plugin written in
+ * TypeScript installs that and extends its tsconfig:
+ *
+ *     { "extends": "@k8sdockside/plugin-sdk/tsconfig.json", "include": ["src"] }
+ *
+ * and both `k8sdockside` and `window.k8sdockside` are typed everywhere. The
+ * file is self-contained on purpose -- no imports, no exports, only global
+ * declarations -- so it can still be copied as it is into a project that does
+ * not use npm.
  *
  * How the bridge works, in short: every call posts a message to the app, which
  * answers it -- or rejects the promise with an Error carrying a sentence --

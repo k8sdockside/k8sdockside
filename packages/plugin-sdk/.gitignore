@@ -1,0 +1,4 @@
+# Copied from internal/plugins/sdk by scripts/sync.mjs at pack time.
+/k8sdockside.d.ts
+/node_modules/
+*.tgz
