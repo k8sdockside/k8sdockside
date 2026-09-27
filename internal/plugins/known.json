@@ -332,5 +332,21 @@
             { "label": "Source", "url": "https://github.com/k8sdockside/gpu" }
         ],
         "official": true
+        },
+    {
+        "id": "pixelagents",
+        "name": "Pixel agents",
+        "tagline": "the cluster as a pixel-art office",
+        "category": "observability",
+        "icon": "users",
+        "description": "The cluster drawn as a pixel-art office: a person for every node, control planes in the glass room and workers on the open floor, each as busy as their node's CPU, memory and disk. Trouble shows on the floor in stages -- litter, then cracks and smoking monitors, and lava only when things are really bad -- with everything behind it listed below, each object a link. A bigger cluster gets a bigger office. Works on any cluster.",
+        "repo": "https://github.com/k8sdockside/pixelagents.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
+        "links": [
+            { "label": "Pixel Agents, the inspiration", "url": "https://www.mdskills.ai/skills/pixel-agents" },
+            { "label": "Source", "url": "https://github.com/k8sdockside/pixelagents" }
+        ],
+        "official": true
     }
 ]

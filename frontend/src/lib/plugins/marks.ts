@@ -47,6 +47,8 @@ const MARKED = new Map<string, string>([
     ['metallb', 'metallb.svg'],
     // Optimization advisor
     ['optimization', 'optimization.svg'],
+    // Pixel agents
+    ['pixelagents', 'pixelagents.svg'],
     // prometheus, built into the app
     ['prometheus', 'prometheus.svg'],
     // Rook Ceph
