@@ -44,6 +44,11 @@ type PluginService struct {
 	configs *KubeconfigService
 	// server is set in the web version, which has no file manager to open.
 	server bool
+	// known keeps the list of known plugins up to date from the repository,
+	// once ServiceStartup has begun it; knownOff forbids that (the web
+	// version's operator switched off requests to GitHub).
+	known    *knownLister
+	knownOff bool
 
 	// registries answers the views that ask what tags an image has.
 	registries *registry.Client

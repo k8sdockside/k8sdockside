@@ -10,6 +10,7 @@ import (
 
 	"github.com/k8sdockside/k8sdockside/internal/addons"
 	"github.com/k8sdockside/k8sdockside/internal/kube"
+	"github.com/k8sdockside/k8sdockside/internal/updates"
 )
 
 // Plugins that are not built in are found somewhere. Most people will not go
@@ -20,10 +21,13 @@ import (
 // "cert-manager is running here, and there is a plugin for it" about a cluster
 // that has it.
 //
-// The list is data compiled into the app rather than fetched: it changes when
-// a plugin is written, not every day, and asking a server what exists would be
-// the app phoning home on every launch. A plugin that is not on the list is
-// installed exactly as before, from its address.
+// The list is data compiled into the app, and the app can also read a newer
+// copy of the same file from the repository -- see knownfetched.go -- so a
+// plugin written after a release can be offered without waiting for the next
+// one. The copy compiled in is always there underneath: offline, with the
+// fetch switched off, or before the first one has answered, it is the list.
+// A plugin that is not on the list is installed exactly as before, from its
+// address.
 
 //go:embed known.json
 var knownRaw []byte
@@ -58,11 +62,16 @@ type Known struct {
 	Links []Link `json:"links,omitzero"`
 	// Official is one kept alongside the app, by its author.
 	Official bool `json:"official,omitzero"`
+	// MinAppVersion is the oldest release of this app the plugin works with,
+	// as in its manifest. An app older than that leaves the entry out of a
+	// fetched list rather than offering an install that would not load.
+	MinAppVersion string `json:"minAppVersion,omitzero"`
 }
 
-// KnownPlugins is the list, in the order it is offered. A mistake in it is a
-// mistake in our own data, which a test catches, so it is fatal.
-var KnownPlugins = sync.OnceValue(func() []Known {
+// embeddedKnown is the list compiled into the app, in the order it is offered.
+// A mistake in it is a mistake in our own data, which a test catches, so it is
+// fatal.
+var embeddedKnown = sync.OnceValue(func() []Known {
 	var list []Known
 	if err := decodeStrict(knownRaw, &list); err != nil {
 		panic(fmt.Sprintf("plugins: known.json: %v", describe(knownRaw, err, "", true)))
@@ -94,6 +103,10 @@ func validateKnown(k Known) (Known, error) {
 	}
 	if err := checkCategory(k.ID, k.Category); err != nil {
 		return k, err
+	}
+	k.MinAppVersion = strings.TrimSpace(k.MinAppVersion)
+	if k.MinAppVersion != "" && !updates.IsVersion(k.MinAppVersion) {
+		return k, fmt.Errorf("%s: minAppVersion %q is not a version", k.ID, k.MinAppVersion)
 	}
 	k.Category = category(k.Category)
 	if k.Icon == "" {

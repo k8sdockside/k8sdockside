@@ -2,6 +2,7 @@
 //
 // One layer of the workspace -- see ../workspace.svelte.ts for how they fit.
 
+import { Events } from '@wailsio/runtime';
 import {
     ResourceService,
     MetricsService,
@@ -435,7 +436,30 @@ export abstract class WorkspacePlugins extends WorkspaceLayout {
         }
         this.registerViews();
         this.tellPluginProblems();
+        this.followKnownPlugins();
         if (this.knownPlugins.length === 0) void this.loadKnownPlugins();
+    }
+
+    private followingKnown = false;
+
+    /**
+     * Reads the known list again whenever the app has fetched a newer one from
+     * the repository -- and the catalogue with it, since an installed plugin's
+     * Official badge and category are read from that list.
+     */
+    private followKnownPlugins(): void {
+        if (this.followingKnown) return;
+        this.followingKnown = true;
+        Events.On('plugins:known', () => {
+            void this.loadKnownPlugins();
+            void PluginService.List()
+                .then((catalogue) => {
+                    this.pluginCatalogue = adoptPluginCatalogue(catalogue);
+                })
+                .catch(() => {
+                    // The catalogue on screen is still right apart from a badge.
+                });
+        });
     }
 
     /**

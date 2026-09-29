@@ -96,6 +96,8 @@ definitions.
 | Optimization advisor | Cost & efficiency | K8s Dockside | [k8sdockside/optimization](https://github.com/k8sdockside/optimization) | — works on any cluster |
 | Descheduler | Cost & efficiency | K8s Dockside | [k8sdockside/descheduler](https://github.com/k8sdockside/descheduler) | its descheduler CronJob or Deployment — it has no custom resources |
 | Pixel agents | Observability | K8s Dockside | [k8sdockside/pixelagents](https://github.com/k8sdockside/pixelagents) | — works on any cluster |
+| Blast radius | Platform | K8s Dockside | [k8sdockside/blastradius](https://github.com/k8sdockside/blastradius) | — works on any cluster |
+| Network policy matrix | Networking | K8s Dockside | [k8sdockside/networkpolicymatrix](https://github.com/k8sdockside/networkpolicymatrix) | — works on any cluster |
 
 Every card credits its author, and says whether the plugin is **Official** —
 kept alongside the app by its author — or from the **Community**. Yours can be
@@ -121,9 +123,17 @@ shows a faint *get plugin* row that opens Settings on it. Nothing is cloned from
 The cross on the row stops the suggestion for good; the card in Settings can
 bring it back.
 
-The list is compiled into the app (`internal/plugins/known.json`) rather than
-fetched, so the app does not ask a server what exists every time it starts. A
-plugin that is not on it installs exactly the same way, from its address.
+The list is compiled into the app (`internal/plugins/known.json`), and the
+app also reads a newer copy of the same file from this repository's `main`
+branch shortly after it starts and every six hours, with the same switch as the
+update check — see [Network traffic and privacy](network-and-privacy.md). So a
+plugin added to the file on `main` is offered without waiting for a release. A
+fetched copy can add plugins and update what an entry says, but cannot move a
+plugin this release shipped with to another repository or change which of
+those are official; an entry an app cannot offer (a newer `minAppVersion`, a
+kind it does not know) is left out on its own. Offline, switched off, or before
+the first fetch, the compiled-in list is the list. A plugin that is not on it
+installs exactly the same way, from its address.
 
 ## Writing one
 

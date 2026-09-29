@@ -301,8 +301,9 @@ is the next step.
 **Settings → Plugins → Available** offers the plugins in
 [`internal/plugins/known.json`](../internal/plugins/known.json) with one
 **Install** button each, and the sidebar suggests one for any cluster running
-what it is about. The list is compiled into the app — it asks no server what
-exists — so getting on it is a pull request to this repository adding an entry:
+what it is about. The list is compiled into the app, and apps from 0.1.19 on
+also read the copy on this repository's `main` branch every few hours, so
+getting on it is a pull request to this repository adding an entry:
 
 ```json
 {
@@ -345,7 +346,10 @@ What the pull request needs:
 - [ ] A row for it in the table under
       [The plugins the app knows of](plugins.md#the-plugins-the-app-knows-of).
 
-It reaches users in the next release of the app. From then on your plugin is
+Once it is merged it reaches apps from 0.1.19 on within about six hours, and
+older apps with their next release. Give the entry a `minAppVersion` when the
+plugin has one, so an older app does not offer an install that would not load.
+From then on your plugin is
 yours: updates are pushed to your repository and reach users through **Update
 from repository**, with no change needed here unless its address moves.
 
