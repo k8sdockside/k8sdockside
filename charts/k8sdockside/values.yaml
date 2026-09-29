@@ -382,12 +382,15 @@ auth:
     name: ""
     key: providers.json
 
-# Whether the bell may ask GitHub if a newer release of k8sdockside exists.
-# The server never asks on its own and never updates itself -- it is upgraded
-# by whoever runs it, with `helm upgrade` -- but anybody signed in can press
-# "Check now" on the bell to see whether this deployment is behind. Set false
-# for a cluster that must not reach the internet: the bell then only says
-# which version is running.
+# Whether the server may ask GitHub anything. With true, anybody signed in
+# can press "Check now" on the bell to see whether this deployment is behind
+# (the server never checks for releases on its own, and never updates itself
+# -- it is upgraded by whoever runs it, with `helm upgrade`), and the server
+# fetches the list of plugins it offers from the k8sdockside repository at
+# start and every six hours, so plugins added since this image was built can
+# be installed from the admin page. Set false for a cluster that must not
+# reach the internet: the bell then only says which version is running, and
+# the plugin list is the one built into the image.
 updateCheck: true
 
 # Extra environment variables for the container, e.g. the OAuth client secrets

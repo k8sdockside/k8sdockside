@@ -27,9 +27,9 @@ type Options struct {
 	// uploaded through the admin page.
 	KubeconfigFolders []string
 	// NoUpdateChecks forbids the web version from asking GitHub whether a
-	// newer release exists even when somebody asks it to: for a server that
-	// must not reach the internet. Ignored by the desktop app, whose own
-	// setting decides.
+	// newer release exists even when somebody asks it to, and from fetching
+	// the list of known plugins: for a server that must not reach the
+	// internet. Ignored by the desktop app, whose own setting decides.
 	NoUpdateChecks bool
 }
 
@@ -119,6 +119,9 @@ func New(settings *appconfig.Store, opts Options) Built {
 	// presses Check now -- and not even then when the operator said so.
 	news.server = opts.Server
 	news.noChecks = opts.Server && opts.NoUpdateChecks
+	// The list of known plugins is fetched from the same place the releases
+	// are asked about, and switched off by the same operator setting.
+	solutions.knownOff = opts.Server && opts.NoUpdateChecks
 
 	return Built{
 		Services: []application.Service{

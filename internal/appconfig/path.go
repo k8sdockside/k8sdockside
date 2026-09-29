@@ -133,3 +133,10 @@ func migrate(legacy, path string) error {
 	_ = os.Remove(filepath.Dir(legacy))
 	return nil
 }
+
+// KnownListPath is where the last list of known plugins fetched from the
+// repository is kept, beside the settings file, so a launch without a network
+// still offers what the last one with one found.
+func (s *Store) KnownListPath() string {
+	return filepath.Join(filepath.Dir(s.path), "known-plugins.json")
+}

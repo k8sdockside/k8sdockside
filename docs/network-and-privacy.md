@@ -9,8 +9,9 @@ at the code that does it, so you can check it rather than take it on trust.
   account. The project runs no servers, so the app has nowhere to report to.
 - **Your clusters are the main traffic.** The app talks to the Kubernetes API
   servers named in your kubeconfigs, with the credentials in those kubeconfigs.
-- **One automatic request goes anywhere else:** a check with GitHub for a newer
-  release. It carries no data of yours, and you can switch it off.
+- **Two automatic requests go anywhere else,** both to GitHub: a check for a
+  newer release, and a fresh copy of the list of plugins the app offers. They
+  carry no data of yours, and one switch turns both off.
 - **Everything else happens only when you ask for it:** installing a plugin,
   upgrading a Helm release, opening a link.
 
@@ -21,7 +22,8 @@ at the code that does it, so you can check it rather than take it on trust.
 | **Your Kubernetes API servers**, as named in your kubeconfigs | When you open a context or a view on it. At launch: a quick check that the selected context's cluster answers, and the tabs you left open last time. | Kubernetes API requests, authenticated with that context's own credentials, with `User-Agent: k8sdockside`. | Don't open the context, or *Disconnect* it (the power button on its row). *Settings → Behaviour → Restore tabs at launch*. |
 | **Credential helpers in your kubeconfig** (`exec:` plugins such as `aws`, `gcloud`, `kubelogin`) | When a context that uses one connects | Whatever that tool sends to its own identity provider. The app runs it the same way `kubectl` would. | Your kubeconfig decides this. |
 | **`api.github.com`**: the update check | 5 seconds after launch, then every 6 hours; or when you press *Check for updates* under *About* | One `GET` of the public "latest release" endpoint for this repository. No body, no cookies, no token. The only identifying header is `User-Agent: k8sdockside/<version> (+https://github.com/k8sdockside/k8sdockside)`. GitHub sees your IP address, as it would for any web request. | *Settings → Notifications → Check for new versions*. In the web version it never runs on its own: only when a signed-in user presses *Check now* on the bell, and never with the chart's `updateCheck: false`. |
-| **`github.com`**: plugins | Only when you install or update a plugin | `git clone` or `git pull` of that plugin's repository. The plugins offered in *Settings → Plugins* are a list built into the app, all on github.com. | Don't install plugins from repositories. |
+| **`raw.githubusercontent.com`**: the plugin list | 8 seconds after launch, then every 6 hours | One `GET` of `internal/plugins/known.json` on this repository's `main` branch, with the same `User-Agent` as the update check and the `ETag` of the copy already held, so an unchanged list is a `304`. The answer is kept beside your settings (`known-plugins.json`) and only changes which plugins *Settings → Plugins → Available* offers; nothing is installed. | *Settings → Notifications → Check for new versions*, the same switch as the update check. In the web version it runs on its own unless the chart's `updateCheck: false` is set. |
+| **`github.com`**: plugins | Only when you install or update a plugin | `git clone` or `git pull` of that plugin's repository. The plugins offered in *Settings → Plugins* come from the list above, all on github.com. | Don't install plugins from repositories. |
 | **Container registries** (Docker Hub, `ghcr.io`, `quay.io` and the like) | Only while a page of a plugin that declares `"registries": true` is open. Today that is only the optional **image-inventory** plugin. | Anonymous, read-only requests for the tags and digests of the public images your cluster runs. No credentials are sent; a private image just shows as needing authentication. | Don't install that plugin, or switch it off in *Settings → Plugins*. |
 | **A Prometheus address you typed in** | Only if you set one in a cluster's settings. By default, charts reach Prometheus through the API server instead. | PromQL queries. No cluster credentials are sent to it. | Clear the address. |
 | **Helm chart repositories** | Only when you upgrade a Helm release from the app | Your own `helm` binary fetches the chart from the repositories in *your* Helm configuration. | Don't upgrade from the app. |
@@ -80,7 +82,7 @@ any other third party.
 The web version runs in your own cluster, behind a sign-in gateway, and differs
 from the desktop app in these ways:
 
-- **No automatic update check.** Whoever deploys it upgrades it, with Helm. The bell says which version runs, and asks GitHub only when somebody presses *Check now* — the same one `GET` as above, from the server's own address. Install with `updateCheck: false` and it never asks at all.
+- **No automatic update check.** Whoever deploys it upgrades it, with Helm. The bell says which version runs, and asks GitHub only when somebody presses *Check now* — the same one `GET` as above, from the server's own address. It does fetch the plugin list on its own, as the desktop app does, so the admin page offers plugins added since the image was built. Install with `updateCheck: false` and it asks GitHub nothing at all.
 - **Sign-in.** Local accounts need no outside connection. If an administrator
   configures GitHub, Google, Facebook, GitLab, Microsoft or an OpenID Connect
   provider, the gateway talks to that provider during sign-in.

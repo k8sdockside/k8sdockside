@@ -158,7 +158,7 @@
     {#if !session.server}
         <SettingsRow
             label="Check for new versions"
-            hint="Asks GitHub shortly after launch, and every six hours after, whether a newer release is out, and says so on the bell in the title bar. The request carries nothing but the app's name and version. Off, the About page can still check when you ask it to."
+            hint="Asks GitHub shortly after launch, and every six hours after, whether a newer release is out, and says so on the bell in the title bar — and fetches the latest list of plugins offered under Plugins → Available. The requests carry nothing but the app's name and version. Off, the About page can still check when you ask it to, and the list is the one this release shipped with."
         >
             <Toggle
                 checked={workspace.checkForUpdates}

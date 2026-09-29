@@ -348,5 +348,38 @@
             { "label": "Source", "url": "https://github.com/k8sdockside/pixelagents" }
         ],
         "official": true
+    },
+    {
+        "id": "blastradius",
+        "name": "Blast radius",
+        "tagline": "what fails if this goes away",
+        "category": "platform",
+        "icon": "alert",
+        "description": "Pick a node, a volume, a ConfigMap, a Secret, a Service or a workload and see everything that fails without it: workloads that go down, lose replicas or break on their next restart, Services left without endpoints, and Ingresses and HTTPRoutes that stop answering. Ranks where losing one thing would hurt most. Works on any cluster.",
+        "repo": "https://github.com/k8sdockside/blastradius.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
+        "links": [
+            { "label": "Source", "url": "https://github.com/k8sdockside/blastradius" }
+        ],
+        "official": true,
+        "minAppVersion": "0.1.1"
+    },
+    {
+        "id": "networkpolicymatrix",
+        "name": "Network policy matrix",
+        "tagline": "who can talk to whom, and why",
+        "category": "networking",
+        "icon": "shield",
+        "description": "The cluster's NetworkPolicies worked out into a matrix of namespaces or workloads, and the world outside, with the rule that allows or blocks each connection. A simulator for one connection on one port, and warnings for egress without DNS, policies that select nothing and namespaces with no policies. Works on any cluster.",
+        "repo": "https://github.com/k8sdockside/networkpolicymatrix.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
+        "links": [
+            { "label": "Network Policies", "url": "https://kubernetes.io/docs/concepts/services-networking/network-policies/" },
+            { "label": "Source", "url": "https://github.com/k8sdockside/networkpolicymatrix" }
+        ],
+        "official": true,
+        "minAppVersion": "0.1.1"
     }
 ]
