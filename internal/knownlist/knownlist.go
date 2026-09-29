@@ -98,7 +98,7 @@ type Cached struct {
 
 // Load reads the copy kept at path. A missing or unreadable file is no copy.
 func Load(path string) (Cached, bool) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- the app's own cache file, beside its settings
 	if err != nil {
 		return Cached{}, false
 	}
