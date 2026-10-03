@@ -233,7 +233,149 @@
         },
     };
 
+    /* What is typed into the page, kept by the app while the page is away.
+
+       The app rebuilds a tab's frame every time the tab is brought forward
+       again, so a search typed into a plugin's page was gone when the reader
+       came back to it. Every input, textarea and select with an id (or a
+       name) is reported to the app as it changes, and handed back in hello;
+       here it is put back, with the input and change events a person typing
+       it would have fired, so the page's own handlers filter exactly as
+       they did. A field the page draws later -- after its data has arrived --
+       is filled in as it appears.
+
+       Opt a field out with data-k8sdockside-keep="off" on it or on anything
+       around it. Passwords and file pickers are never kept. Kept for the
+       session only, and dropped when the tab is closed. */
+    var KEEP_OFF = '[data-k8sdockside-keep="off"]';
+
+    function fieldKey(el) {
+        if (!el || el.nodeType !== 1) return '';
+        var tag = el.tagName;
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') return '';
+        if (el.closest && el.closest(KEEP_OFF)) return '';
+        var type = String(el.type || '').toLowerCase();
+        if (tag === 'INPUT' && /^(password|file|hidden|submit|button|reset|image)$/.test(type)) return '';
+        if (type === 'radio') return el.name ? 'radio:' + el.name : '';
+        if (el.id) return '#' + el.id;
+        if (el.name) return 'name:' + el.name;
+        return '';
+    }
+
+    function keepFields(saved) {
+        saved = saved && typeof saved === 'object' ? saved : {};
+        var values = Object.assign({}, saved);
+        var settled = {};
+
+        function record(event) {
+            var el = event.target;
+            var key = fieldKey(el);
+            if (!key) return;
+            // Typed into by the reader: never put back over what they typed.
+            if (event.isTrusted) settled[key] = true;
+            if (el.type === 'radio') {
+                if (!el.checked) return;
+                values[key] = el.value;
+            } else if (el.type === 'checkbox') {
+                values[key] = !!el.checked;
+            } else {
+                values[key] = String(el.value);
+            }
+            call('fields.set', { fields: values }).catch(function () {});
+        }
+        document.addEventListener('input', record, true);
+        document.addEventListener('change', record, true);
+
+        var waiting = Object.keys(saved).length;
+        if (!waiting) return;
+
+        function fire(el) {
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        function restore(el) {
+            var key = fieldKey(el);
+            if (!key || settled[key] || !Object.prototype.hasOwnProperty.call(saved, key)) return;
+            var want = saved[key];
+            if (el.type === 'radio') {
+                if (el.value !== want) return;
+                settled[key] = true;
+                waiting--;
+                if (!el.checked) {
+                    el.checked = true;
+                    fire(el);
+                }
+                return;
+            }
+            if (el.type === 'checkbox') {
+                settled[key] = true;
+                waiting--;
+                if (el.checked !== !!want) {
+                    el.checked = !!want;
+                    fire(el);
+                }
+                return;
+            }
+            if (el.value === want) {
+                settled[key] = true;
+                waiting--;
+                return;
+            }
+            el.value = want;
+            // A select whose option is not there yet takes no value; it is
+            // tried again when its options are drawn.
+            if (el.value !== want) return;
+            settled[key] = true;
+            waiting--;
+            fire(el);
+        }
+
+        function sweep(node) {
+            if (!node || node.nodeType !== 1) return;
+            if (node.tagName === 'OPTION' && node.parentElement) {
+                var select = node.closest('select');
+                if (select) restore(select);
+                return;
+            }
+            restore(node);
+            if (node.querySelectorAll) {
+                var found = node.querySelectorAll('input, textarea, select');
+                for (var i = 0; i < found.length; i++) restore(found[i]);
+            }
+        }
+
+        sweep(document.documentElement);
+        if (waiting <= 0 || typeof MutationObserver !== 'function') return;
+        var observer = new MutationObserver(function (records) {
+            records.forEach(function (r) {
+                for (var i = 0; i < r.addedNodes.length; i++) sweep(r.addedNodes[i]);
+            });
+            if (waiting <= 0) observer.disconnect();
+        });
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+        // A field that never comes back -- the page changed -- is not waited
+        // for forever.
+        setTimeout(function () {
+            observer.disconnect();
+        }, 30000);
+    }
+
+    /* After the page's own scripts have run, and after whatever they started
+       from ready(): one task later than both, so the handlers the restored
+       events are meant for are listening. */
+    function whenLoaded(fn) {
+        function later() {
+            setTimeout(fn, 0);
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', later);
+        else later();
+    }
+
     var ready = call('hello').then(function (context) {
+        whenLoaded(function () {
+            keepFields(context.fields);
+        });
         applyTheme(context.theme);
         applyDateTime(context.datetime);
         if (context.sectionId) {
@@ -520,6 +662,18 @@
          * for 'datetime' to redraw.
          */
         format: format,
+
+        /**
+         * What was typed into this page's fields when it was last on screen,
+         * keyed '#id', 'name:name' or 'radio:name'. The SDK puts these back
+         * by itself; this is for a page that builds a field long after it
+         * loads and would rather set it from its own state.
+         */
+        fields: function () {
+            return ready.then(function (ctx) {
+                return Object.assign({}, ctx.fields || {});
+            });
+        },
 
         /** Listens for pushes from the app. Events: 'theme', 'datetime'. Returns an unsubscribe function. */
         on: function (event, fn) {

@@ -14,6 +14,7 @@
   administrators. Everyone else still sees what is installed and what it does.
 -->
 <script lang="ts">
+    import { SETTINGS } from '../../catalogue';
     import { onExternalClick } from '../../links';
     import {
         ANY_PLUGIN,
@@ -26,6 +27,8 @@
     } from '../../plugins/categories';
     import { authorOf, knownStanding, standingOf } from '../../plugins/credit';
     import type { KnownPlugin, PluginLink } from '../../plugins/types';
+    import { fields } from '../../state/fields';
+    import { resourceTabId } from '../../state/panes';
     import { session } from '../../state/session.svelte';
     import { workspace } from '../../state/workspace.svelte';
     import Icon from '../Icon.svelte';
@@ -42,10 +45,15 @@
      * what a word matches, what order a category comes in -- are in
      * lib/plugins/categories.ts, where they are tested.
      */
-    let query = $state<PluginQuery>({ ...ANY_PLUGIN });
+    // The search and the address being typed come back with the settings
+    // tab -- see fields.ts.
+    const fieldScope = resourceTabId('', SETTINGS);
+    let query = $state<PluginQuery>(fields.recall(fieldScope, 'plugins.query', { ...ANY_PLUGIN }));
+    $effect(() => fields.keep(fieldScope, 'plugins.query', query));
 
     /** The repository address being typed, and whether a clone is running. */
-    let repoUrl = $state('');
+    let repoUrl = $state(fields.recall(fieldScope, 'plugins.repoUrl', ''));
+    $effect(() => fields.keep(fieldScope, 'plugins.repoUrl', repoUrl));
     let cloning = $state(false);
     let updating = $state<string | null>(null);
 

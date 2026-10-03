@@ -163,7 +163,13 @@
                             <td class="tone-{pod.status.tone || 'plain'}">{pod.status.text}</td>
                             <td class="tone-{pod.ready.tone || 'plain'}" title="Ready containers">{pod.ready.text}</td>
                             <td class="dim" title="Restarts">↻ {pod.restarts.text}</td>
-                            <td class="dim node" title="Node">{pod.node}</td>
+                            <td class="dim node">
+                                {#if pod.node}
+                                    <button class="link quiet" title="Describe node {pod.node}" onclick={() => open('nodes', '', pod.node)}>
+                                        {pod.node}
+                                    </button>
+                                {/if}
+                            </td>
                             <td class="dim age">{pod.age}</td>
                         </tr>
                     {/each}
@@ -347,6 +353,15 @@
     .link:hover {
         text-decoration: underline;
         text-underline-offset: 2px;
+    }
+
+    /* Where a pod runs leads somewhere, but it is not what the row is about. */
+    .link.quiet {
+        color: inherit;
+    }
+
+    .link.quiet:hover {
+        color: var(--accent);
     }
 
     .none {

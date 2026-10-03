@@ -11,9 +11,10 @@
   must not go with it.
 -->
 <script lang="ts">
-    import { tick } from 'svelte';
+    import { tick, untrack } from 'svelte';
     import { singularFor } from '../catalogue';
     import { alpha } from '../colors';
+    import { fields } from '../state/fields';
     import { logs } from '../state/logs.svelte';
     import { workspace, type DockTab } from '../state/workspace.svelte';
     import ErrorState from './ErrorState.svelte';
@@ -27,7 +28,10 @@
 
     let doc = $derived(logs.doc(tab.id));
     let color = $derived(workspace.colorOf(tab.contextId));
-    let query = $state('');
+    // The filter comes back with the tab, rather than starting empty every
+    // time another dock tab was looked at -- see fields.ts.
+    let query = $state(untrack(() => fields.recall(tab.id, 'query', '')));
+    $effect(() => fields.keep(tab.id, 'query', query));
 
     let shown = $derived(
         query.trim() === ''

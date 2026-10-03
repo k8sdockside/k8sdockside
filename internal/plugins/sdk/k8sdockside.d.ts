@@ -275,6 +275,12 @@ declare namespace K8sDockside {
          * `on('datetime')` for changes. Absent on an app older than 0.1.10.
          */
         datetime?: DateTimeSettings;
+        /**
+         * What was typed into the page's fields when it was last on screen,
+         * keyed '#id', 'name:name' or 'radio:name'. The SDK puts these back
+         * by itself; see `fields()`. Absent on an older app.
+         */
+        fields?: Record<string, string | boolean>;
     }
 
     // ----- actions ------------------------------------------------------------
@@ -736,6 +742,18 @@ declare namespace K8sDockside {
         format?: Format;
 
         /** Listens for pushes from the app. Returns a function that stops listening. */
+        /**
+         * What was typed into this page's fields when it was last on screen.
+         *
+         * The app rebuilds a tab's page each time the tab comes forward, and
+         * the SDK puts every input, textarea and select with an id or name
+         * back as it was, firing `input` and `change` so the page's own
+         * handlers react. This is for a page that builds a field long after
+         * it loads and would rather set it from its own state. Opt a field
+         * out with `data-k8sdockside-keep="off"`.
+         */
+        fields(): Promise<Record<string, string | boolean>>;
+
         on<E extends keyof Events>(event: E, listener: (data: Events[E]) => void): Unsubscribe;
 
         /**
