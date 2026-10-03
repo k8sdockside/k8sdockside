@@ -63,6 +63,21 @@ const STORAGE_KEY = 'k8sdockside.backdrop';
 const CACHE_SIZE = 64;
 
 /**
+ * A drawn scene as an object URL, or null where one cannot be made -- no
+ * createObjectURL at all, or one that refuses the Blob it is given, as jsdom's
+ * does from 30.1 when the Blob is not its own. The caller falls back to a data:
+ * URL, which is longer but shows the same picture.
+ */
+function objectUrl(svg: string): string | null {
+    if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return null;
+    try {
+        return URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+    } catch {
+        return null;
+    }
+}
+
+/**
  * The seed a scene is drawn with when it is pinned or shown as a thumbnail.
  * Fixed per scene, so a pinned picture is the same picture tomorrow.
  */
@@ -250,10 +265,7 @@ class Backdrop {
 
         const palette = own ? moodPalette(own, dark) : paletteFor(theme?.resolved ?? {}, dark);
         const svg = renderScene(picture.scene, picture.seed, palette);
-        const url =
-            typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
-                ? URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
-                : `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+        const url = objectUrl(svg) ?? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
         this.cache.set(key, url);
         if (this.cache.size > CACHE_SIZE) {
             const [oldest, stale] = this.cache.entries().next().value as [string, string];
