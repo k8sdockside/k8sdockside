@@ -491,17 +491,31 @@ test('the node filter is the whole name, not a substring of it', async () => {
     await expect.poll(() => names()).toEqual(['api', 'cache']);
 });
 
-test('the chip says which node, and takes the filter off again', async () => {
+test('the node picker says which node, and takes the filter off again', async () => {
     views.forgetAll();
     views.focusNode(resourceTabId(PROD, 'pods'), 'worker-1');
 
     render(ResourceTable, { contextId: PROD, kind: 'pods' });
     pushed.send(podsOnNodes());
     await expect.poll(() => names()).toEqual(['api', 'cache']);
+    await expect.element(page.getByRole('combobox', { name: 'Node' })).toHaveValue('worker-1');
 
-    await page.getByTitle('Show the pods on every node again').click();
+    await page.getByRole('button', { name: 'Show every node again' }).click();
 
     await expect.poll(() => names()).toEqual(['api', 'web', 'cache']);
+});
+
+// Narrowing to a node should not depend on first finding a row that is on it.
+test('the node picker offers every node the rows are on, and narrows to one', async () => {
+    views.forgetAll();
+    render(ResourceTable, { contextId: PROD, kind: 'pods' });
+    pushed.send(podsOnNodes());
+    await expect.poll(() => names()).toEqual(['api', 'web', 'cache']);
+
+    await page.getByRole('combobox', { name: 'Node' }).selectOptions('worker-2');
+
+    await expect.poll(() => names()).toEqual(['web']);
+    expect(views.recall(resourceTabId(PROD, 'pods'))?.node).toBe('worker-2');
 });
 
 // A listing with no Node column has no node to filter on, and must not grow a
@@ -558,7 +572,7 @@ test('a node name is a name, not a link to something else', async () => {
 // not from us: KubeVirt calls its VirtualMachineInstance column "NodeName".
 // Matching on the heading is what lets a plugin's kinds reach a node without
 // the app knowing anything about that plugin.
-test('a NodeName column leads to the node, the way a Node column does', async () => {
+test('a NodeName column narrows to the node, the way a Node column does', async () => {
     views.forgetAll();
     render(ResourceTable, { contextId: PROD, kind: 'crd:virtualmachineinstances.kubevirt.io' });
     pushed.send({
@@ -579,8 +593,10 @@ test('a NodeName column leads to the node, the way a Node column does', async ()
 
     await page.getByRole('button', { name: 'wrkr01' }).click();
 
-    await expect.poll(() => workspace.activeTab?.kind).toBe('pods');
-    expect(views.recall(resourceTabId(PROD, 'pods'))?.node).toBe('wrkr01');
+    // In place: the listing already says where its rows run, and going
+    // through the tab machinery folded the dock when this list was in it.
+    await expect.element(page.getByRole('combobox', { name: 'Node' })).toHaveValue('wrkr01');
+    expect(views.recall(resourceTabId(PROD, 'crd:virtualmachineinstances.kubevirt.io'))?.node).toBe('wrkr01');
 });
 
 // A column called "Node Selector" is not a node, and turning it into a link to

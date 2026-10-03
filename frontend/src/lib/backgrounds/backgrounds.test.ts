@@ -270,6 +270,9 @@ describe('the rotation', () => {
         const picture = { ...BUILTIN_PICTURES[0], mood: THEME_MOOD } as (typeof BUILTIN_PICTURES)[number];
         const url = backdrop.urlFor(picture, theme);
         expect(backdrop.urlFor(picture, theme)).toBe(url);
-        expect(backdrop.urlFor(picture, { ...theme, id: 'fjord' })).not.toBe(url);
+        // Colours of its own: a data: URL is the drawing itself, so the same
+        // colours under another id would rightly come out the same.
+        const fjord = { id: 'fjord', base: 'dark', resolved: { bg: '#10202a', accent: '#e0a040' } };
+        expect(backdrop.urlFor(picture, fjord)).not.toBe(url);
     });
 });

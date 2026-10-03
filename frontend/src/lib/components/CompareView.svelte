@@ -13,9 +13,11 @@
 <script lang="ts">
     import { onMount, untrack } from 'svelte';
     import { ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
-    import { NAV_GROUPS, PORT_FORWARDS, ACCESS_OVERVIEW, labelFor } from '../catalogue';
+    import { COMPARE, NAV_GROUPS, PORT_FORWARDS, ACCESS_OVERVIEW, labelFor } from '../catalogue';
     import { adoptComparison, type Comparison } from '../state/adopt';
     import { compare } from '../state/compare.svelte';
+    import { fields } from '../state/fields';
+    import { resourceTabId } from '../state/panes';
     import { workspace } from '../state/workspace.svelte';
     import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
     import Icon from './Icon.svelte';
@@ -23,15 +25,33 @@
     /** Unchanged lines kept either side of a change; longer runs fold. */
     const CONTEXT_LINES = 3;
 
-    let leftContext = $state(compare.left.contextId);
-    let rightContext = $state(compare.right.contextId);
-    let kind = $state(compare.left.kind);
-    let namespace = $state(compare.left.namespace);
-    let name = $state(compare.left.name);
+    // A form typed into and left before Compare was pressed is still filled
+    // in when the tab comes back; the last comparison run is the fallback.
+    // See fields.ts.
+    const fieldScope = resourceTabId('', COMPARE);
+    const typed = fields.recall<Record<string, string | boolean> | null>(fieldScope, 'form', null);
+
+    let leftContext = $state((typed?.leftContext as string | undefined) ?? compare.left.contextId);
+    let rightContext = $state((typed?.rightContext as string | undefined) ?? compare.right.contextId);
+    let kind = $state((typed?.kind as string | undefined) ?? compare.left.kind);
+    let namespace = $state((typed?.namespace as string | undefined) ?? compare.left.namespace);
+    let name = $state((typed?.name as string | undefined) ?? compare.left.name);
     /** The right side's own namespace and name, when it differs from the left's. */
-    let rightNamespace = $state('');
-    let rightName = $state('');
-    let differentName = $state(false);
+    let rightNamespace = $state((typed?.rightNamespace as string | undefined) ?? '');
+    let rightName = $state((typed?.rightName as string | undefined) ?? '');
+    let differentName = $state((typed?.differentName as boolean | undefined) ?? false);
+    $effect(() => {
+        fields.keep(fieldScope, 'form', {
+            leftContext,
+            rightContext,
+            kind,
+            namespace,
+            name,
+            rightNamespace,
+            rightName,
+            differentName,
+        });
+    });
 
     let result = $state<Comparison | null>(null);
     let running = $state(false);

@@ -2,6 +2,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import LogView from './LogView.svelte';
+import { fields } from '../state/fields';
 
 const events = vi.hoisted(() => ({ handler: (_e: { data: unknown }) => {} }));
 vi.mock('@wailsio/runtime', async (importOriginal) => {
@@ -144,6 +145,7 @@ function deliver(lines: { pod: string; container: string; text: string }[], done
 
 beforeEach(() => {
     logs.forget(TAB.id);
+    fields.forgetAll();
     vi.mocked(LogService.Containers).mockReset().mockResolvedValue(ONE_POD);
     vi.mocked(LogService.Open).mockReset().mockResolvedValue('logs-1');
     vi.mocked(LogService.Close).mockReset();

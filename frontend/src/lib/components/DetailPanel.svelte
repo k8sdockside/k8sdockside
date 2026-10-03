@@ -8,6 +8,7 @@
   else. What is left here is the report and what can be done to the object.
 -->
 <script lang="ts">
+    import { untrack } from 'svelte';
     import { HELM_RELEASES, SECRETS, singularFor } from '../catalogue';
     import MetricsPanel from '../charts/MetricsPanel.svelte';
     import VirtualMachine from '../kubevirt/VirtualMachine.svelte';
@@ -25,6 +26,8 @@
     import PluginFrame from './PluginFrame.svelte';
     import WhenVisible from './WhenVisible.svelte';
     import { detail } from '../state/detail.svelte';
+    import { fields } from '../state/fields';
+    import { DETAILS_TAB_ID } from '../state/panes';
     import { notices } from '../state/notices.svelte';
     import { copyText } from '../clipboard';
 
@@ -96,14 +99,28 @@
     /**
      * What to find in the report.
      *
-     * Cleared when the panel moves to another object: a query typed against one
+     * Kept per object rather than per panel: a query typed against one
      * object's report says nothing about the next, and leaving it would open
-     * the next object already filtered down to nothing.
+     * the next object already filtered down to nothing. But coming back to the
+     * same object -- from another tab, or after reading another object --
+     * finds what was being looked for still there. See fields.ts.
      */
+    let fieldScope = $derived(
+        target
+            ? fields.scope(DETAILS_TAB_ID, `${target.contextId}#${target.kind}#${target.namespace}#${target.name}`)
+            : '',
+    );
     let query = $state('');
+    /** The object the query on screen belongs to, so it is kept under that one only. */
+    let queryScope = '';
     $effect(() => {
-        target?.name;
-        query = '';
+        const scope = fieldScope;
+        query = untrack(() => fields.recall(scope, 'query', ''));
+        queryScope = scope;
+    });
+    $effect(() => {
+        const q = query;
+        if (fieldScope && fieldScope === queryScope) fields.keep(fieldScope, 'query', q);
     });
 
     /**

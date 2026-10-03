@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { detail } from './detail.svelte';
+import { fields } from './fields';
 
 vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => import('./workspace.mocks'));
 
@@ -796,6 +797,54 @@ describe('what a list was showing', () => {
         workspace.closeTab(resourceTabId(PROD, 'nodes'));
 
         expect(views.recall(id)?.sortColumn).toBe(3);
+    });
+
+    test('takes what was typed into the tab with it when it closes', () => {
+        workspace.openTab(PROD, 'pods');
+        const id = resourceTabId(PROD, 'pods');
+        fields.keep(id, 'query', 'api');
+        fields.keep(fields.scope(id, 'page'), 'page', { '#query': 'api' });
+
+        workspace.closeTab(id);
+
+        expect(fields.recall(id, 'query', '')).toBe('');
+        expect(fields.recall(fields.scope(id, 'page'), 'page', {})).toEqual({});
+    });
+});
+
+// Clicking the dock tab already showing folds the dock away -- that is what a
+// second click on it is for. Asking for a tab by a link is not that click: the
+// pods-on-node link folded the dock shut whenever the pods list it narrows was
+// the tab already showing there.
+describe('the dock and a tab asked for by a link', () => {
+    beforeEach(() => {
+        views.forgetAll();
+        workspace.closeAllTabs();
+        workspace.closeAllTabsIn('bottom');
+    });
+
+    test('showing the pods on a node leaves the dock open', () => {
+        workspace.openTab(PROD, 'pods');
+        const id = resourceTabId(PROD, 'pods');
+        workspace.moveTabToPane(id, 'bottom');
+        expect(workspace.isPaneOpen('bottom')).toBe(true);
+        expect(workspace.panes.bottom.activeId).toBe(id);
+
+        workspace.showPodsOnNode(PROD, 'worker-1');
+
+        expect(workspace.isPaneOpen('bottom')).toBe(true);
+        expect(workspace.panes.bottom.activeId).toBe(id);
+        expect(views.recall(id)?.node).toBe('worker-1');
+    });
+
+    test('a second click on the dock tab still folds it away', () => {
+        workspace.openTab(PROD, 'pods');
+        const id = resourceTabId(PROD, 'pods');
+        workspace.moveTabToPane(id, 'bottom');
+
+        workspace.activateTab(id);
+
+        expect(workspace.isPaneOpen('bottom')).toBe(false);
     });
 });
 

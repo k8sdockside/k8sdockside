@@ -26,6 +26,8 @@
     import { adoptPluginSummary } from '../plugins/adopt';
     import { pluginState, setPluginState } from '../plugins/storage';
     import { detail, type DetailTarget } from '../state/detail.svelte';
+    import { fields } from '../state/fields';
+    import { DETAILS_TAB_ID } from '../state/panes';
     import { resourceTabId, workspace } from '../state/workspace.svelte';
     import { pluginFocus } from '../plugins/focus.svelte';
     import Icon from './Icon.svelte';
@@ -76,6 +78,9 @@
         untrack(() => {
             const asked = pluginFocus.take(tabId);
             if (!asked) return;
+            // The page is being opened on something it was searched for, and
+            // a filter typed into it earlier could hide exactly that.
+            fields.forget(tabId);
             focusHash = asked.hash;
             focusNonce = asked.nonce;
         });
@@ -139,6 +144,43 @@
     let objectKey = $derived(object ? `${object.contextId}/${object.kind}/${object.namespace}/${object.name}` : '');
     /** What the frame is rebuilt on: another object for a section, another focus for a tab. */
     let frameKey = $derived(`${objectKey}|${focusNonce}`);
+
+    /**
+     * Where the page's own fields are kept between one build of the frame and
+     * the next -- see fields.ts. The pane destroys a tab's frame whenever
+     * another tab is brought forward, and a search typed into a plugin's page
+     * was gone when it came back. The page cannot be read from here, so its
+     * SDK reports what is typed into it and gets it back in `hello`.
+     *
+     * Per tab for a tab's page, and per object for a section: a section is
+     * drawn for one object, and what was typed against one says nothing
+     * about the next.
+     */
+    let fieldScope = $derived(
+        section
+            ? fields.scope(DETAILS_TAB_ID, `plugin#${section.pluginId}#${section.sectionId}#${objectKey}`)
+            : fields.scope(tabId, 'page'),
+    );
+
+    /** At most this many fields, each at most this long, are kept for a page. */
+    const MAX_FIELDS = 64;
+    const MAX_FIELD_LENGTH = 4096;
+
+    /**
+     * What a page reported as typed into it, cut down to plain strings and
+     * booleans under named keys. The page is the plugin's; nothing it sends is
+     * trusted to be the shape the SDK would send.
+     */
+    function pageFields(raw: unknown): Record<string, string | boolean> {
+        const out: Record<string, string | boolean> = {};
+        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return out;
+        for (const [name, value] of Object.entries(raw).slice(0, MAX_FIELDS)) {
+            if (name.length > 200) continue;
+            if (typeof value === 'boolean') out[name] = value;
+            else if (typeof value === 'string' && value.length <= MAX_FIELD_LENGTH) out[name] = value;
+        }
+        return out;
+    }
 
     // ----- the confirmation a write waits on -------------------------------
 
@@ -280,6 +322,9 @@
                     // can write them the way the app does. The SDK's format
                     // helpers read it; see datetime.svelte.ts.
                     datetime: { ...dateTimeSettings() },
+                    // What was typed into the page when it was last on screen,
+                    // for the SDK to put back. See fieldScope.
+                    fields: fields.recall(fieldScope, 'page', {}),
                 };
             case 'actions': {
                 // What this plugin offers on an object right now -- the section's
@@ -447,6 +492,9 @@
                 const value = pluginState(p.id, contextId)[text(params.key)];
                 return value === undefined ? null : value;
             }
+            case 'fields.set':
+                fields.keep(fieldScope, 'page', pageFields(params.fields));
+                return null;
             case 'storage.keys':
                 return Object.keys(pluginState(p.id, contextId)).sort();
             case 'storage.set':

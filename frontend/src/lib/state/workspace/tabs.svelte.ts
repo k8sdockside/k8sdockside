@@ -7,6 +7,7 @@ import { changes } from '../changes.svelte';
 import { editors } from '../editor.svelte';
 import { logs } from '../logs.svelte';
 import { terminals } from '../terminals.svelte';
+import { fields } from '../fields';
 import { views } from '../views';
 import {
     CLUSTERS_TAB_ID,
@@ -103,7 +104,10 @@ export abstract class WorkspaceTabs extends WorkspaceContexts {
                 title: kind === DASHBOARD ? 'Dashboard' : labelFor(kind),
             });
         }
-        this.activateTab(id);
+        // Opening is never a request to fold the pane away. Without this, the
+        // "pods on this node" link folded the dock shut whenever the pods tab
+        // it narrows was the one already showing there.
+        this.activateTab(id, { fold: false });
     }
 
     /**
@@ -167,7 +171,12 @@ export abstract class WorkspaceTabs extends WorkspaceContexts {
      * object in another cluster when one is given.
      */
     openCompare(target?: CompareTarget): void {
-        if (target) compare.against(target);
+        if (target) {
+            compare.against(target);
+            // A half-typed form left in the tab must not cover the object
+            // this was asked to compare.
+            fields.forget(resourceTabId('', COMPARE));
+        }
         this.openAppTab(COMPARE);
     }
 
@@ -192,7 +201,7 @@ export abstract class WorkspaceTabs extends WorkspaceContexts {
                 { atEnd: true },
             );
         }
-        this.activateTab(id);
+        this.activateTab(id, { fold: false });
     }
 
     /**
@@ -222,8 +231,12 @@ export abstract class WorkspaceTabs extends WorkspaceContexts {
      * The second click is the point, as it is for a context in the sidebar:
      * clicking the tab you are on has to do something, and in the bottom panel
      * what it should do is hand the space back to the view above.
+     *
+     * Only a click on the tab itself means that. Everything that opens a tab
+     * by asking for it -- a link, the sidebar, a search hit -- passes
+     * `fold: false`, because "show me this" never means "hide it".
      */
-    activateTab(id: string): void {
+    activateTab(id: string, { fold = true }: { fold?: boolean } = {}): void {
         const pane = this.paneOf(id);
         if (pane === null) return;
 
@@ -231,7 +244,7 @@ export abstract class WorkspaceTabs extends WorkspaceContexts {
         const tab = state.tabs.find((t) => t.id === id);
         if (!tab) return;
 
-        if (pane === 'bottom' && state.activeId === id && state.open) {
+        if (fold && pane === 'bottom' && state.activeId === id && state.open) {
             this.setPaneOpen('bottom', false);
             return;
         }
@@ -440,6 +453,7 @@ export abstract class WorkspaceTabs extends WorkspaceContexts {
      * through here -- see moveTabToPane.
      */
     private forget(tab: Tab): void {
+        fields.forget(tab.id);
         if (tab.view === 'logs') logs.forget(tab.id);
         else if (tab.view === 'shell') terminals.forget(tab.id);
         else if (tab.view === 'details') detail.clear();

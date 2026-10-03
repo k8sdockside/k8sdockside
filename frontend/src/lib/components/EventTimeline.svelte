@@ -16,6 +16,10 @@
     import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
     import { adoptTimeline, type Timeline } from '../state/adopt';
     import { detail } from '../state/detail.svelte';
+    import { fields } from '../state/fields';
+    import { resourceTabId } from '../state/panes';
+    import { DASHBOARD } from '../catalogue';
+    import { untrack } from 'svelte';
 
     interface Props {
         contextId: string;
@@ -41,9 +45,17 @@
     const AXIS_H = 20;
     const PAD_R = 14;
 
-    let minutes = $state(60);
-    let namespace = $state('');
-    let warningsOnly = $state(false);
+    // Kept with the dashboard's tab, so its filters are still set when the
+    // tab comes back -- see fields.ts.
+    const fieldScope = untrack(() => resourceTabId(contextId, DASHBOARD));
+    let minutes = $state(fields.recall(fieldScope, 'events.minutes', 60));
+    let namespace = $state(fields.recall(fieldScope, 'events.namespace', ''));
+    let warningsOnly = $state(fields.recall(fieldScope, 'events.warningsOnly', false));
+    $effect(() => {
+        fields.keep(fieldScope, 'events.minutes', minutes);
+        fields.keep(fieldScope, 'events.namespace', namespace);
+        fields.keep(fieldScope, 'events.warningsOnly', warningsOnly);
+    });
     let timeline = $state<Timeline | null>(null);
     let error = $state<string | null>(null);
     let loading = $state(false);
