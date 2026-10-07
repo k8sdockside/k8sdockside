@@ -134,6 +134,8 @@
         ],
         folder: ['M3 7a1 1 0 0 1 1-1h5l2 2.5h8a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7z'],
         close: ['M6.5 6.5l11 11', 'M17.5 6.5l-11 11'],
+        // The menus folded into one button, on a screen too narrow for four.
+        menu: ['M4 6.5h16', 'M4 12h16', 'M4 17.5h16'],
         // A small disc: an editor holding changes that are not in the cluster.
         // Drawn as a circle of almost no radius and filled out by the stroke,
         // so it stays a single-stroke glyph like everything else here.
