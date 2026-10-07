@@ -132,6 +132,16 @@ body {
     overflow: hidden;
 }
 
+/* On a phone 100% is the tallest the viewport gets, measured with the browser's
+   toolbars hidden -- so with them showing, the foot of the window (and the bar
+   that picks a panel) sits underneath them. dvh is the height actually visible.
+   On a desktop the two are the same. */
+@supports (height: 100dvh) {
+    body {
+        height: 100dvh;
+    }
+}
+
 body {
     /* This is an application, not a document: only fields and code blocks are
        selectable, and they opt back in below. */
@@ -160,6 +170,7 @@ code,
 }
 
 button {
+    -webkit-tap-highlight-color: transparent;
     font: inherit;
     color: inherit;
     background: none;
@@ -187,6 +198,20 @@ input[type="search"]:focus {
 :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
+}
+
+/* A small screen. Most of what changes there belongs to the shell and lives in
+   its components -- see lib/state/viewport.svelte.ts; this is what is global. */
+@media (max-width: 760px) {
+    /* iOS zooms the whole page into any field whose text is under 16px, and
+       does not zoom back out. */
+    input[type="text"],
+    input[type="search"],
+    input:not([type]),
+    textarea,
+    select {
+        font-size: 16px;
+    }
 }
 
 /* Scrollbars: present but quiet, so dense tables do not gain a heavy frame. */

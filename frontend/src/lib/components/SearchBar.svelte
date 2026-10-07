@@ -944,4 +944,29 @@
     .tips .aside {
         margin: 0;
     }
+
+    @media (max-width: 760px) {
+        .host {
+            flex: 1 1 auto;
+        }
+
+        .field {
+            height: 32px;
+        }
+
+        /* 16px stops iOS zooming the page in when the field is focused. */
+        input {
+            font-size: 16px;
+        }
+
+        .shortcut,
+        .keys {
+            display: none;
+        }
+
+        .panel {
+            width: calc(100vw - 16px);
+            max-height: calc(100dvh - 120px);
+        }
+    }
 </style>

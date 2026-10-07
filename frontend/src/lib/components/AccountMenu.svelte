@@ -127,6 +127,12 @@
         color: var(--text-dim);
     }
 
+    @media (max-width: 760px) {
+        .trigger {
+            max-width: 96px;
+        }
+    }
+
     .trigger:hover,
     .trigger[aria-expanded='true'] {
         background: var(--bg-hover);

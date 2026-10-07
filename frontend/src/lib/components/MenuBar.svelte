@@ -22,6 +22,7 @@
     import { search } from '../state/search.svelte';
     import { session } from '../state/session.svelte';
     import { updates } from '../state/updates.svelte';
+    import { viewport } from '../state/viewport.svelte';
     import { PANE_LABELS, workspace, type PaneId } from '../state/workspace.svelte';
     import { rememberSection } from './settings/section.svelte';
     import Icon from './Icon.svelte';
@@ -169,6 +170,13 @@
         ];
     });
 
+    /**
+     * The one menu a small screen has instead of four: a row of File, Clusters,
+     * View and Help is wider than a phone before anything else is in the bar.
+     * It holds the same items, under the same names as headings.
+     */
+    const ALL = 'Menu';
+
     /** The menu showing, by label; null when none is. */
     let openLabel = $state<string | null>(null);
     let barEl = $state<HTMLElement | null>(null);
@@ -282,6 +290,33 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="bar" role="menubar" tabindex="-1" bind:this={barEl} onclick={(e) => e.stopPropagation()} onkeydown={onKeyDown}>
+    {#if viewport.compact}
+        <div class="host">
+            <button
+                class="trigger icon"
+                data-menu={ALL}
+                aria-haspopup="menu"
+                aria-expanded={openLabel === ALL}
+                aria-label="Menu"
+                title="Menu"
+                onclick={() => toggle(ALL)}
+            >
+                <Icon name="menu" size={18} />
+            </button>
+
+            {#if openLabel === ALL}
+                <div class="menu" role="menu" aria-label="Menu" use:keepInside>
+                    {#each menus as menu, m (menu.label)}
+                        {#if m > 0}<hr />{/if}
+                        <div class="heading" role="presentation">{menu.label}</div>
+                        {#each tidy(menu.entries) as entry, i (i)}
+                            {@render item(ALL, entry)}
+                        {/each}
+                    {/each}
+                </div>
+            {/if}
+        </div>
+    {:else}
     {#each menus as menu (menu.label)}
         <div class="host">
             <button
@@ -302,27 +337,33 @@
             {#if openLabel === menu.label}
                 <div class="menu" role="menu" aria-label={menu.label} use:keepInside>
                     {#each tidy(menu.entries) as entry, i (i)}
-                        {#if entry === 'separator'}
-                            <hr />
-                        {:else}
-                            <button
-                                role={entry.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
-                                aria-checked={entry.checked}
-                                disabled={entry.disabled}
-                                title={entry.title}
-                                onclick={() => run(menu.label, entry)}
-                            >
-                                <span class="tick">{#if entry.checked}<Icon name="check" size={13} />{/if}</span>
-                                <span class="label">{entry.label}</span>
-                                {#if entry.shortcut}<span class="key">{entry.shortcut}</span>{/if}
-                            </button>
-                        {/if}
+                        {@render item(menu.label, entry)}
                     {/each}
                 </div>
             {/if}
         </div>
     {/each}
+    {/if}
 </div>
+
+{#snippet item(label: string, entry: Entry)}
+    {#if entry === 'separator'}
+        <hr />
+    {:else}
+        <button
+            role={entry.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+            aria-checked={entry.checked}
+            disabled={entry.disabled}
+            title={entry.title}
+            onclick={() => run(label, entry)}
+        >
+            <span class="tick">{#if entry.checked}<Icon name="check" size={13} />{/if}</span>
+            <span class="label">{entry.label}</span>
+            <!-- Keyboard shortcuts mean nothing on a phone. -->
+            {#if entry.shortcut && !viewport.compact}<span class="key">{entry.shortcut}</span>{/if}
+        </button>
+    {/if}
+{/snippet}
 
 <style>
     .bar {
@@ -362,6 +403,21 @@
         color: var(--text);
     }
 
+    .trigger.icon {
+        justify-content: center;
+        width: 36px;
+        height: 32px;
+        padding: 0;
+    }
+
+    .heading {
+        padding: 6px 8px 2px;
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+    }
+
     .menu {
         position: absolute;
         top: calc(100% + 4px);
@@ -391,6 +447,14 @@
         font-size: 12px;
         color: var(--text);
         text-align: left;
+    }
+
+    /* Fingers rather than a pointer: rows tall enough to hit. */
+    @media (pointer: coarse) {
+        .menu button {
+            height: 38px;
+            font-size: 13px;
+        }
     }
 
     .menu button:hover:not(:disabled),

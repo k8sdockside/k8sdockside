@@ -18,6 +18,7 @@
     import { onMount, untrack } from 'svelte';
     import Icon from './lib/components/Icon.svelte';
     import Pane from './lib/components/Pane.svelte';
+    import PaneNav from './lib/components/PaneNav.svelte';
     import TopBar from './lib/components/TopBar.svelte';
     import Welcome from './lib/components/Welcome.svelte';
     import { PLUGIN_RECHECK_MS, workspace } from './lib/state/workspace.svelte';
@@ -29,6 +30,8 @@
     import { rowMetrics } from './lib/density';
     import { applyTheme } from './lib/theme/apply';
     import { setDateTimeSettings } from './lib/datetime.svelte';
+    import { followFocus, viewport, type ActiveTabs } from './lib/state/viewport.svelte';
+    import { PANE_IDS } from './lib/state/panes';
 
     onMount(() => {
         // Which version this is -- the desktop app or the web one -- and who
@@ -54,6 +57,37 @@
             }),
             open: (id) => workspace.openTab(id, DASHBOARD),
         });
+    });
+
+    // A small screen shows one pane at a time -- see lib/state/viewport.svelte.ts.
+    $effect(() => viewport.start());
+
+    // ...and follows the user to whichever pane their last tap put something
+    // in. Only from the moment the saved layout has loaded: restoring it moves
+    // every pane's active tab at once, and that is nobody asking to look.
+    let lastActive: ActiveTabs | null = null;
+    $effect(() => {
+        if (!workspace.loaded) return;
+        const now = Object.fromEntries(
+            PANE_IDS.map((pane) => [pane, workspace.panes[pane].tabs.length ? workspace.panes[pane].activeId : null]),
+        ) as ActiveTabs;
+        untrack(() => {
+            if (lastActive) {
+                viewport.show(
+                    followFocus(viewport.focus, lastActive, now, (pane) => workspace.panes[pane].tabs.length > 0),
+                );
+            }
+            lastActive = now;
+        });
+    });
+
+    // Folding the dock -- a second tap on its tab, or its chevron -- hands the
+    // room back to the view above it on a wide screen. On a small one there is
+    // no view above it, so it hands back the screen instead.
+    $effect(() => {
+        if (viewport.compact && viewport.focus === 'bottom' && !workspace.isPaneOpen('bottom')) {
+            untrack(() => viewport.show('main'));
+        }
     });
 
     // Zoom is applied as CSS on the app's own element, not through the window.
@@ -196,7 +230,7 @@
 
 <svelte:window onkeydown={onZoomKey} />
 
-<div class="shell">
+<div class="shell" class:compact={viewport.compact} data-focus={viewport.compact ? viewport.focus : undefined}>
     <TopBar />
 
     <div class="body">
@@ -223,6 +257,23 @@
         <Welcome />
     {/snippet}
 
+    <!-- On a small screen the bar at the foot picks the pane, and the status
+         line keeps only its messages, which nothing else would show. -->
+    {#if viewport.compact}
+        {#if notices.current}
+            <footer class="statusbar">
+                <span class="notice" class:error={notices.current.tone === 'error'}>
+                    {#if notices.current.tone === 'error'}<Icon name="alert" size={12} />{/if}
+                    {notices.current.text}
+                </span>
+                <span class="spacer"></span>
+                <button class="dismiss" onclick={() => notices.dismiss()} aria-label="Dismiss message">
+                    <Icon name="close" size={11} />
+                </button>
+            </footer>
+        {/if}
+        <PaneNav />
+    {:else}
     <footer class="statusbar">
         {#if notices.current}
             <span class="notice" class:error={notices.current.tone === 'error'}>
@@ -250,6 +301,7 @@
             </span>
         {/if}
     </footer>
+    {/if}
 </div>
 
 <style>
@@ -283,6 +335,30 @@
         flex: 1 1 auto;
         min-height: 0;
         min-width: 0;
+    }
+
+    /* A small screen: one pane at a time, filling the body. Which one is
+       viewport.focus, written onto the shell as data-focus; Pane hides the
+       others. The containers a hidden pane leaves empty go too, so the one
+       being shown is not sharing its height with nothing. */
+    .shell.compact .body {
+        flex-direction: column;
+    }
+
+    .shell.compact[data-focus='left'] main,
+    .shell.compact[data-focus='bottom'] .upper {
+        display: none;
+    }
+
+    .shell.compact .statusbar {
+        height: auto;
+        min-height: 28px;
+        padding: 4px 12px;
+        white-space: normal;
+    }
+
+    .shell.compact .notice {
+        overflow: visible;
     }
 
     .statusbar {

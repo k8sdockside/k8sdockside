@@ -125,4 +125,34 @@
         margin-left: auto;
         padding-right: 8px;
     }
+
+    /* A small screen (the breakpoint is COMPACT_QUERY in
+       state/viewport.svelte.ts): the menus fold into one button, the title
+       goes -- the browser tab already says what this is -- and the search box
+       takes the width that leaves. */
+    @media (max-width: 760px) {
+        .topbar {
+            grid-template-columns: auto minmax(0, 1fr);
+            height: 48px;
+            padding-top: env(safe-area-inset-top, 0px);
+            box-sizing: content-box;
+        }
+
+        .title {
+            display: none;
+        }
+
+        .lead {
+            padding-left: 4px;
+        }
+
+        .trail {
+            padding-left: 4px;
+            gap: 4px;
+        }
+
+        .menus {
+            padding-right: 4px;
+        }
+    }
 </style>

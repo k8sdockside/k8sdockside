@@ -472,6 +472,7 @@
            the title bar, and a panel growing rightwards would leave the window. */
         right: 0;
         width: 360px;
+        max-width: calc(100vw - 16px);
         max-height: min(560px, 80vh);
         overflow: auto;
         padding: 6px;

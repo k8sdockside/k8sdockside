@@ -40,6 +40,7 @@
     } from '../state/panes';
     import { currentTabDrag, endTabDrag } from '../state/tabdrag.svelte';
     import { isAppTab, isSettingsTab, workspace } from '../state/workspace.svelte';
+    import { viewport } from '../state/viewport.svelte';
     import AccessOverview from '../access/AccessOverview.svelte';
     import Dashboard from './Dashboard.svelte';
     import DetailPanel from './DetailPanel.svelte';
@@ -293,6 +294,14 @@
     );
     /** On screen only as somewhere to drop the thing being dragged. */
     let bare = $derived(contents.tabs.length === 0);
+
+    /**
+     * On a small screen only one pane is shown, and it fills the window -- see
+     * state/viewport.svelte.ts. The rest stay mounted, hidden, so a terminal
+     * or a log stream in one of them carries on while another is looked at.
+     */
+    let compact = $derived(viewport.compact);
+    let hidden = $derived(compact && viewport.focus !== pane);
 </script>
 
 <!-- A drag that ends anywhere but on a target -- let go over the table, or
@@ -306,11 +315,13 @@
         class:open
         class:receiving
         class:bare
+        class:compact
+        class:hidden
         class:sized={pane !== 'main'}
         bind:this={paneEl}
         style:--size="{contents.size}px"
     >
-        {#if pane !== 'main' && !bare}
+        {#if pane !== 'main' && !bare && !compact}
             <!-- A focusable separator is the ARIA "window splitter" pattern; the
                  a11y rules below only key off the role, which they treat as static. -->
             <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -548,6 +559,26 @@
     .pane.left.bare,
     .pane.right.bare {
         width: 220px;
+    }
+
+    /* A small screen: the one pane shown takes the whole body, whatever size
+       it was dragged to on a wider one. Its saved size is left alone, so it
+       comes back as it was when the window is wide again. */
+    .pane.hidden {
+        display: none;
+    }
+
+    .pane.compact {
+        flex: 1 1 auto;
+        width: 100%;
+        max-width: none;
+        border-left: 0;
+        border-right: 0;
+    }
+
+    .pane.bottom.compact.open {
+        height: auto;
+        max-height: none;
     }
 
     /* The grab strip sits over the seam between the pane and what is next to

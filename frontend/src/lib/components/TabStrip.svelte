@@ -975,4 +975,12 @@
     .close.modified:hover .cross {
         display: grid;
     }
+
+    /* Fingers rather than a pointer: an 18px cross is a target a thumb misses. */
+    @media (pointer: coarse) {
+        .close {
+            width: 26px;
+            height: 26px;
+        }
+    }
 </style>
