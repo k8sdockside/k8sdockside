@@ -39,6 +39,17 @@ const CUSTOM_KINDS = {
 };
 
 const settle = () => new Promise((r) => setTimeout(r, 700));
+
+/**
+ * Waits for a row to be scrolled fully into view. The reveal scrolls smoothly,
+ * and how long that takes depends on how busy the machine is -- with the whole
+ * suite running in parallel, a fixed wait sometimes caught it mid-scroll.
+ */
+const arrives = (label: string) =>
+    expect.poll(() => {
+        const row = rowFor(label);
+        return !!row && inView(row);
+    }, { timeout: 5000, interval: 50 }).toBe(true);
 const scroller = () => document.querySelector('.scroll') as HTMLElement;
 
 /** The sidebar row for one resource kind, if it is rendered at all. */
@@ -92,9 +103,8 @@ test('activating a tab brings its own row into view', async () => {
     await settle();
 
     workspace.activateTab(resourceTabId(CTX.id, 'customresourcedefinitions'));
-    await settle();
 
-    expect(inView(rowFor('All definitions')!)).toBe(true);
+    await arrives('All definitions');
 });
 
 // Reaching a custom resource used to leave the sidebar on the cluster's name:
@@ -132,11 +142,8 @@ describe('a custom resource, folded two deep', () => {
         await settle();
 
         workspace.activateTab(resourceTabId(CTX.id, CRD_KIND));
-        await settle();
 
-        const row = rowFor(CRD_LABEL);
-        expect(row).toBeTruthy();
-        expect(inView(row!)).toBe(true);
+        await arrives(CRD_LABEL);
     });
 
     // Coming back to it is the same journey with the folds already open, and it
@@ -149,8 +156,7 @@ describe('a custom resource, folded two deep', () => {
         await settle();
 
         workspace.activateTab(resourceTabId(CTX.id, CRD_KIND));
-        await settle();
 
-        expect(inView(rowFor(CRD_LABEL)!)).toBe(true);
+        await arrives(CRD_LABEL);
     });
 });

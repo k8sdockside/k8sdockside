@@ -653,6 +653,58 @@
         },
 
         /**
+         * Command line tools on the user's machine, run by the app: the page
+         * itself cannot start a process. Needs "ui": { "tools": [...] }
+         * declaring the tool and exactly which commands. Desktop app only.
+         */
+        tools: {
+            /** tool id -> { id, label, tool: { found, path, version, reason }, files: [{ id, label, path, source, exists }] }. */
+            status: function (tool) {
+                return call('tools.status', { tool: tool });
+            },
+            /** Asks the user, in a file dialog, for one of the tool's files for this cluster; resolves with the status. */
+            chooseFile: function (tool, file) {
+                return call('tools.chooseFile', { tool: tool, file: file });
+            },
+            /** Goes back to the manifest's default for one of the tool's files. */
+            forgetFile: function (tool, file) {
+                return call('tools.forgetFile', { tool: tool, file: file });
+            },
+            /**
+             * Runs a "read" command: (tool, args) -> { stdout, stderr, code,
+             * truncated }. A non-zero code resolves; a command the manifest
+             * does not allow rejects.
+             */
+            exec: function (tool, args) {
+                return call('tools.exec', { tool: tool, args: args || [] });
+            },
+            /** exec, then stdout as JSON; rejects with stderr when the code is not 0. */
+            json: function (tool, args) {
+                return call('tools.exec', { tool: tool, args: args || [] }).then(function (out) {
+                    if (out.code !== 0) throw new Error(String(out.stderr || 'exit status ' + out.code).trim().slice(0, 500));
+                    return JSON.parse(out.stdout);
+                });
+            },
+            /**
+             * Asks to run a "run" command: { tool, args, defaults?, label?,
+             * title?, danger?, confirm? }. The user sees the exact command
+             * line; if they say yes it runs in the tool's console in the dock.
+             * Rejects with "the command was declined" if they do not.
+             */
+            run: function (request) {
+                return call('tools.run', request || {});
+            },
+            /** Opens the tool's console in the dock: { tool, defaults?, label? }. */
+            console: function (request) {
+                return call('tools.console', request || {});
+            },
+            /** Opens an "interactive" command in the user's own terminal: (tool, args). */
+            external: function (tool, args) {
+                return call('tools.external', { tool: tool, args: args || [] });
+            },
+        },
+
+        /**
          * Writes dates and times the way the user chose to see them, in the
          * app and in every plugin: format.date(when), format.time(when,
          * { seconds }), format.dateTime(when, { seconds }), format.day(when),

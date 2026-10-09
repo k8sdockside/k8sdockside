@@ -15,7 +15,7 @@
     import { singularFor } from '../catalogue';
     import { alpha } from '../colors';
     import { session } from '../state/session.svelte';
-    import { terminals } from '../state/terminals.svelte';
+    import { terminals, TOOL_CONSOLE } from '../state/terminals.svelte';
     import { workspace, type DockTab } from '../state/workspace.svelte';
     import ErrorState from './ErrorState.svelte';
     import Icon from './Icon.svelte';
@@ -29,6 +29,8 @@
     let doc = $derived(terminals.doc(tab.id));
     let color = $derived(workspace.colorOf(tab.contextId));
     let onNode = $derived(tab.kind === 'nodes');
+    /** A plugin tool's console rather than a shell: it has no container, and no other terminal to move to. */
+    let onTool = $derived(tab.kind === TOOL_CONSOLE);
 
     let host = $state<HTMLElement | null>(null);
 
@@ -73,7 +75,7 @@
     }
 
     let subject = $derived(
-        onNode ? `node ${tab.name}` : `${singularFor(tab.kind)} ${tab.name}`,
+        onTool ? `${tab.name} console` : onNode ? `node ${tab.name}` : `${singularFor(tab.kind)} ${tab.name}`,
     );
 
     /** What the bar says about where the session actually is. */
@@ -131,7 +133,7 @@
 
         <!-- Not in the web version: "your own terminal" would be one on the
              server, where nobody is looking. -->
-        {#if !session.server}
+        {#if !session.server && !onTool}
             <button
                 class="toggle"
                 title="Open this shell in your own terminal instead"

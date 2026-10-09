@@ -37,7 +37,11 @@ GOVULNCHECK ?= $(LOCALBIN)/govulncheck
 # Use the Go toolchain version declared in go.mod when building tools
 GO_VERSION := $(shell awk '/^go /{print $$2}' go.mod)
 GO_TOOLCHAIN := go$(GO_VERSION)
-GOSEC_VERSION ?= latest
+# master, not latest: gosec v2.29.0 is built with golang.org/x/tools v0.49.0,
+# which cannot read the export data of Go 1.27.2 and fails every package with
+# type errors. Back to latest once a release newer than v2.29.0 is out. After
+# changing this or Go, delete bin/tools/gosec -- it is only built when missing.
+GOSEC_VERSION ?= master
 GOLANGCI_LINT_VERSION ?= latest
 GOVULNCHECK_VERSION ?= latest
 
@@ -376,8 +380,8 @@ install-security-scanner: $(GOSEC) ## Install gosec security scanner locally (st
 $(GOSEC): | $(LOCALBIN)
 	@set -e; printf "$(CYAN)Installing gosec $(GOSEC_VERSION)...$(RESET)\n"; \
 	if ! GOBIN=$(LOCALBIN) go install github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION) 2>/dev/null; then \
-		printf "$(YELLOW)Primary install failed, attempting fallback to @main...$(RESET)\n"; \
-		if ! GOBIN=$(LOCALBIN) go install github.com/securego/gosec/v2/cmd/gosec@main; then \
+		printf "$(YELLOW)Primary install failed, attempting fallback to @master...$(RESET)\n"; \
+		if ! GOBIN=$(LOCALBIN) go install github.com/securego/gosec/v2/cmd/gosec@master; then \
 			printf "$(RED)✗ gosec installation failed$(RESET)\n"; \
 			exit 1; \
 		fi; \

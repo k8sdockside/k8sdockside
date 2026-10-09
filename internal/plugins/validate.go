@@ -476,6 +476,12 @@ func validateUI(p *Plugin) error {
 	}
 	ui.Services = services
 
+	tools, err := validateTools(p.ID, slices.Clone(ui.Tools))
+	if err != nil {
+		return err
+	}
+	ui.Tools = tools
+
 	ui.Readable = readableKinds(*p, ui.Kinds)
 	p.UI = &ui
 	return nil

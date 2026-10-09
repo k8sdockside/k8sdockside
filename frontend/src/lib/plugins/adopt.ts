@@ -56,6 +56,15 @@ export function adoptPlugin(plugin: bindings.Plugin): Plugin {
                   readable: [...(plugin.ui.readable ?? [])],
                   write: plugin.ui.write ?? false,
                   registries: plugin.ui.registries ?? false,
+                  tools: (plugin.ui.tools ?? []).map((tool) => ({
+                      id: tool.id,
+                      label: tool.label || tool.command,
+                      command: tool.command,
+                      files: (tool.files ?? []).map((f) => ({ id: f.id, label: f.label || f.id })),
+                      read: [...(tool.read ?? [])],
+                      run: [...(tool.run ?? [])],
+                      interactive: [...(tool.interactive ?? [])],
+                  })),
                   services: (plugin.ui.services ?? []).map((svc) => ({
                       id: svc.id,
                       label: svc.label || svc.name || svc.id,

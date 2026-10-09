@@ -36,6 +36,10 @@ type ContextPrefs struct {
 	// pods of a production one have long ones, and a width dragged for the
 	// second is the wrong width for the first.
 	Columns map[string]ColumnPrefs `json:"columns,omitempty"`
+	// Tools are the files the user chose for plugins' command line tools here
+	// -- a credentials file per cluster, typically -- keyed by "plugin/tool",
+	// then by the file's id. Written only by SetToolFile.
+	Tools map[string]map[string]string `json:"tools,omitempty"`
 }
 
 // ColumnPrefs is what the user changed about one kind's table: the widths they
@@ -71,7 +75,8 @@ func (c ColumnPrefs) isEmpty() bool {
 // empty override is not nothing: CollapsedGroups of length zero means "show
 // every group here", which is a choice and not the absence of one.
 func (p ContextPrefs) isEmpty() bool {
-	return p.Alias == "" && p.Color == "" && p.Metrics == "" && p.CollapsedGroups == nil && len(p.Columns) == 0
+	return p.Alias == "" && p.Color == "" && p.Metrics == "" && p.CollapsedGroups == nil && len(p.Columns) == 0 &&
+		len(p.Tools) == 0
 }
 
 // TabRef identifies one open tab: a kubeconfig context and the resource kind

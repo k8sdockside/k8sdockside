@@ -19,6 +19,7 @@
         MetricsService,
         PluginService,
         ResourceService,
+        TerminalService,
     } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import { adoptPanel } from '../charts/adopt';
     import { isPluginOverview, PLUGIN_OVERVIEW, pluginKindFor } from '../catalogue';
@@ -252,6 +253,29 @@
         return out;
     }
 
+    /** One of the tools the plugin declares. Go checks again. */
+    function toolOf(
+        p: { name: string; ui?: { tools: { id: string; label: string; command: string }[] } | null },
+        params: Record<string, unknown>,
+    ): { id: string; label: string; command: string } {
+        const id = text(params.tool);
+        const tool = (p.ui?.tools ?? []).find((t) => t.id === id);
+        if (!tool) throw new Error(`${p.name} does not declare a tool "${id}" in "ui": { "tools": [...] }`);
+        return tool;
+    }
+
+    /** A command's arguments as a page gives them: strings only. */
+    function wordsOf(value: unknown): string[] {
+        if (!Array.isArray(value)) return [];
+        return value.filter((w): w is string => typeof w === 'string').slice(0, 256);
+    }
+
+    /** What a console's dock tab is called: the tool, and what the page says it is on. */
+    function consoleName(tool: { command: string }, params: Record<string, unknown>): string {
+        const on = text(params.label).slice(0, 80);
+        return on ? `${tool.command} · ${on}` : tool.command;
+    }
+
     function targetOf(params: Record<string, unknown>): DetailTarget {
         return {
             contextId,
@@ -303,6 +327,7 @@
                     readable: [...(p.ui?.readable ?? [])],
                     write: p.ui?.write ?? false,
                     registries: p.ui?.registries ?? false,
+                    tools: (p.ui?.tools ?? []).map((t) => ({ id: t.id, label: t.label, command: t.command })),
                     services: (p.ui?.services ?? []).map((svc) => ({ id: svc.id, label: svc.label, paths: [...svc.paths] })),
                     actions: (p.actions ?? []).map((a) => ({ id: a.id, label: a.label, kind: a.kind })),
                     // What the plugin says about itself, so a page that is its
@@ -428,6 +453,45 @@
                 if (!svc) throw new Error(`${p.name} does not declare a service "${id}" in "ui": { "services": [...] }`);
                 return PluginService.ServiceGet(contextId, p.id, svc.id, text(params.path), queryOf(params.query));
             }
+            // The command line tools the plugin declares. Go matches every
+            // command against the manifest's patterns again, and passes the
+            // files the user chose; see internal/plugins/uitools.go.
+            case 'tools.status':
+                return PluginService.ToolStatus(contextId, p.id, toolOf(p, params).id);
+            case 'tools.chooseFile':
+                return PluginService.ToolChooseFile(contextId, p.id, toolOf(p, params).id, text(params.file));
+            case 'tools.forgetFile':
+                return PluginService.ToolForgetFile(contextId, p.id, toolOf(p, params).id, text(params.file));
+            case 'tools.exec':
+                return PluginService.ToolExec(contextId, p.id, toolOf(p, params).id, wordsOf(params.args));
+            case 'tools.run': {
+                // Written out by Go exactly as it would be typed, shown to the
+                // user, and run only if they say yes -- in a console in the
+                // dock, where they can watch it.
+                const tool = toolOf(p, params);
+                const args = wordsOf(params.args);
+                const plan = await PluginService.ToolPlan(contextId, p.id, tool.id, 'run', args);
+                const confirm = text(params.confirm);
+                const yes = await ask({
+                    title: text(params.title) || `${p.name} wants to run ${tool.command} ${args[0] ?? ''}`,
+                    target: { contextId, kind: tool.command, namespace: '', name: '' },
+                    detail: plan.display,
+                    apply: 'Run in console',
+                    danger: params.danger === true,
+                    typeToConfirm: confirm || undefined,
+                });
+                if (!yes) throw new Error('the command was declined');
+                workspace.openToolConsole(contextId, p.id, tool.id, consoleName(tool, params), wordsOf(params.defaults), args);
+                return { command: plan.display };
+            }
+            case 'tools.console': {
+                const tool = toolOf(p, params);
+                workspace.openToolConsole(contextId, p.id, tool.id, consoleName(tool, params), wordsOf(params.defaults), []);
+                return null;
+            }
+            case 'tools.external':
+                await TerminalService.LaunchTool(contextId, p.id, toolOf(p, params).id, wordsOf(params.args));
+                return null;
             case 'patch': {
                 const target = targetOf(params);
                 if (!p.ui?.write) throw new Error(`${p.name} does not declare "ui": { "write": true }`);

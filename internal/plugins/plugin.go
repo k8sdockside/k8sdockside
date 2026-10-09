@@ -282,6 +282,9 @@ type UI struct {
 	// Services are the in-cluster Services the views may make GET requests
 	// to, through the API server. See UIService.
 	Services []UIService `json:"services,omitzero"`
+	// Tools are the command line tools on the user's machine the views may
+	// run, and exactly which commands. See UITool.
+	Tools []UITool `json:"tools,omitzero"`
 	// Readable is every kind the views may read, worked out by the loader --
 	// Kinds plus everything else the plugin names -- and ignored on the way
 	// in. Both sides check against this one list.

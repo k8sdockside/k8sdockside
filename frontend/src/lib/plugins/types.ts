@@ -48,8 +48,21 @@ export interface PluginUI {
     write: boolean;
     /** Whether the views may ask registries about the images the cluster runs. */
     registries: boolean;
+    /** The command line tools on this machine the views may run, and which commands. */
+    tools: PluginToolAccess[];
     /** The in-cluster Services the views may make GET requests to. */
     services: PluginServiceAccess[];
+}
+
+/** One command line tool a plugin's views may run, as the settings card shows it. */
+export interface PluginToolAccess {
+    id: string;
+    label: string;
+    command: string;
+    files: { id: string; label: string }[];
+    read: string[];
+    run: string[];
+    interactive: string[];
 }
 
 /**

@@ -1,6 +1,6 @@
 {
     "name": "@k8sdockside/plugin-sdk",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Types, build tool and DOM helpers for K8s Dockside plugins written in TypeScript.",
     "license": "Apache-2.0",
     "author": "K8s Dockside",

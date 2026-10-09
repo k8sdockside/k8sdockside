@@ -77,6 +77,9 @@ func New(settings *appconfig.Store, opts Options) Built {
 	// reading Secrets, through the connection the cluster's tabs already have.
 	charts := NewHelmService(configs, resources.watcher, settings)
 	shells := NewTerminalService(configs, resources.watcher, settings)
+	// The console for a plugin's command line tool asks the plugins which
+	// tools they declare.
+	shells.plugins = solutions
 	tunnels := NewPortForwardService(configs, resources.watcher, settings)
 	// Search borrows the same watcher again: a search of a context already
 	// open in a tab goes through that tab's connection, and one of a context
