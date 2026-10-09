@@ -19,7 +19,7 @@
 # into the source by .github/scripts/stamp-version.sh before the build, exactly
 # as for the desktop release, and so arrives with the build context.
 
-ARG GO_VERSION=1.27.1
+ARG GO_VERSION=1.27.2
 ARG ALPINE_VERSION=3.22
 ARG HELM_VERSION=3.22.0
 
