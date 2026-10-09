@@ -6,7 +6,7 @@ import { TerminalService } from '../../../../bindings/github.com/k8sdockside/k8s
 import { changes } from '../changes.svelte';
 import { editors } from '../editor.svelte';
 import { logs } from '../logs.svelte';
-import { terminals } from '../terminals.svelte';
+import { terminals, TOOL_CONSOLE } from '../terminals.svelte';
 import { fields } from '../fields';
 import { views } from '../views';
 import {
@@ -632,6 +632,25 @@ export abstract class WorkspaceTabs extends WorkspaceContexts {
             void this.openExternalShell(target);
             return;
         }
+        this.openObjectTab('shell', target);
+    }
+
+    /**
+     * Opens the console for one of a plugin's command line tools in the dock.
+     * defaults are flag and value pairs every command gets unless it gives the
+     * flag; initial is a command the user has just confirmed, run first. One
+     * console per tool and label, so asking again brings the same one forward.
+     */
+    openToolConsole(
+        contextId: string,
+        pluginId: string,
+        toolId: string,
+        label: string,
+        defaults: string[],
+        initial: string[],
+    ): void {
+        const target: DetailTarget = { contextId, kind: TOOL_CONSOLE, namespace: `${pluginId}/${toolId}`, name: label };
+        void terminals.primeTool(tabIdFor('shell', target), target, defaults, initial);
         this.openObjectTab('shell', target);
     }
 

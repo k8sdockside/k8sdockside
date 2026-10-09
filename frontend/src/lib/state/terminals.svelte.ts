@@ -79,6 +79,18 @@ function decode(data: string): Uint8Array {
     return bytes;
 }
 
+/**
+ * The kind a plugin tool's console is opened with. Its namespace is
+ * `<plugin>/<tool>` and its name what the dock tab is called.
+ */
+export const TOOL_CONSOLE = 'tool';
+
+/** What a tool console is given: defaults for every command, and one to run first. */
+interface ToolStart {
+    defaults: string[];
+    initial: string[];
+}
+
 /** One terminal's xterm instance and the addon that sizes it. */
 interface Attached {
     term: XTerm;
@@ -91,6 +103,8 @@ class Terminals {
     private terms = new Map<string, Attached>();
     /** Which tab each session belongs to, so output is routed by its own id. */
     private routes = new Map<string, string>();
+    /** What each tool console is started with; the initial command is used once. */
+    private toolStarts = new Map<string, ToolStart>();
     private fontSize = 12;
     private scrollback = 5000;
 
@@ -302,7 +316,7 @@ class Terminals {
         // The picker's contents, which a node shell does not have: a node's
         // "containers" are the one this app is about to create, and it is not
         // something to choose between.
-        if (target.kind !== 'nodes') {
+        if (target.kind !== 'nodes' && target.kind !== TOOL_CONSOLE) {
             try {
                 const containers = await TerminalService.Containers(
                     target.contextId,
@@ -320,6 +334,16 @@ class Terminals {
         }
 
         await this.start(id, target, '', '');
+    }
+
+    /**
+     * Says what a tool console starts with. A console already open with a
+     * command to run is started again, so that the command runs where the
+     * user is looking rather than in a session they may have closed.
+     */
+    async primeTool(id: string, target: ShellTarget, defaults: string[], initial: string[]): Promise<void> {
+        this.toolStarts.set(id, { defaults, initial });
+        if (this.docs[id] && initial.length) await this.start(id, target, '', '');
     }
 
     /** Attaches to a different container, which is a new session. */
@@ -341,6 +365,7 @@ class Terminals {
         this.stop(id);
         this.terms.get(id)?.term.dispose();
         this.terms.delete(id);
+        this.toolStarts.delete(id);
         delete this.docs[id];
     }
 
@@ -364,7 +389,9 @@ class Terminals {
 
         try {
             const session =
-                target.kind === 'nodes'
+                target.kind === TOOL_CONSOLE
+                    ? await this.openTool(id, target)
+                    : target.kind === 'nodes'
                     ? await TerminalService.OpenNode(target.contextId, target.name)
                     : await TerminalService.Open(
                           target.contextId,
@@ -399,6 +426,15 @@ class Terminals {
                 current.error = message(err);
             }
         }
+    }
+
+    /** Opens a tool console, running its initial command once. */
+    private openTool(id: string, target: ShellTarget) {
+        const [pluginId, toolId] = target.namespace.split('/');
+        const start = this.toolStarts.get(id) ?? { defaults: [], initial: [] };
+        // Used once: reconnecting must not run an upgrade a second time.
+        this.toolStarts.set(id, { defaults: start.defaults, initial: [] });
+        return TerminalService.OpenTool(target.contextId, pluginId ?? '', toolId ?? '', start.defaults, start.initial);
     }
 
     /** Closes whatever session a tab is on, if any. */

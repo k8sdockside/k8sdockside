@@ -381,5 +381,27 @@
         ],
         "official": true,
         "minAppVersion": "0.1.1"
+    },
+    {
+        "id": "talos",
+        "name": "Talos",
+        "tagline": "the machines under your Kubernetes",
+        "category": "platform",
+        "icon": "server",
+        "description": "For clusters on Talos Linux 1.12 to 1.15: every machine on a version runway and a board, with its stage, services, extensions and Secure Boot, and a drawer per machine for hardware, logs, kernel messages, network, storage and etcd. Upgrades, reboots and service restarts are written out as the exact talosctl command and run in a talosctl console in the dock once you confirm. Runs the talosctl on your machine with the talosconfig you choose per cluster; desktop app only.",
+        "repo": "https://github.com/k8sdockside/talos.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
+        "detectWorkloads": [
+            { "kind": "nodes", "field": "metadata.annotations{talos.dev/owned-labels}" },
+            { "kind": "nodes", "field": "metadata.annotations{talos.dev/owned-annotations}" },
+            { "kind": "nodes", "field": "metadata.annotations{extensions.talos.dev/schematic}" }
+        ],
+        "links": [
+            { "label": "talos.dev", "url": "https://www.talos.dev/" },
+            { "label": "Source", "url": "https://github.com/k8sdockside/talos" }
+        ],
+        "official": true,
+        "minAppVersion": "0.1.23"
     }
 ]

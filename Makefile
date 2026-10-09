@@ -37,9 +37,21 @@ GOVULNCHECK ?= $(LOCALBIN)/govulncheck
 # Use the Go toolchain version declared in go.mod when building tools
 GO_VERSION := $(shell awk '/^go /{print $$2}' go.mod)
 GO_TOOLCHAIN := go$(GO_VERSION)
-GOSEC_VERSION ?= latest
+# Pinned to a gosec main commit: v2.29.0 bundles golang.org/x/tools v0.49.0,
+# which cannot read Go 1.27.2 export data. Switch back to latest once v2.29.1+
+# is released.
+GOSEC_VERSION ?= v2.29.1-0.20261005092323-d2b649ec0182
 GOLANGCI_LINT_VERSION ?= latest
 GOVULNCHECK_VERSION ?= latest
+
+# The scanners load the code the way the compiler wrote it, so a scanner built
+# by an older Go can fail to read it at all. Each is installed under a name
+# carrying its version and the Go that built it -- bin/tools/gosec is a link to
+# that -- so changing either installs it afresh. Before, a bin/tools restored
+# from CI's cache (or left over locally) was used whatever it had been built by.
+GO_RUNNING := $(shell go env GOVERSION)
+GOSEC_BIN := $(LOCALBIN)/gosec-$(GOSEC_VERSION)-$(GO_RUNNING)
+GOVULNCHECK_BIN := $(LOCALBIN)/govulncheck-$(GOVULNCHECK_VERSION)-$(GO_RUNNING)
 
 # Keep the wails3 CLI on the exact version this module depends on. Lazily
 # evaluated so it only runs when a wails target is actually invoked.
@@ -372,32 +384,36 @@ install-wails: ## Install the wails3 CLI at the version required by go.mod.
 	@printf "$(GREEN)✓ wails3 $(WAILS_VERSION) installed$(RESET)\n"
 
 .PHONY: install-security-scanner
-install-security-scanner: $(GOSEC) ## Install gosec security scanner locally (static analysis for security issues)
-$(GOSEC): | $(LOCALBIN)
-	@set -e; printf "$(CYAN)Installing gosec $(GOSEC_VERSION)...$(RESET)\n"; \
-	if ! GOBIN=$(LOCALBIN) go install github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION) 2>/dev/null; then \
-		printf "$(YELLOW)Primary install failed, attempting fallback to @main...$(RESET)\n"; \
-		if ! GOBIN=$(LOCALBIN) go install github.com/securego/gosec/v2/cmd/gosec@main; then \
+install-security-scanner: $(GOSEC_BIN) ## Install gosec security scanner locally (static analysis for security issues)
+	@ln -sf $(notdir $(GOSEC_BIN)) $(GOSEC)
+$(GOSEC_BIN): | $(LOCALBIN)
+	@set -e; printf "$(CYAN)Installing gosec $(GOSEC_VERSION) with $(GO_RUNNING)...$(RESET)\n"; \
+	tmp=$$(mktemp -d); \
+	if ! GOBIN=$$tmp go install github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION) 2>/dev/null; then \
+		printf "$(YELLOW)Primary install failed, retrying with the error shown...$(RESET)\n"; \
+		if ! GOBIN=$$tmp go install github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION); then \
 			printf "$(RED)✗ gosec installation failed$(RESET)\n"; \
-			exit 1; \
+			rm -rf $$tmp; exit 1; \
 		fi; \
 	fi; \
-	printf "$(GREEN)✓ gosec installed at $(BOLD)$(GOSEC)$(RESET)\n"; \
-	chmod +x $(GOSEC)
+	mv $$tmp/gosec $@; rm -rf $$tmp; chmod +x $@; \
+	printf "$(GREEN)✓ gosec installed at $(BOLD)$@$(RESET)\n"
 
 .PHONY: install-govulncheck
-install-govulncheck: $(GOVULNCHECK) ## Install govulncheck locally (vulnerability scanner for Go)
-$(GOVULNCHECK): | $(LOCALBIN)
-	@set -e; echo "Attempting to install govulncheck $(GOVULNCHECK_VERSION)"; \
-	if ! GOBIN=$(LOCALBIN) go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) 2>/dev/null; then \
+install-govulncheck: $(GOVULNCHECK_BIN) ## Install govulncheck locally (vulnerability scanner for Go)
+	@ln -sf $(notdir $(GOVULNCHECK_BIN)) $(GOVULNCHECK)
+$(GOVULNCHECK_BIN): | $(LOCALBIN)
+	@set -e; echo "Installing govulncheck $(GOVULNCHECK_VERSION) with $(GO_RUNNING)"; \
+	tmp=$$(mktemp -d); \
+	if ! GOBIN=$$tmp go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) 2>/dev/null; then \
 		echo "Primary install failed, attempting install from @latest (compatibility fallback)"; \
-		if ! GOBIN=$(LOCALBIN) go install golang.org/x/vuln/cmd/govulncheck@latest; then \
+		if ! GOBIN=$$tmp go install golang.org/x/vuln/cmd/govulncheck@latest; then \
 			echo "govulncheck installation failed for versions $(GOVULNCHECK_VERSION) and @latest"; \
-			exit 1; \
+			rm -rf $$tmp; exit 1; \
 		fi; \
 	fi; \
-	echo "govulncheck installed at $(GOVULNCHECK)"; \
-	chmod +x $(GOVULNCHECK)
+	mv $$tmp/govulncheck $@; rm -rf $$tmp; chmod +x $@; \
+	echo "govulncheck installed at $@"
 
 ##@ Security
 # gosec skips build/: the Wails scaffold's own iOS/Android dependency installers

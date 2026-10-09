@@ -169,6 +169,7 @@ through `window.k8sdockside`. Each call is a promise; a failure rejects with an
 | Dates and times | `format.date(when)`, `format.time(when)`, `format.dateTime(when)`, `format.age(when)`, `format.moment(when)` — written the way the user chose in **Settings → Dates and times**, as the app writes them (0.1.10 and newer; check it exists) |
 | Registries | `registry.lookup({ image })` — the tags an image's registry lists and what its tag points at now, asked by the app for an image the cluster runs (0.0.25 and newer; needs `"ui": { "registries": true }`) |
 | Services in the cluster | `services.get({ service, path, query })`, `services.json(...)` — a GET to a Service the manifest declares, made by the app through the API server (0.0.27 and newer; needs `"ui": { "services": [...] }`) |
+| Command line tools | `tools.status(id)`, `tools.exec(id, args)`, `tools.json(id, args)`, `tools.run({ tool, args })`, `tools.console({ tool })`, `tools.external(id, args)`, `tools.chooseFile(id, file)` — a CLI on the user's machine, run by the app with the files the user chose for the cluster (0.1.23 and newer, desktop only; needs `"ui": { "tools": [...] }` — see below) |
 | Remembering | `storage.get(key)`, `storage.set(key, value)`, `storage.remove(key)`, `storage.keys()` — kept by the app per plugin and per cluster, across restarts (0.0.19 and newer; check it exists) |
 
 Every call, with what it takes and returns, is in
@@ -220,6 +221,51 @@ Content-Security-Policy that repeats it. It:
   — anonymously, and only about images the tab's cluster runs. With
   `"ui": { "services": [...] }` the app makes GET requests for it to the
   Services declared there, under the paths declared there, and nowhere else.
+
+- runs **no programs** of its own. With `"ui": { "tools": [...] }` the app
+  runs a command line tool for it -- see below.
+
+### Command line tools
+
+Some products are not managed through the Kubernetes API: a machine OS with
+its own API, a storage system with its own CLI. The tool that speaks to them
+is already on the user's machine, set up with their credentials file. A
+manifest can declare it:
+
+```json
+"ui": {
+    "tools": [{
+        "id": "talosctl",
+        "command": "talosctl",
+        "version": ["version", "--client", "--short"],
+        "files": [{ "id": "config", "label": "talosconfig", "flag": "--talosconfig", "env": "TALOSCONFIG", "default": "~/.talos/config" }],
+        "read": ["get machinestatus **", "logs * **"],
+        "run": ["reboot **"],
+        "interactive": ["dashboard **"]
+    }]
+}
+```
+
+- `command` is a program's name, found on PATH or where package managers put
+  it -- never a path.
+- `files` are chosen by the user per cluster (`tools.chooseFile`) and passed by
+  the app with `flag` and/or `env` on every command. A page may not pass those
+  flags itself.
+- A pattern is words: a literal word, `*` for one argument that is not a flag,
+  and `**`, last only, for whatever follows. It must begin with a literal, so
+  no pattern allows every command.
+- `read` commands run when the page asks (`tools.exec`), and their output comes
+  back. Allow only commands that look: a `**` after a command that has
+  sub-actions (`service **`) would let a page stop a service.
+- `run` commands (`tools.run`) are shown to the user as the exact command line,
+  files included, and run in a console in the dock only if they say yes.
+- `interactive` commands (`tools.external`) open in the user's own terminal.
+- `tools.console` opens the tool's console in the dock: the user types the
+  tool's commands, with the files and the page's `defaults` added. It is not a
+  shell -- no pipes, no variables -- and runs nothing but the tool.
+
+Every command is a process with its arguments, never a shell line. The plugin's
+card in Settings lists every pattern before any page runs one.
 
 The plugin's card in Settings says how many kinds its pages read, whether
 they may ask to change them, whether they ask registries, and which services

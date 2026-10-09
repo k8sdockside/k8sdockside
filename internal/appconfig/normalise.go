@@ -3,6 +3,7 @@
 package appconfig
 
 import (
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -590,6 +591,13 @@ func clone(s Settings) Settings {
 	for k, v := range s.Contexts {
 		v.CollapsedGroups = slices.Clone(v.CollapsedGroups)
 		v.Columns = cloneColumns(v.Columns)
+		if v.Tools != nil {
+			tools := make(map[string]map[string]string, len(v.Tools))
+			for k, files := range v.Tools {
+				tools[k] = maps.Clone(files)
+			}
+			v.Tools = tools
+		}
 		out.Contexts[k] = v
 	}
 	return out

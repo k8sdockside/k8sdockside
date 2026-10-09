@@ -5,6 +5,7 @@ package appconfig
 
 import (
 	"errors"
+	"maps"
 	"path/filepath"
 	"slices"
 )
@@ -15,6 +16,9 @@ func (s *Store) SetContextPrefs(id string, prefs ContextPrefs) (Settings, error)
 		return s.Get(), errors.New("context id is required")
 	}
 	return s.update(func(d *Settings) {
+		// The tools' files are SetToolFile's alone: the window writes this
+		// whole record from its own copy, which does not carry them.
+		prefs.Tools = d.Contexts[id].Tools
 		// A folding override is a preference in its own right, so a context
 		// carrying only that one is kept -- see ContextPrefs.isEmpty.
 		if prefs.isEmpty() {
@@ -46,6 +50,52 @@ func (s *Store) SetMetricsEndpoint(contextID, value string) (Settings, error) {
 		// The same emptiness rule SetContextPrefs applies: a context with
 		// nothing left to say about it is forgotten rather than kept as a blank
 		// entry cluttering the settings file.
+		if prefs.isEmpty() {
+			delete(d.Contexts, contextID)
+			return
+		}
+		d.Contexts[contextID] = prefs
+	})
+}
+
+// ToolFiles returns the files chosen for one plugin tool in a context, by file
+// id. Empty when none were chosen.
+func (s *Store) ToolFiles(contextID, tool string) map[string]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return maps.Clone(s.data.Contexts[contextID].Tools[tool])
+}
+
+// SetToolFile records the file chosen for one of a plugin tool's files in a
+// context. An empty path forgets the choice.
+func (s *Store) SetToolFile(contextID, tool, fileID, path string) (Settings, error) {
+	if contextID == "" || tool == "" || fileID == "" {
+		return s.Get(), errors.New("context, tool and file are required")
+	}
+	return s.update(func(d *Settings) {
+		prefs := d.Contexts[contextID]
+		tools := map[string]map[string]string{}
+		for k, v := range prefs.Tools {
+			tools[k] = maps.Clone(v)
+		}
+		files := tools[tool]
+		if files == nil {
+			files = map[string]string{}
+		}
+		if path == "" {
+			delete(files, fileID)
+		} else {
+			files[fileID] = path
+		}
+		if len(files) == 0 {
+			delete(tools, tool)
+		} else {
+			tools[tool] = files
+		}
+		prefs.Tools = tools
+		if len(tools) == 0 {
+			prefs.Tools = nil
+		}
 		if prefs.isEmpty() {
 			delete(d.Contexts, contextID)
 			return

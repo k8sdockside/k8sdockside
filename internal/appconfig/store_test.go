@@ -1596,3 +1596,29 @@ func TestASnoozeOutlastsARestartAndNonsenseIsDropped(t *testing.T) {
 		t.Errorf("a snooze that is not a time was kept: %q", saved.Preferences.AlertsSnoozedUntil)
 	}
 }
+
+func TestToolFilesSurviveTheWindowsWrites(t *testing.T) {
+	store := openIn(t)
+	if _, err := store.SetToolFile("ctx", "acme/acmectl", "config", "/home/me/.acme/config"); err != nil {
+		t.Fatal(err)
+	}
+	// The window writes the whole record without the tools in it.
+	if _, err := store.SetContextPrefs("ctx", ContextPrefs{Alias: "lab"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.ToolFiles("ctx", "acme/acmectl")["config"]; got != "/home/me/.acme/config" {
+		t.Fatalf("config = %q after SetContextPrefs", got)
+	}
+	if _, err := store.SetContextPrefs("ctx", ContextPrefs{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := store.Get().Contexts["ctx"]; !ok {
+		t.Fatal("a context with a tool file chosen should be kept")
+	}
+	if _, err := store.SetToolFile("ctx", "acme/acmectl", "config", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := store.Get().Contexts["ctx"]; ok {
+		t.Fatal("a context with nothing left should be forgotten")
+	}
+}

@@ -13,8 +13,10 @@ import (
 
 	"github.com/k8sdockside/k8sdockside/internal/appconfig"
 	"github.com/k8sdockside/k8sdockside/internal/kube"
+	"github.com/k8sdockside/k8sdockside/internal/plugins"
 	"github.com/k8sdockside/k8sdockside/internal/session"
 	"github.com/k8sdockside/k8sdockside/internal/termapp"
+	"github.com/k8sdockside/k8sdockside/internal/toolcli"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -84,6 +86,9 @@ type TerminalService struct {
 	// server is set in the web version, which has no terminal emulator of the
 	// user's to hand a shell to.
 	server bool
+	// plugins answers which command line tools a plugin declares, for the
+	// tool console. See OpenTool.
+	plugins *PluginService
 
 	mu       sync.Mutex
 	sessions map[string]*live
@@ -356,6 +361,65 @@ func (s *TerminalService) LaunchNode(contextID, node string) error {
 	args = append(args, shellChain(prefs.Shells)...)
 
 	return termapp.Launch(prefs.External, node+" — "+kc.Name, append([]string{kubectl}, args...))
+}
+
+// OpenTool opens a console in the dock for one of a plugin's command line
+// tools: a terminal that runs that tool's commands for this cluster, already
+// given the files the user chose for it. defaults are flag and value pairs
+// added to a command that does not give the flag; initial, when given, is a
+// run command the user has just confirmed, run first. See toolcli.Console.
+func (s *TerminalService) OpenTool(ctx context.Context, contextID, pluginID, toolID string, defaults, initial []string) (TerminalSession, error) {
+	if s.server || s.plugins == nil {
+		return TerminalSession{}, errDesktopOnly
+	}
+	inv, err := s.plugins.prepareTool(contextID, pluginID, toolID, true)
+	if err != nil {
+		return TerminalSession{}, err
+	}
+	if err := checkDefaults(inv.tool, defaults); err != nil {
+		return TerminalSession{}, err
+	}
+	if len(initial) > 0 {
+		if err := inv.tool.Allows(plugins.ToolRun, initial); err != nil {
+			return TerminalSession{}, err
+		}
+	}
+
+	id, sess := s.register(ctx)
+	console := &toolcli.Console{
+		Path:     inv.status.Tool.Path,
+		Name:     inv.tool.Command,
+		Always:   inv.always,
+		Defaults: defaults,
+		Env:      inv.env,
+		Banner: strings.TrimSpace(fmt.Sprintf("%s %s — %s · type ? for help, exit to close",
+			inv.tool.Label, inv.status.Tool.Version, strings.Join(inv.always, " "))),
+	}
+	go func() {
+		defer s.finished(id)
+		err := console.Run(sess.ctx, sess.in, sess.batch, initial)
+		s.ended(id, sess, err)
+	}()
+	return TerminalSession{ID: id}, nil
+}
+
+// LaunchTool opens one of a plugin tool's interactive commands -- one that
+// draws a full screen -- in the user's own terminal.
+func (s *TerminalService) LaunchTool(contextID, pluginID, toolID string, args []string) error {
+	if s.server || s.plugins == nil {
+		return errDesktopOnly
+	}
+	inv, err := s.plugins.prepareTool(contextID, pluginID, toolID, true)
+	if err != nil {
+		return err
+	}
+	if err := inv.tool.Allows(plugins.ToolInteractive, args); err != nil {
+		return err
+	}
+	command := append([]string{inv.status.Tool.Path}, args...)
+	command = append(command, inv.always...)
+	prefs := s.store.Get().Preferences.Terminal
+	return termapp.Launch(prefs.External, inv.tool.Label, command)
 }
 
 // connectArgs point kubectl at exactly the context this window is showing.

@@ -120,6 +120,10 @@ func details(p plugins.Plugin) []string {
 		if p.UI.Registries {
 			out = append(out, "its pages ask registries about the images the cluster runs")
 		}
+		for _, tool := range p.UI.Tools {
+			out = append(out, fmt.Sprintf("its pages run %s on your machine: %d read, %d run (confirmed), %d interactive command patterns",
+				tool.Command, len(tool.Read), len(tool.Run), len(tool.Interactive)))
+		}
 		for _, svc := range p.UI.Services {
 			out = append(out, fmt.Sprintf("its pages call %s (%s) at %s", svc.Label, svc.Describe(), strings.Join(svc.Paths, ", ")))
 		}

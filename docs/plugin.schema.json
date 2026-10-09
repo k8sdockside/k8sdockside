@@ -612,6 +612,14 @@
                     "type": "boolean",
                     "description": "Lets the pages ask the registries of images the cluster runs which tags they have (k8sdockside.registry.lookup). The app asks, anonymously and over https; the pages still have no network access. Needs K8s Dockside 0.0.25 or newer."
                 },
+                "tools": {
+                    "type": "array",
+                    "maxItems": 4,
+                    "items": {
+                        "$ref": "#/definitions/uiTool"
+                    },
+                    "description": "Command line tools on the user's machine the pages may run (k8sdockside.tools): the program, the files it reads (chosen by the user per cluster and passed by the app), and exactly which commands. 'read' commands run when a page asks; 'run' commands are shown to the user and run in a console in the dock only if they say yes; 'interactive' ones open in the user's own terminal. Desktop app only. Needs K8s Dockside 0.1.23 or newer."
+                },
                 "services": {
                     "type": "array",
                     "maxItems": 8,
@@ -621,6 +629,42 @@
                     "description": "In-cluster Services the pages may make GET requests to (k8sdockside.services.get), through the API server's service proxy. The pages pick one of these and a path under its prefixes; nothing else. Needs K8s Dockside 0.0.27 or newer."
                 }
             }
+        },
+        "uiTool": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "command"],
+            "properties": {
+                "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$", "description": "What a page names the tool by." },
+                "label": { "type": "string", "description": "How the app names it. Defaults to the command." },
+                "command": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$", "description": "The program's name, looked for on PATH and where package managers put it. Never a path." },
+                "version": { "type": "array", "items": { "type": "string" }, "description": "Arguments that make the tool print its version, e.g. [\"version\", \"--client\"]." },
+                "files": {
+                    "type": "array",
+                    "items": { "$ref": "#/definitions/uiToolFile" },
+                    "description": "Files the tool reads, chosen by the user per cluster and passed to every command. Pages cannot choose the paths or pass the flags themselves."
+                },
+                "read": { "$ref": "#/definitions/toolPatterns", "description": "Commands a page may run and read the output of, without asking. A pattern is words: a literal word, * for any one argument that is not a flag, and ** (last only) for whatever follows." },
+                "run": { "$ref": "#/definitions/toolPatterns", "description": "Commands a page may ask to run. The user sees the exact command line and it runs in a console in the dock only if they say yes." },
+                "interactive": { "$ref": "#/definitions/toolPatterns", "description": "Commands a page may open in the user's own terminal, for ones that draw a full screen." }
+            }
+        },
+        "uiToolFile": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id"],
+            "properties": {
+                "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$" },
+                "label": { "type": "string", "description": "What the file is called for a person, e.g. talosconfig." },
+                "flag": { "type": "string", "description": "The flag that passes it, e.g. --talosconfig." },
+                "env": { "type": "string", "description": "An environment variable that passes it as well, e.g. TALOSCONFIG." },
+                "default": { "type": "string", "description": "Where it is when the user has not chosen one; ~ is their home." }
+            }
+        },
+        "toolPatterns": {
+            "type": "array",
+            "maxItems": 128,
+            "items": { "type": "string", "minLength": 1 }
         },
         "uiService": {
             "type": "object",

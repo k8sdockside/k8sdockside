@@ -517,6 +517,22 @@
                     Calls {plugin.ui.services.map((s) => s.label).join(', ')} in the cluster · GET only
                 </p>
             {/if}
+            {#each plugin.ui.tools as tool (tool.id)}
+                <!-- Everything it may run is in the title, word for word: the
+                     card is where the user decides whether to trust it. -->
+                <p
+                    class="counts"
+                    title={[
+                        ...tool.read.map((p) => `reads: ${tool.command} ${p}`),
+                        ...tool.run.map((p) => `asks to run: ${tool.command} ${p}`),
+                        ...tool.interactive.map((p) => `opens in your terminal: ${tool.command} ${p}`),
+                    ].join('\n')}
+                >
+                    Runs <code>{tool.command}</code> on this machine · {tool.read.length} read command{tool.read.length === 1 ? '' : 's'}
+                    {#if tool.run.length}· {tool.run.length} that change things, each confirmed{/if}
+                    {#if tool.files.length}· with your {tool.files.map((f) => f.label).join(', ')}{/if}
+                </p>
+            {/each}
         {/if}
         {#if objectExtras(plugin)}
             <p class="counts" title={(plugin.actions ?? []).map((a) => `${a.label} on ${a.kind}`).join('\n')}>
