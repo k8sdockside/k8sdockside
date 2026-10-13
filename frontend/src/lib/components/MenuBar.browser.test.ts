@@ -299,17 +299,27 @@ test('help and the Kubernetes primer can be opened from it', async () => {
 });
 
 // Left, where desktop apps keep their menus, and away from the right-hand end
-// where Windows and most Linux desktops draw the window's own buttons.
+// where Windows and most Linux desktops draw the window's own buttons. In a
+// desktop-sized window: the default 414px viewport is narrower than the bar's
+// traffic-light inset plus its four menus, so "the left half" is not a question
+// it can answer.
 test('the menus are at the left of the bar, in order', async () => {
-    render(TopBar);
+    await page.viewport(1200, 800);
+    try {
+        render(TopBar);
 
-    const bar = page.getByRole('menubar');
-    await expect.element(bar).toBeVisible();
-    const names = [...document.querySelectorAll('[role="menubar"] button[aria-haspopup="menu"]')].map((b) => b.textContent?.trim());
-    expect(names).toEqual(['File', 'Clusters', 'View', 'Help']);
+        const bar = page.getByRole('menubar');
+        await expect.element(bar).toBeVisible();
+        const names = [...document.querySelectorAll('[role="menubar"] button[aria-haspopup="menu"]')].map((b) =>
+            b.textContent?.trim(),
+        );
+        expect(names).toEqual(['File', 'Clusters', 'View', 'Help']);
 
-    const box = (document.querySelector('[role="menubar"]') as HTMLElement).getBoundingClientRect();
-    expect(box.right).toBeLessThan(document.documentElement.clientWidth / 2);
+        const box = (document.querySelector('[role="menubar"]') as HTMLElement).getBoundingClientRect();
+        expect(box.right).toBeLessThan(document.documentElement.clientWidth / 2);
+    } finally {
+        await page.viewport(414, 896);
+    }
 });
 
 test('the arrow keys move between menus, and Escape closes them', async () => {

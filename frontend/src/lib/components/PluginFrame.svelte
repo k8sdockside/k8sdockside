@@ -222,6 +222,9 @@
 
     // ----- the bridge --------------------------------------------------------
 
+    /** The keys App's onZoomKey answers with Cmd/Ctrl held; F1 needs neither. */
+    const APP_SHORTCUT_KEYS = new Set(['+', '=', '-', '_', '0', ',', 'b', 'B']);
+
     function text(value: unknown): string {
         return typeof value === 'string' ? value : '';
     }
@@ -397,6 +400,35 @@
                 // Sections only: a tab fills its pane whatever the page says.
                 const wanted = Number(params.height);
                 if (section && Number.isFinite(wanted)) height = Math.min(4000, Math.max(60, Math.ceil(wanted)));
+                return null;
+            }
+            case 'shortcut': {
+                // One of the app's own shortcuts, pressed while the page had
+                // focus -- see the SDK. Replayed on this window, where App's
+                // key handler takes it exactly as if it had been pressed here.
+                // Only the keys that handler knows, so a page cannot press
+                // anything else on the app's behalf.
+                const key = text(params.key);
+                const code = text(params.code);
+                const metaKey = params.metaKey === true;
+                const ctrlKey = params.ctrlKey === true;
+                const known =
+                    key === 'F1' ||
+                    ((metaKey || ctrlKey) &&
+                        (APP_SHORTCUT_KEYS.has(key) || code === 'NumpadAdd' || code === 'NumpadSubtract'));
+                if (!known) throw new Error(`"${key}" is not one of the app's shortcuts`);
+                window.dispatchEvent(
+                    new KeyboardEvent('keydown', {
+                        key,
+                        code,
+                        metaKey,
+                        ctrlKey,
+                        shiftKey: params.shiftKey === true,
+                        altKey: params.altKey === true,
+                        bubbles: true,
+                        cancelable: true,
+                    }),
+                );
                 return null;
             }
             case 'list':

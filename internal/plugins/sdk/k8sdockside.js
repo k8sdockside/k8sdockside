@@ -84,6 +84,48 @@
         }
     });
 
+    /* The app's own shortcuts, passed up to it. A key pressed while the page
+       has focus goes to the page's document, never the app's window, so
+       zooming with Cmd/Ctrl +, - or 0 -- and the app's other shortcuts --
+       did nothing once the page had been clicked. Only these keys are passed
+       on; the app checks the list again. Keep in step with onZoomKey in
+       frontend/src/App.svelte. */
+    function appShortcut(event) {
+        if (event.key === 'F1') return true;
+        if (!event.metaKey && !event.ctrlKey) return false;
+        switch (event.key) {
+            case '+':
+            case '=':
+            case '-':
+            case '_':
+            case '0':
+            case ',':
+            case 'b':
+            case 'B':
+                return true;
+        }
+        return event.code === 'NumpadAdd' || event.code === 'NumpadSubtract';
+    }
+
+    window.addEventListener(
+        'keydown',
+        function (event) {
+            if (event.defaultPrevented || !appShortcut(event)) return;
+            event.preventDefault();
+            call('shortcut', {
+                key: event.key,
+                code: event.code,
+                metaKey: event.metaKey,
+                ctrlKey: event.ctrlKey,
+                shiftKey: event.shiftKey,
+                altKey: event.altKey,
+            }).catch(function () {
+                // An app older than the shortcut request does not know it.
+            });
+        },
+        false,
+    );
+
     /* A section sits in a scrolling detail panel, where a frame cannot size
        itself to its content; so the page's height is measured here and told to
        the app whenever it changes. A tab fills its pane and ignores it. */
