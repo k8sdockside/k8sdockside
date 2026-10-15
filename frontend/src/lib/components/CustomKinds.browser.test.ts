@@ -157,7 +157,7 @@ test('a section already open when the context is expanded fetches', async () => 
     workspace.customKinds = {};
     // Left open from a previous session, or by the per-context folding.
     workspace.settings.contexts = {
-        c0: { alias: '', color: '', metrics: '', columns: {}, collapsedGroups: NAV_GROUPS
+        c0: { alias: '', color: '', metrics: '', columns: {}, restartsSeen: '', restartsPeriod: 0, collapsedGroups: NAV_GROUPS
             .map((g) => g.label)
             .filter((label) => label !== DEFINITIONS_GROUP) },
     };
@@ -172,7 +172,7 @@ test('a context expanded with the section already open fetches', async () => {
     workspace.customKinds = {};
     workspace.expanded = [];
     workspace.settings.contexts = {
-        c0: { alias: '', color: '', metrics: '', collapsedGroups: [], columns: {} },
+        c0: { alias: '', color: '', metrics: '', collapsedGroups: [], columns: {}, restartsSeen: '', restartsPeriod: 0 },
     };
     render(ContextTree, { props: { context: CTX } });
     await settle();
@@ -188,7 +188,7 @@ describe('re-reading the definitions', () => {
     /** Opens the section and clears whatever the effect did on the way. */
     async function openSection() {
         workspace.settings.contexts = {
-            c0: { alias: '', color: '', metrics: '', columns: {}, collapsedGroups: NAV_GROUPS
+            c0: { alias: '', color: '', metrics: '', columns: {}, restartsSeen: '', restartsPeriod: 0, collapsedGroups: NAV_GROUPS
                 .map((g) => g.label)
                 .filter((label) => label !== DEFINITIONS_GROUP) },
         };

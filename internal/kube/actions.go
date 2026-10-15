@@ -57,6 +57,15 @@ type ObjectState struct {
 	// Pending reports a certificate signing request nobody has approved or
 	// denied yet, which is the only time the panel offers either.
 	Pending bool `json:"pending"`
+	// NoEvict is why evicting this pod would do nothing useful -- it is
+	// already going, already finished, or a static pod its kubelet puts
+	// straight back -- and the button is disabled with it as the reason.
+	// Empty when Evict makes sense, and for every kind that is not a pod.
+	NoEvict string `json:"noEvict"`
+	// EvictNote is what the confirmation should add for a pod Evict does work
+	// on but not the way the dialog otherwise says: one nothing manages is not
+	// replaced, and a DaemonSet's comes back on the same node.
+	EvictNote string `json:"evictNote"`
 }
 
 // stateOf reads an object for the few facts the action bar needs.
@@ -81,6 +90,9 @@ func stateOf(u *unstructured.Unstructured) ObjectState {
 	out.Paused, _, _ = unstructured.NestedBool(u.Object, "spec", "paused")
 	if u.GetKind() == "CertificateSigningRequest" {
 		out.Pending = csrPending(u)
+	}
+	if u.GetKind() == "Pod" {
+		out.NoEvict, out.EvictNote = evictAdvice(u)
 	}
 	return out
 }
@@ -141,6 +153,31 @@ func (w *Watcher) ObjectState(kc Context, kind, namespace, name string) (ObjectS
 		return nil
 	})
 	return out, err
+}
+
+// evictAdvice says whether evicting a pod makes sense, and what to warn about
+// when it does something other than "stopped and replaced". The checks are the
+// ones a drain sorts pods by -- see classify -- asked of one pod.
+func evictAdvice(u *unstructured.Unstructured) (noEvict, note string) {
+	if u.GetDeletionTimestamp() != nil {
+		return "It is already being deleted", ""
+	}
+	if _, found := u.GetAnnotations()[mirrorPod]; found {
+		return "A static pod: the kubelet runs it from a file on the node and puts it straight back", ""
+	}
+	if terminal(u) {
+		return "It has already finished, so there is nothing running to move. Delete removes it", ""
+	}
+	owners := u.GetOwnerReferences()
+	for i := range owners {
+		if owners[i].Kind == "DaemonSet" {
+			return "", "It belongs to a DaemonSet, which starts it again on the same node."
+		}
+	}
+	if len(owners) == 0 {
+		return "", "Nothing manages this pod: it is deleted for good, not replaced."
+	}
+	return "", ""
 }
 
 // Delete removes one object.

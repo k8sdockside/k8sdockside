@@ -148,3 +148,95 @@ func TestTimeCellCarriesTheMoment(t *testing.T) {
 		t.Errorf("no time carries %q", got)
 	}
 }
+
+// restartedPod is a running pod whose one container has restarted count
+// times, the last of them at finished.
+func restartedPod(name string, count int64, finished time.Time) unstructured.Unstructured {
+	return troublePod("kube-system", name, map[string]any{
+		"phase": "Running",
+		"containerStatuses": []any{map[string]any{
+			"name":         "main",
+			"restartCount": count,
+			"lastState": map[string]any{"terminated": map[string]any{
+				"reason":     "Completed",
+				"finishedAt": finished.UTC().Format(time.RFC3339),
+			}},
+		}},
+	})
+}
+
+func TestPodRestartsColumnCountsAllButTonesOnlyCurrent(t *testing.T) {
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+
+	cases := []struct {
+		name string
+		pod  unstructured.Unstructured
+		text string
+		tone string
+	}{
+		{"never", troublePod("a", "p", map[string]any{"containerStatuses": []any{map[string]any{"restartCount": int64(0)}}}), "0", ""},
+		{"after a reboot two weeks ago", restartedPod("p", 2, now.Add(-13*24*time.Hour)), "2", ""},
+		{"just now", restartedPod("p", 2, now.Add(-5*time.Minute)), "2", "warn"},
+		{"many, just now", restartedPod("p", 9, now.Add(-5*time.Minute)), "9", "error"},
+		{"crash looping, no record of when", troublePod("a", "p", map[string]any{"containerStatuses": []any{map[string]any{
+			"restartCount": int64(4),
+			"state":        map[string]any{"waiting": map[string]any{"reason": "CrashLoopBackOff"}},
+		}}}), "4", "warn"},
+		{"no record of when", troublePod("a", "p", map[string]any{"containerStatuses": []any{map[string]any{"restartCount": int64(3)}}}), "3", ""},
+	}
+	for _, c := range cases {
+		got := podRestartsAt(&c.pod, now)
+		if got.Text != c.text || got.Tone != c.tone {
+			t.Errorf("%s: got %q/%q, want %q/%q", c.name, got.Text, got.Tone, c.text, c.tone)
+		}
+	}
+
+	// Sorted by the count, not by the text: 10 after 9.
+	nine := podRestartsAt(ptr(restartedPod("p", 9, now)), now)
+	ten := podRestartsAt(ptr(restartedPod("p", 10, now)), now)
+	if nine.Sort >= ten.Sort {
+		t.Errorf("sort keys %q, %q: 9 should sort before 10", nine.Sort, ten.Sort)
+	}
+}
+
+func TestPodTroubleLastRestartAt(t *testing.T) {
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	older := now.Add(-13 * 24 * time.Hour)
+	newer := now.Add(-2 * time.Hour)
+
+	got := podTroubleAt([]unstructured.Unstructured{
+		restartedPod("scheduler", 2, older),
+		restartedPod("apiserver", 1, newer),
+		troublePod("a", "fine", map[string]any{"phase": "Running"}),
+	}, now)
+
+	if want := newer.Format(time.RFC3339); got.LastRestartAt != want {
+		t.Errorf("LastRestartAt = %q, want %q", got.LastRestartAt, want)
+	}
+	for _, issue := range got.Worst {
+		if issue.LastRestartAt == "" {
+			t.Errorf("%s has no LastRestartAt", issue.Name)
+		}
+	}
+
+	none := podTroubleAt([]unstructured.Unstructured{troublePod("a", "fine", map[string]any{"phase": "Running"})}, now)
+	if none.LastRestartAt != "" {
+		t.Errorf("LastRestartAt with no restarts = %q, want empty", none.LastRestartAt)
+	}
+}
+
+func TestPodTroubleListsEveryRestartedPodNewestFirst(t *testing.T) {
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	got := podTroubleAt([]unstructured.Unstructured{
+		restartedPod("old", 2, now.Add(-13*24*time.Hour)),
+		restartedPod("new", 1, now.Add(-2*time.Hour)),
+		troublePod("a", "fine", map[string]any{"phase": "Running"}),
+	}, now)
+
+	if len(got.Restarted) != 2 || got.Restarted[0].Name != "new" || got.Restarted[1].Name != "old" {
+		t.Fatalf("Restarted = %+v, want new then old", got.Restarted)
+	}
+	if got.Restarted[1].Restarts != 2 || got.Restarted[1].LastRestartAt == "" {
+		t.Errorf("old = %+v", got.Restarted[1])
+	}
+}

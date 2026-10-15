@@ -174,18 +174,37 @@ func podStatus(u *unstructured.Unstructured) Cell {
 	return status(nestedString(u, "status", "phase"))
 }
 
+// podRestarts is the pod's restart count as kubectl and k9s show it: every
+// restart of the app's containers, not its init containers, since the pod was
+// made.
+//
+// A total cannot say by itself whether anything is wrong now: control-plane
+// pods that came back after a node reboot two weeks ago read "2" for as long as
+// they live, on a cluster that is fine. So the number is the same as k9s's, but
+// it is only toned as trouble while the restarts are current -- the last one
+// within recentRestart, or a container stuck in CrashLoopBackOff or the like.
 func podRestarts(u *unstructured.Unstructured) Cell {
+	return podRestartsAt(u, time.Now())
+}
+
+// podRestartsAt is podRestarts with the clock passed in, for tests.
+func podRestartsAt(u *unstructured.Unstructured, now time.Time) Cell {
 	var total int64
 	for _, raw := range nestedSlice(u, "status", "containerStatuses") {
-		if n, ok := asMap(raw)["restartCount"].(int64); ok {
-			total += n
-		}
+		total += mapInt(asMap(raw), "restartCount")
 	}
-	cell := number(int(total))
+	cell := Cell{Text: fmt.Sprintf("%d", total), Sort: fmt.Sprintf("%08d", total)}
+	if total == 0 {
+		return cell
+	}
+	last := lastTermination(u).finished
+	recent := !last.IsZero() && now.Sub(last) < recentRestart
 	switch {
+	case !recent && badWait(u) == "":
+		// History: stated, not judged.
 	case total > 5:
 		cell.Tone = "error"
-	case total > 0:
+	default:
 		cell.Tone = "warn"
 	}
 	return cell

@@ -108,6 +108,8 @@ export abstract class WorkspaceContexts extends WorkspaceSources {
             metrics: current?.metrics ?? '',
             collapsedGroups: current?.collapsedGroups ?? null,
             columns: current?.columns ?? {},
+            restartsSeen: current?.restartsSeen ?? '',
+            restartsPeriod: current?.restartsPeriod ?? 0,
             ...patch,
         };
 
@@ -126,6 +128,33 @@ export abstract class WorkspaceContexts extends WorkspaceSources {
         'Could not save context settings',
         300,
     );
+
+    // ----- restart history -------------------------------------------------
+    //
+    // A restart count lives as long as the pod, so a node reboot leaves every
+    // control-plane pod "restarted" for weeks on a cluster that is fine. The
+    // dashboard lets the user say "seen": restarts up to that moment stop being
+    // shown, and the first one after it brings them all back.
+
+    /** When this cluster's restart history was dismissed, RFC3339; '' if never. */
+    restartsSeenOf(contextId: string): string {
+        return this.settings.contexts[contextId]?.restartsSeen ?? '';
+    }
+
+    /** Dismisses the restart history as of now, or brings it back with `false`. */
+    dismissRestarts(contextId: string, dismissed = true): void {
+        this.writeContextPrefs(contextId, { restartsSeen: dismissed ? new Date().toISOString() : '' });
+    }
+
+    /** How many days back this cluster's restart history reaches; 0 is all of it. */
+    restartsPeriodOf(contextId: string): number {
+        return this.settings.contexts[contextId]?.restartsPeriod ?? 0;
+    }
+
+    /** Remembers the restart history's period, across tabs and launches. */
+    setRestartsPeriod(contextId: string, days: number): void {
+        this.writeContextPrefs(contextId, { restartsPeriod: days });
+    }
 
     /** Clears the alias and colour, returning the context to its defaults. */
     resetContextPrefs(contextId: string): void {

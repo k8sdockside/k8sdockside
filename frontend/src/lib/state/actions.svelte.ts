@@ -28,6 +28,10 @@ export interface ObjectState {
     paused: boolean;
     /** A certificate signing request nobody has answered yet. */
     pending: boolean;
+    /** Why evicting this pod would do nothing useful; '' when it makes sense. */
+    noEvict: string;
+    /** What an eviction's confirmation should add -- not replaced, or back on the same node. */
+    evictNote: string;
     /**
      * A virtual machine's lifecycle state, for the bar that offers Start or
      * Stop but never both. `isMachine` is false for every other kind, which is
@@ -126,6 +130,8 @@ const UNKNOWN: ObjectState = {
     suspended: false,
     paused: false,
     pending: false,
+    noEvict: '',
+    evictNote: '',
     vm: NOT_A_MACHINE,
 };
 
@@ -195,6 +201,8 @@ class Actions {
                 suspended: state.suspended ?? false,
                 paused: state.paused ?? false,
                 pending: state.pending ?? false,
+                noEvict: state.noEvict ?? '',
+                evictNote: state.evictNote ?? '',
                 // Only asked for the two KubeVirt kinds, and only after the
                 // first call has answered: every other object pays nothing for
                 // a question that is not about it.
