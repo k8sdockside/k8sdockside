@@ -78,7 +78,7 @@ beforeEach(async () => {
     workspace.selectedContextId = 'c0';
     // Everything open, so the tree is as long as it really gets.
     workspace.settings.contexts = {
-        c0: { alias: '', color: '', metrics: '', collapsedGroups: [], columns: {} },
+        c0: { alias: '', color: '', metrics: '', collapsedGroups: [], columns: {}, restartsSeen: '', restartsPeriod: 0 },
     };
     workspace.settings.layout.collapsedGroups = [];
     render(Sidebar);
@@ -116,7 +116,7 @@ describe('a custom resource, folded two deep', () => {
         workspace.customKinds = { c0: CUSTOM_KINDS };
         workspace.settings.contexts = {
             c0: { alias: '', color: '', metrics: '',
-                collapsedGroups: [DEFINITIONS_GROUP], columns: {} },
+                collapsedGroups: [DEFINITIONS_GROUP], columns: {}, restartsSeen: '', restartsPeriod: 0 },
         };
         workspace.expandedApiGroups = [];
         await settle();

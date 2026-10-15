@@ -56,7 +56,7 @@ func podTrouble(pods []unstructured.Unstructured) PodTrouble {
 // podTroubleAt is podTrouble with the clock passed in, so a test can say
 // what "recent" is measured from.
 func podTroubleAt(pods []unstructured.Unstructured, now time.Time) PodTrouble {
-	out := PodTrouble{Worst: []PodIssue{}}
+	out := PodTrouble{Worst: []PodIssue{}, Restarted: []PodRestart{}}
 
 	type ranked struct {
 		issue    PodIssue
@@ -64,6 +64,7 @@ func podTroubleAt(pods []unstructured.Unstructured, now time.Time) PodTrouble {
 		last     time.Time
 	}
 	var all []ranked
+	var latest time.Time
 
 	for i := range pods {
 		p := &pods[i]
@@ -95,8 +96,21 @@ func podTroubleAt(pods []unstructured.Unstructured, now time.Time) PodTrouble {
 
 		recent := !last.finished.IsZero() && now.Sub(last.finished) < recentRestart
 		if restarts > 0 {
+			if last.finished.After(latest) {
+				latest = last.finished
+			}
 			out.Restarting++
 			out.Restarts += restarts
+			record := PodRestart{
+				Namespace:       p.GetNamespace(),
+				Name:            p.GetName(),
+				Restarts:        restarts,
+				LastTermination: last.describe(),
+			}
+			if !last.finished.IsZero() {
+				record.LastRestartAt = last.finished.UTC().Format(time.RFC3339)
+			}
+			out.Restarted = append(out.Restarted, record)
 			if recent {
 				out.RestartedRecently++
 			}
@@ -120,10 +134,20 @@ func podTroubleAt(pods []unstructured.Unstructured, now time.Time) PodTrouble {
 			}
 			if !last.finished.IsZero() {
 				issue.LastRestart = age(int(now.Sub(last.finished).Minutes()))
+				issue.LastRestartAt = last.finished.UTC().Format(time.RFC3339)
 			}
 			all = append(all, ranked{issue: issue, severity: severity, last: last.finished})
 		}
 	}
+
+	if !latest.IsZero() {
+		out.LastRestartAt = latest.UTC().Format(time.RFC3339)
+	}
+	// Most recent first; RFC3339 in UTC sorts as text, and a pod with no
+	// record of when goes last.
+	sort.SliceStable(out.Restarted, func(i, j int) bool {
+		return out.Restarted[i].LastRestartAt > out.Restarted[j].LastRestartAt
+	})
 
 	sort.SliceStable(all, func(i, j int) bool {
 		if all[i].severity != all[j].severity {

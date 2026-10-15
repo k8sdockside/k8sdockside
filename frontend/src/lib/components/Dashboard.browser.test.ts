@@ -124,7 +124,7 @@ vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services'
 // The cluster dashboard's counters and events are the way into the rest of
 // the cluster: a tile opens the list it counts, and an event opens itself.
 const { workspace } = await import('../state/workspace.svelte');
-const { ResourceService, ActionService } = await import('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services');
+const { ResourceService, ActionService, SettingsService } = await import('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services');
 const Dashboard = (await import('./Dashboard.svelte')).default;
 
 const PROD = '/home/u/.kube/config::admin@prod';
@@ -276,7 +276,7 @@ test('evicted pods are called out and lead to the pods tab searched for them', a
     render(Dashboard, { contextId: PROD });
 
     await expect.element(page.getByText('Pods need attention')).toBeVisible();
-    await expect.element(page.getByText('3 pods ever restarted · 11 restarts')).toBeVisible();
+    await expect.element(page.getByRole('group', { name: 'Restart history period' })).toBeVisible();
 
     await page.getByRole('button', { name: /^42 evicted/ }).click();
     expect(workspace.tabs.map((t) => [t.contextId, t.kind])).toContainEqual([PROD, 'pods']);
@@ -402,4 +402,89 @@ test('the event timeline draws each event and opens its report', async () => {
     await mark.click();
 
     expect(detail.target).toEqual({ contextId: PROD, kind: 'events', namespace: 'default', name: 'web-1.abc' });
+});
+
+// A restart count lives as long as the pod: a node reboot two weeks ago leaves
+// the control plane "restarted" on a cluster that is fine. That is history,
+// said without alarm, and the user can put it away.
+const RECENTLY = new Date(Date.now() - 5 * 3_600_000).toISOString();
+const TWO_WEEKS_AGO = new Date(Date.now() - 13 * 86_400_000).toISOString();
+const OLD_RESTARTS = {
+    ...OVERVIEW,
+    pods: {
+        evicted: 0,
+        failed: 0,
+        crashLooping: 0,
+        restarting: 9,
+        restarts: 15,
+        restartedRecently: 0,
+        lastRestartAt: RECENTLY,
+        restarted: [
+            { namespace: 'kube-system', name: 'coredns-abc', restarts: 1, lastTermination: 'Error (exit 1)', lastRestartAt: RECENTLY },
+            { namespace: 'kube-system', name: 'kube-scheduler-ht1', restarts: 2, lastTermination: 'Error (exit 1)', lastRestartAt: TWO_WEEKS_AGO },
+        ],
+        worst: [
+            {
+                namespace: 'kube-system', name: 'kube-scheduler-ht1', trouble: 'restarted', reason: 'Restarted', restarts: 2,
+                message: '', lastTermination: 'Error (exit 1)', lastRestart: '13d', lastRestartAt: '2026-10-02T08:00:00Z',
+            },
+        ],
+    },
+};
+
+test('old restarts are history, not trouble, and can be hidden and shown again', async () => {
+    delete workspace.settings.contexts[PROD];
+    vi.mocked(ResourceService.Overview).mockResolvedValue(OLD_RESTARTS as never);
+    render(Dashboard, { contextId: PROD });
+
+    await expect.element(page.getByRole('heading', { name: 'Restart history' })).toBeVisible();
+    expect(page.getByText('Pods need attention').elements()).toHaveLength(0);
+
+    await page.getByRole('button', { name: 'Hide restart history' }).click();
+
+    await expect.element(page.getByText(/Restart history hidden/)).toBeVisible();
+    expect(page.getByRole('heading', { name: 'Restart history' }).elements()).toHaveLength(0);
+    expect(page.getByText('kube-scheduler-ht1').elements()).toHaveLength(0);
+
+    await page.getByRole('button', { name: 'Show' }).click();
+    await expect.element(page.getByRole('heading', { name: 'Restart history' })).toBeVisible();
+    await expect.element(page.getByText('kube-scheduler-ht1')).toBeVisible();
+});
+
+test('the restart history narrows to a period', async () => {
+    delete workspace.settings.contexts[PROD];
+    vi.mocked(ResourceService.Overview).mockResolvedValue(OLD_RESTARTS as never);
+    render(Dashboard, { contextId: PROD });
+
+    await expect.element(page.getByText('2 pods restarted at some point')).toBeVisible();
+
+    await page.getByRole('button', { name: '7d' }).click();
+    await expect.element(page.getByText('1 pod restarted in the last 7 days')).toBeVisible();
+    await expect.element(page.getByText('coredns-abc')).toBeVisible();
+    expect(page.getByText('kube-scheduler-ht1').elements()).toHaveLength(0);
+
+    // Kept in the settings, so a dashboard opened again starts where it was.
+    expect(workspace.restartsPeriodOf(PROD)).toBe(7);
+    await vi.waitFor(() =>
+        expect(SettingsService.SetContextPrefs).toHaveBeenCalledWith(PROD, expect.objectContaining({ restartsPeriod: 7 })),
+    );
+
+    await page.getByRole('button', { name: 'All' }).click();
+    await expect.element(page.getByText('kube-scheduler-ht1')).toBeVisible();
+    expect(workspace.restartsPeriodOf(PROD)).toBe(0);
+});
+
+test('a restart after the history was hidden brings it back', async () => {
+    workspace.settings.contexts[PROD] = {
+        alias: '', color: '', metrics: '', collapsedGroups: null, columns: {}, restartsSeen: '2026-10-10T00:00:00Z', restartsPeriod: 0,
+    };
+    vi.mocked(ResourceService.Overview).mockResolvedValue({
+        ...OLD_RESTARTS,
+        pods: { ...OLD_RESTARTS.pods, restartedRecently: 1, lastRestartAt: '2026-10-15T11:50:00Z' },
+    } as never);
+    render(Dashboard, { contextId: PROD });
+
+    await expect.element(page.getByText('Pods need attention')).toBeVisible();
+    await expect.element(page.getByText('restarted in the last hour')).toBeVisible();
+    delete workspace.settings.contexts[PROD];
 });

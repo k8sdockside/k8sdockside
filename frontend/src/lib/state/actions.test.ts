@@ -86,6 +86,8 @@ const IDLE = {
     suspended: false,
     paused: false,
     pending: false,
+    noEvict: '',
+    evictNote: '',
     vm: NOT_A_MACHINE,
 };
 

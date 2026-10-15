@@ -19,7 +19,7 @@ function health(overrides: Partial<ClusterHealth> = {}, pods: Partial<ClusterHea
 }
 
 function issue(name: string, trouble: string) {
-    return { namespace: 'apps', name, trouble, reason: trouble, restarts: 0, message: '', lastTermination: '', lastRestart: '' };
+    return { namespace: 'apps', name, trouble, reason: trouble, restarts: 0, message: '', lastTermination: '', lastRestart: '', lastRestartAt: '' };
 }
 
 describe('what got worse', () => {

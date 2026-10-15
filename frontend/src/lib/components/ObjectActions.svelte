@@ -650,7 +650,11 @@
             // An eviction asks the disruption budgets, which is the whole
             // difference from Delete and the thing worth saying.
             case 'evict':
-                return `Evict ${subject}? It is stopped and replaced by whatever manages it, unless a disruption budget refuses.`;
+                // A bare pod is not replaced and a DaemonSet's comes back where
+                // it was; the note says which, in place of "replaced".
+                return facts.evictNote
+                    ? `Evict ${subject}? ${facts.evictNote} A disruption budget may refuse.`
+                    : `Evict ${subject}? It is stopped and replaced by whatever manages it, unless a disruption budget refuses.`;
             case 'approve':
                 return `Approve ${subject}? The signer will issue a certificate the cluster trusts, and this cannot be taken back.`;
             case 'deny':
@@ -1018,8 +1022,12 @@
     <button
         class:danger={action.tone === 'danger'}
         class:last={action.tone === 'danger'}
-        disabled={busy || (action.needsHelm === true && helmMissing)}
-        title={action.needsHelm === true && helmMissing ? helm.tool.reason : labelOf(action)}
+        disabled={busy || (action.needsHelm === true && helmMissing) || (action.id === 'evict' && facts.noEvict !== '')}
+        title={action.needsHelm === true && helmMissing
+            ? helm.tool.reason
+            : action.id === 'evict' && facts.noEvict
+              ? facts.noEvict
+              : labelOf(action)}
         onclick={() => choose(action)}
     >
         <Icon name={iconOf(action)} size={13} />
