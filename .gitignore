@@ -43,8 +43,10 @@ node_modules/
 
 # Vite's dependency-optimisation cache, for the same reason.
 .vite/
-# vitest browser-mode leftovers from a failed assertion
+# vitest browser-mode leftovers from a failed assertion (vitest 4 wrote
+# .vitest-attachments, vitest 5 writes .vitest/attachments)
 frontend/.vitest-attachments
+frontend/.vitest/
 frontend/src/**/__screenshots__
 build/linux/appimage/build
 build/windows/nsis/MicrosoftEdgeWebview2Setup.exe

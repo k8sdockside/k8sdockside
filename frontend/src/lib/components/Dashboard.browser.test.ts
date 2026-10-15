@@ -201,7 +201,7 @@ test('the counters keep up with the cluster instead of freezing at what they wer
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
         render(Dashboard, { contextId: PROD });
-        await expect.element(page.getByRole('button', { name: /Pods/ })).toHaveTextContent('87/88');
+        await expect.element(page.getByRole('button', { name: /Pods/ })).toMatchTextContent('87/88');
 
         // A job's pod is deleted out there.
         const fewer = {
@@ -213,7 +213,7 @@ test('the counters keep up with the cluster instead of freezing at what they wer
         await vi.advanceTimersByTimeAsync(30_000);
 
         expect(vi.mocked(ResourceService.Overview).mock.calls.length).toBeGreaterThanOrEqual(2);
-        await expect.element(page.getByRole('button', { name: /Pods/ })).toHaveTextContent('86/87');
+        await expect.element(page.getByRole('button', { name: /Pods/ })).toMatchTextContent('86/87');
     } finally {
         vi.useRealTimers();
     }
@@ -221,7 +221,7 @@ test('the counters keep up with the cluster instead of freezing at what they wer
 
 test('the refresh button reads the cluster again without waiting for the timer', async () => {
     render(Dashboard, { contextId: PROD });
-    await expect.element(page.getByRole('button', { name: /Pods/ })).toHaveTextContent('87/88');
+    await expect.element(page.getByRole('button', { name: /Pods/ })).toMatchTextContent('87/88');
     expect(vi.mocked(ResourceService.Overview)).toHaveBeenCalledTimes(1);
 
     const fewer = {
@@ -232,20 +232,20 @@ test('the refresh button reads the cluster again without waiting for the timer',
 
     await page.getByRole('button', { name: 'Refresh' }).click();
 
-    await expect.element(page.getByRole('button', { name: /Pods/ })).toHaveTextContent('2/2');
+    await expect.element(page.getByRole('button', { name: /Pods/ })).toMatchTextContent('2/2');
 });
 
 // A cluster that blinks must not take the page with it: numbers half a minute
 // old are worth far more than an empty page and a button to press.
 test('a refresh that fails keeps the numbers and says they are old', async () => {
     render(Dashboard, { contextId: PROD });
-    await expect.element(page.getByRole('button', { name: /Pods/ })).toHaveTextContent('87/88');
+    await expect.element(page.getByRole('button', { name: /Pods/ })).toMatchTextContent('87/88');
 
     vi.mocked(ResourceService.Overview).mockRejectedValue(new Error('dial tcp 10.0.0.1:6443: i/o timeout'));
     await page.getByRole('button', { name: 'Refresh' }).click();
 
     await expect.element(page.getByText('did not answer the last refresh', { exact: false })).toBeVisible();
-    await expect.element(page.getByRole('button', { name: /Pods/ })).toHaveTextContent('87/88');
+    await expect.element(page.getByRole('button', { name: /Pods/ })).toMatchTextContent('87/88');
 });
 
 // Nothing on screen yet is the other case: then the failure is the page, with

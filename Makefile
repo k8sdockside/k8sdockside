@@ -353,6 +353,10 @@ update-deps: update-deps-go update-deps-frontend ## Update Go and frontend depen
 update-deps-go: ## Update Go dependencies.
 	@printf "$(CYAN)Updating Go dependencies...$(RESET)\n"
 	@go get -u ./...
+	@apimachinery=$$(go list -m -f '{{.Path}}@{{.Version}}' k8s.io/apimachinery) && \
+	pins=$$(go mod graph | awk -v am="$$apimachinery" '$$1 == am && $$2 ~ /^(k8s\.io\/kube-openapi|sigs\.k8s\.io\/structured-merge-diff)/ {print $$2}') && \
+	printf "$(CYAN)Re-pinning to $$apimachinery: $$(echo $$pins)$(RESET)\n" && \
+	go get $$pins
 	@go mod tidy
 	@printf "$(CYAN)Verifying the upgraded module graph still compiles...$(RESET)\n"
 	@$(MAKE) --no-print-directory build-go
@@ -363,12 +367,12 @@ update-deps-frontend: ## Update frontend dependencies (minor/patch only; TARGET=
 	@target=$${TARGET:-minor}; \
 	printf "$(CYAN)Updating frontend dependencies (target=$${target})...$(RESET)\n"; \
 	cd $(FRONTEND_DIR) && \
-	if command -v ncu >/dev/null 2>&1; then \
-		ncu --target $${target} -u; \
+	if command -v ncu >/dev/null 2>&1 && ncu --help 2>/dev/null | grep -q -- --cooldown; then \
+		ncu --target $${target} --cooldown $$(npm config get min-release-age) -u; \
 	else \
-		printf "$(YELLOW)ncu not found, using npx npm-check-updates...$(RESET)\n"; \
-		npx --yes npm-check-updates --target $${target} -u; \
-	fi; \
+		printf "$(YELLOW)ncu with --cooldown not found, using scripts/update-deps.mjs...$(RESET)\n"; \
+		node scripts/update-deps.mjs $${target}; \
+	fi && \
 	npm install
 	@printf "$(GREEN)✓ Frontend dependencies updated!$(RESET)\n"
 

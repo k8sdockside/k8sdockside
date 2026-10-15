@@ -305,7 +305,7 @@ test('choosing namespaces moves the filter on the open subscription', async () =
 
     await page.getByRole('menuitemcheckbox', { name: 'default' }).click();
     await expect.poll(() => moved.mock.lastCall?.[0]).toEqual(['default', 'kube-system']);
-    await expect.element(page.getByRole('button', { name: /^Namespaces/ })).toHaveTextContent('default, kube-system');
+    await expect.element(page.getByRole('button', { name: /^Namespaces/ })).toMatchTextContent('default, kube-system');
 });
 
 /** Two deployments, the older one first, as the backend orders them. */

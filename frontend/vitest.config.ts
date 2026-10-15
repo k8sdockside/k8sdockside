@@ -32,6 +32,9 @@ export default defineConfig({
                         provider: playwright(),
                         headless: true,
                         instances: [{ browser: 'chromium' }],
+                        // vitest 5 made locators match whole text by default; the
+                        // tests find elements by a phrase inside them.
+                        locators: { exact: false },
                     },
                 },
             },

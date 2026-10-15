@@ -548,8 +548,8 @@ test('an install that failed marks its card and keeps the whole reason on it', a
     // lines git printed, which are the part someone pastes elsewhere.
     const failure = page.getByRole('alert');
     await expect.element(failure).toBeVisible();
-    await expect.element(failure).toHaveTextContent('the repository is private, or is not there');
-    await expect.element(failure).toHaveTextContent('terminal prompts disabled');
+    await expect.element(failure).toMatchTextContent('the repository is private, or is not there');
+    await expect.element(failure).toMatchTextContent('terminal prompts disabled');
 
     // And the card itself is marked, so it is findable in a list of a dozen.
     expect(document.querySelectorAll('.plugin.failed')).toHaveLength(1);

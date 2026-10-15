@@ -13,7 +13,7 @@ const trigger = () => page.getByRole('button', { name: /^Namespaces/ });
 test('nothing ticked reads as every namespace', async () => {
     render(NamespacePicker, { namespaces: FEW, selected: [], onchange: vi.fn() });
 
-    await expect.element(trigger()).toHaveTextContent('All namespaces');
+    await expect.element(trigger()).toMatchTextContent('All namespaces');
 });
 
 test('ticking a row adds it to the choice, and the panel stays open for the next one', async () => {
@@ -50,11 +50,11 @@ test('All namespaces clears the choice', async () => {
 
 test('the trigger names two namespaces and counts more', async () => {
     render(NamespacePicker, { namespaces: FEW, selected: ['default', 'kube-system'], onchange: vi.fn() });
-    await expect.element(trigger()).toHaveTextContent('default, kube-system');
+    await expect.element(trigger()).toMatchTextContent('default, kube-system');
 
     document.body.innerHTML = '';
     render(NamespacePicker, { namespaces: FEW, selected: FEW, onchange: vi.fn() });
-    await expect.element(trigger()).toHaveTextContent('3 namespaces');
+    await expect.element(trigger()).toMatchTextContent('3 namespaces');
 });
 
 test('a filter box appears once there are many, and narrows the rows', async () => {

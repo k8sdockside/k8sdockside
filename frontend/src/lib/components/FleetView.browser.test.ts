@@ -65,10 +65,10 @@ test('the clusters in trouble come first, with what is wrong', async () => {
     render(FleetView);
 
     const rows = page.getByRole('row');
-    await expect.element(rows.nth(1)).toHaveTextContent('admin@edge');
-    await expect.element(rows.nth(1)).toHaveTextContent('2/3');
-    await expect.element(rows.nth(1)).toHaveTextContent('BackOff');
-    await expect.element(rows.nth(2)).toHaveTextContent('admin@prod');
+    await expect.element(rows.nth(1)).toMatchTextContent('admin@edge');
+    await expect.element(rows.nth(1)).toMatchTextContent('2/3');
+    await expect.element(rows.nth(1)).toMatchTextContent('BackOff');
+    await expect.element(rows.nth(2)).toMatchTextContent('admin@prod');
 });
 
 // A cluster nobody has connected is listed, and left alone until asked.
@@ -76,7 +76,7 @@ test('a cluster not connected is not read until somebody asks', async () => {
     render(FleetView);
 
     const idle = page.getByRole('row').filter({ hasText: 'admin@idle' });
-    await expect.element(idle).toHaveTextContent('Not connected');
+    await expect.element(idle).toMatchTextContent('Not connected');
     expect(Health.mock.calls.some((c) => c[0] === IDLE.id)).toBe(false);
 
     await idle.getByRole('button', { name: 'Check' }).click();
