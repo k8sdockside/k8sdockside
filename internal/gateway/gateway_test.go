@@ -317,6 +317,47 @@ func TestTheAppIsToldWhoIsAskingAndNothingElse(t *testing.T) {
 	}
 }
 
+// Wails refuses a loopback listener any Host but its own address, and checks
+// Origin against Host; the browser's host goes along for the plugin views.
+func TestTheAppIsAskedForByItsLoopbackAddress(t *testing.T) {
+	h := newHarness(t, nil)
+	c := h.setUp("alice")
+	app := strings.TrimPrefix(h.app.URL, "http://")
+	public := strings.TrimPrefix(h.srv.URL, "http://")
+
+	send := func(origin string) *http.Request {
+		req, _ := http.NewRequest(http.MethodGet, h.srv.URL+"/assets/app.js", nil)
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		req.Header.Set("X-Forwarded-Host", "evil.example")
+		if resp := h.do(c, req); resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET = %d", resp.StatusCode)
+		}
+		return h.lastSeen()
+	}
+
+	seen := send(h.srv.URL)
+	if seen.Host != app {
+		t.Fatalf("the app was asked for as %q, want %q", seen.Host, app)
+	}
+	if got := seen.Header.Get("X-Forwarded-Host"); got != public {
+		t.Fatalf("X-Forwarded-Host = %q, want %q", got, public)
+	}
+	if got := seen.Header.Get("Origin"); got != h.app.URL {
+		t.Fatalf("the gateway's own Origin reached the app as %q, want %q", got, h.app.URL)
+	}
+
+	for _, origin := range []string{"https://evil.example", "null"} {
+		if got := send(origin).Header.Get("Origin"); got != origin {
+			t.Fatalf("Origin %q reached the app as %q; only the gateway's own is translated", origin, got)
+		}
+	}
+	if got := send("").Header.Get("Origin"); got != "" {
+		t.Fatalf("a request without an Origin reached the app with %q", got)
+	}
+}
+
 func TestCrossSiteRequestsAreRefused(t *testing.T) {
 	h := newHarness(t, nil)
 	c := h.setUp("alice")

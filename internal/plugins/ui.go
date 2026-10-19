@@ -160,9 +160,14 @@ func serveUI(w http.ResponseWriter, r *http.Request, catalogue func() Catalogue)
 
 // webviewHost is the host the page was loaded from -- "localhost" under the
 // wails:// scheme on macOS and Linux, "wails.localhost" on Windows -- checked
-// to be something that can go into a header without quoting.
+// to be something that can go into a header without quoting. In the web
+// version it is the host the browser used, which the gateway forwards: the app
+// itself is asked for by its loopback address.
 func webviewHost(r *http.Request) string {
-	host := r.Host
+	host := r.Header.Get("X-Forwarded-Host")
+	if host == "" {
+		host = r.Host
+	}
 	if host == "" {
 		return "localhost"
 	}

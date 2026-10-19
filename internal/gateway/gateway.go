@@ -316,11 +316,20 @@ func pluginView(r *http.Request) bool {
 // gateway may say who someone is.
 func (g *Gateway) rewrite(pr *httputil.ProxyRequest) {
 	if up := g.upstream.Load(); up != nil {
+		// The app is asked for by its own loopback address: Wails refuses a
+		// loopback listener any other Host, against DNS rebinding. It also
+		// checks a runtime call's and a WebSocket's Origin against that Host,
+		// so an Origin the gateway knows for its own is translated to match;
+		// any other -- "null" from a plugin view, another site -- is passed on
+		// as sent, for Wails to judge.
 		pr.SetURL(up)
+		if g.ownOrigin(pr.In) {
+			pr.Out.Header.Set("Origin", up.Scheme+"://"+up.Host)
+		}
+		// The host the browser used, for what the app writes into headers
+		// itself: a plugin view's Content-Security-Policy.
+		pr.Out.Header.Set("X-Forwarded-Host", pr.In.Host)
 	}
-	// Wails checks a WebSocket's Origin against Host, and the Origin is the
-	// address the browser used.
-	pr.Out.Host = pr.In.Host
 	pr.Out.Header.Del(headerSecret)
 	pr.Out.Header.Del(headerUser)
 	stripCookies(pr.Out, sessionCookie, oauthCookie)
@@ -532,6 +541,16 @@ func (g *Gateway) sameOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
 		return true
+	}
+	return g.ownOrigin(r)
+}
+
+// ownOrigin reports whether a request names an Origin, and it is one of the
+// gateway's own hosts.
+func (g *Gateway) ownOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return false
 	}
 	u, err := url.Parse(origin)
 	if err != nil {
