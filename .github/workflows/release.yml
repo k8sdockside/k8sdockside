@@ -223,9 +223,22 @@ jobs:
               return $null
           }
 
+          # The community feed answers 504 often enough to sink a release on
+          # its own, so retry with backoff, then fall back to winget, which
+          # pulls from a different source. A failed attempt only warns; the
+          # throw below is the single gate.
           $exe = Find-MakeNSIS
-          if (-not $exe) {
+          for ($attempt = 1; -not $exe -and $attempt -le 3; $attempt++) {
+              Write-Host "Installing NSIS via Chocolatey (attempt $attempt of 3)"
               choco install nsis -y --no-progress
+              if ($LASTEXITCODE -ne 0) { Write-Warning "choco exited $LASTEXITCODE" }
+              $exe = Find-MakeNSIS
+              if (-not $exe -and $attempt -lt 3) { Start-Sleep -Seconds (30 * $attempt) }
+          }
+          if (-not $exe -and (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
+              Write-Host 'Chocolatey failed; installing NSIS via winget'
+              winget install --id NSIS.NSIS --exact --silent --disable-interactivity --accept-source-agreements --accept-package-agreements
+              if ($LASTEXITCODE -ne 0) { Write-Warning "winget exited $LASTEXITCODE" }
               $exe = Find-MakeNSIS
           }
           if (-not $exe) { throw 'makensis.exe not found after installing NSIS' }
