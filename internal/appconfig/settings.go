@@ -40,6 +40,15 @@ type ContextPrefs struct {
 	// -- a credentials file per cluster, typically -- keyed by "plugin/tool",
 	// then by the file's id. Written only by SetToolFile.
 	Tools map[string]map[string]string `json:"tools,omitempty"`
+	// RestartsSeen is when the user dismissed this cluster's restart history
+	// on the dashboard, RFC3339; empty when they have not. Restarts up to then
+	// are not shown as needing attention -- a node reboot leaves every
+	// control-plane pod with a count for as long as it lives -- and the first
+	// restart after it brings the panel back.
+	RestartsSeen string `json:"restartsSeen,omitzero"`
+	// RestartsPeriod is how many days back the dashboard's restart history
+	// reaches here; 0 is all of it, which is the default.
+	RestartsPeriod int `json:"restartsPeriod,omitzero"`
 }
 
 // ColumnPrefs is what the user changed about one kind's table: the widths they
@@ -76,7 +85,7 @@ func (c ColumnPrefs) isEmpty() bool {
 // every group here", which is a choice and not the absence of one.
 func (p ContextPrefs) isEmpty() bool {
 	return p.Alias == "" && p.Color == "" && p.Metrics == "" && p.CollapsedGroups == nil && len(p.Columns) == 0 &&
-		len(p.Tools) == 0
+		len(p.Tools) == 0 && p.RestartsSeen == "" && p.RestartsPeriod == 0
 }
 
 // TabRef identifies one open tab: a kubeconfig context and the resource kind

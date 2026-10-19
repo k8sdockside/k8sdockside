@@ -172,6 +172,10 @@ export interface ContextPrefs {
     collapsedGroups: string[] | null;
     /** What the user changed about each kind's table here, keyed by kind. */
     columns: Record<string, ColumnPrefs>;
+    /** When the dashboard's restart history was dismissed, RFC3339; '' if never. */
+    restartsSeen: string;
+    /** How many days back the restart history reaches; 0 is all of it. */
+    restartsPeriod: number;
 }
 
 /**
@@ -185,7 +189,9 @@ export function isEmptyContextPrefs(prefs: ContextPrefs): boolean {
         !prefs.color &&
         !prefs.metrics &&
         prefs.collapsedGroups === null &&
-        Object.keys(prefs.columns).length === 0
+        Object.keys(prefs.columns).length === 0 &&
+        !prefs.restartsSeen &&
+        !prefs.restartsPeriod
     );
 }
 
@@ -355,6 +361,8 @@ export function adoptSettings(settings: appconfig.Settings): Settings {
                     // null is "follows the global folding" and must survive.
                     collapsedGroups: prefs?.collapsedGroups ?? null,
                     columns: adoptColumns(prefs?.columns),
+                    restartsSeen: prefs?.restartsSeen ?? '',
+                    restartsPeriod: prefs?.restartsPeriod ?? 0,
                 },
             ]),
         ),
@@ -520,7 +528,10 @@ export function adoptOverview(overview: kube.Overview): Overview {
 }
 
 /** What is wrong with a cluster's pods, with the lists Go may send as null. */
-export type PodTrouble = Omit<kube.PodTrouble, 'worst'> & { worst: kube.PodIssue[] };
+export type PodTrouble = Omit<kube.PodTrouble, 'worst' | 'restarted'> & {
+    worst: kube.PodIssue[];
+    restarted: kube.PodRestart[];
+};
 
 export function adoptPodTrouble(pods: kube.PodTrouble | null | undefined): PodTrouble {
     return {
@@ -530,7 +541,9 @@ export function adoptPodTrouble(pods: kube.PodTrouble | null | undefined): PodTr
         restarting: pods?.restarting ?? 0,
         restarts: pods?.restarts ?? 0,
         restartedRecently: pods?.restartedRecently ?? 0,
+        lastRestartAt: pods?.lastRestartAt ?? '',
         worst: (pods?.worst ?? []).map((issue) => ({ ...issue })),
+        restarted: (pods?.restarted ?? []).map((pod) => ({ ...pod })),
     };
 }
 

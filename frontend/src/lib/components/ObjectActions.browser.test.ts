@@ -65,7 +65,7 @@ vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services'
         CheckYAML: vi.fn().mockResolvedValue({ valid: true, message: '', line: 0 }),
     },
     ActionService: {
-        ObjectState: vi.fn().mockResolvedValue({ scalable: false, replicas: 0, cordoned: false, containers: [], suspended: false, paused: false, pending: false }),
+        ObjectState: vi.fn().mockResolvedValue({ scalable: false, replicas: 0, cordoned: false, containers: [], suspended: false, paused: false, pending: false, noEvict: '', evictNote: '' }),
         Delete: vi.fn().mockResolvedValue(undefined),
         Scale: vi.fn().mockResolvedValue(undefined),
         Restart: vi.fn().mockResolvedValue(undefined),
@@ -181,7 +181,7 @@ beforeEach(async () => {
     });
     vi.mocked(HelmService.Uninstall).mockReset().mockResolvedValue('');
     vi.mocked(HelmService.Rollback).mockReset().mockResolvedValue('');
-    vi.mocked(ActionService.ObjectState).mockReset().mockResolvedValue({ scalable: false, replicas: 0, cordoned: false, containers: [], suspended: false, paused: false, pending: false });
+    vi.mocked(ActionService.ObjectState).mockReset().mockResolvedValue({ scalable: false, replicas: 0, cordoned: false, containers: [], suspended: false, paused: false, pending: false, noEvict: '', evictNote: '' });
     vi.mocked(ActionService.Delete).mockReset().mockResolvedValue(undefined);
     vi.mocked(ActionService.Scale).mockReset().mockResolvedValue(undefined);
     vi.mocked(ActionService.Cordon).mockReset().mockResolvedValue(undefined);
@@ -347,7 +347,7 @@ test('nothing else offers it: a pod is not a place other pods are placed', async
 // The one button whose label is the cluster's answer rather than ours: offering
 // to cordon a node that is already cordoned is a button that does nothing.
 test('a cordoned node offers to be uncordoned instead', async () => {
-    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: false, replicas: 0, cordoned: true, containers: [], suspended: false, paused: false, pending: false });
+    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: false, replicas: 0, cordoned: true, containers: [], suspended: false, paused: false, pending: false, noEvict: '', evictNote: '' });
 
     render(ObjectActions, { object: NODE });
 
@@ -432,7 +432,7 @@ test('a refused delete says why and leaves the object alone', async () => {
 });
 
 test('scale opens a field holding the count the workload is at', async () => {
-    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: true, replicas: 3, cordoned: false, containers: [], suspended: false, paused: false, pending: false });
+    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: true, replicas: 3, cordoned: false, containers: [], suspended: false, paused: false, pending: false, noEvict: '', evictNote: '' });
     render(ObjectActions, { object: DEPLOYMENT });
     await expect.element(page.getByRole('button', { name: 'Scale' })).toBeVisible();
 
@@ -442,7 +442,7 @@ test('scale opens a field holding the count the workload is at', async () => {
 });
 
 test('scaling sends the number that was typed', async () => {
-    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: true, replicas: 3, cordoned: false, containers: [], suspended: false, paused: false, pending: false });
+    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: true, replicas: 3, cordoned: false, containers: [], suspended: false, paused: false, pending: false, noEvict: '', evictNote: '' });
     render(ObjectActions, { object: DEPLOYMENT });
     await page.getByRole('button', { name: 'Scale' }).click();
 
@@ -456,7 +456,7 @@ test('scaling sends the number that was typed', async () => {
 
 /** Opens the scale form on a deployment running three. */
 async function openScale(): Promise<HTMLInputElement> {
-    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: true, replicas: 3, cordoned: false, containers: [], suspended: false, paused: false, pending: false });
+    vi.mocked(ActionService.ObjectState).mockResolvedValue({ scalable: true, replicas: 3, cordoned: false, containers: [], suspended: false, paused: false, pending: false, noEvict: '', evictNote: '' });
     render(ObjectActions, { object: DEPLOYMENT });
     await page.getByRole('button', { name: 'Scale' }).click();
     await expect.element(page.getByRole('slider', { name: 'Replica count' })).toBeVisible();
@@ -867,6 +867,8 @@ function facts(over: Record<string, unknown> = {}) {
         suspended: false,
         paused: false,
         pending: false,
+        noEvict: '',
+        evictNote: '',
         ...over,
     });
 }
@@ -954,7 +956,7 @@ test('evicting a pod asks first, then evicts it', async () => {
 // A request that has been answered cannot be answered again, so the buttons
 // go with the answer.
 test('a signing request offers approve and deny only while it is pending', async () => {
-    facts({ pending: false });
+    facts({ pending: false, noEvict: '', evictNote: '' });
     const answered = await render(ObjectActions, { object: CSR });
     await expect.element(page.getByRole('button', { name: 'Delete' })).toBeVisible();
     expect(page.getByRole('button', { name: 'Approve' }).elements()).toHaveLength(0);
@@ -969,4 +971,23 @@ test('a signing request offers approve and deny only while it is pending', async
     await page.getByRole('button', { name: 'Approve' }).click();
 
     await vi.waitFor(() => expect(ActionService.AnswerCSR).toHaveBeenCalledWith(PROD, 'csr-1', true));
+});
+
+// A static pod, one already going, or one that has finished: evicting it does
+// nothing useful, so the button says why instead of being pressable.
+test('evict is disabled, with the reason, where it would do nothing', async () => {
+    facts({ noEvict: 'A static pod: the kubelet runs it from a file on the node and puts it straight back' });
+    render(ObjectActions, { object: POD });
+
+    const evict = page.getByRole('button', { name: 'Evict' });
+    await expect.element(evict).toBeDisabled();
+    await expect.element(evict).toHaveAttribute('title', 'A static pod: the kubelet runs it from a file on the node and puts it straight back');
+});
+
+test('evicting a pod nothing manages says it is not replaced', async () => {
+    facts({ evictNote: 'Nothing manages this pod: it is deleted for good, not replaced.' });
+    render(ObjectActions, { object: POD });
+
+    await page.getByRole('button', { name: 'Evict' }).click();
+    await expect.element(page.getByText(/deleted for good/)).toBeVisible();
 });

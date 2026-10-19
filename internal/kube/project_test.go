@@ -178,7 +178,11 @@ func TestPodRestartsAreSummedAcrossContainers(t *testing.T) {
 			"phase": "Running",
 			"containerStatuses": []any{
 				map[string]any{"ready": true, "restartCount": int64(2), "state": map[string]any{"running": map[string]any{}}},
-				map[string]any{"ready": true, "restartCount": int64(3), "state": map[string]any{"running": map[string]any{}}},
+				map[string]any{"ready": true, "restartCount": int64(3), "state": map[string]any{"running": map[string]any{}},
+					// Recent, so the restarts are current and the list shows them.
+					"lastState": map[string]any{"terminated": map[string]any{
+						"finishedAt": time.Now().Add(-5 * time.Minute).UTC().Format(time.RFC3339),
+					}}},
 			},
 		},
 	})

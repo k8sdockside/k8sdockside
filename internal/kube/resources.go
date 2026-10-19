@@ -99,8 +99,28 @@ type PodTrouble struct {
 	// over once a month ago reads the same as one falling over now; this is
 	// the number that tells them apart.
 	RestartedRecently int `json:"restartedRecently"`
+	// LastRestartAt is when the most recent restart of any pod here happened,
+	// RFC3339, empty when none has or none is on record. The dashboard holds
+	// it against the moment the user dismissed the restart history, so a
+	// dismissal lasts until something restarts again.
+	LastRestartAt string `json:"lastRestartAt"`
+	// Restarted is every pod that has restarted a container, most recent
+	// first, so the dashboard's restart history can be narrowed to a period
+	// -- the last day, the last week -- without asking the cluster again.
+	Restarted []PodRestart `json:"restarted"`
 	// Worst is the handful of pods most worth opening, worst first.
 	Worst []PodIssue `json:"worst"`
+}
+
+// PodRestart is one pod in the restart history.
+type PodRestart struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+	Restarts  int    `json:"restarts"`
+	// LastTermination is why a container last stopped, as PodIssue has it.
+	LastTermination string `json:"lastTermination"`
+	// LastRestartAt is when, RFC3339; empty when the kubelet kept no record.
+	LastRestartAt string `json:"lastRestartAt"`
 }
 
 // PodIssue is one pod on the dashboard's attention list.
@@ -121,6 +141,9 @@ type PodIssue struct {
 	// empty for a pod that has never restarted.
 	LastTermination string `json:"lastTermination"`
 	LastRestart     string `json:"lastRestart"`
+	// LastRestartAt is the same moment as LastRestart, RFC3339, so the
+	// dashboard can tell a restart from before a dismissal from one after.
+	LastRestartAt string `json:"lastRestartAt"`
 }
 
 // Event is a cluster event as shown on the dashboard and in the events table.
