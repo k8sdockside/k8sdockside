@@ -144,7 +144,10 @@ func TestLiveForwardCarriesTraffic(t *testing.T) {
 	// Cancelling is how the app disconnects one, and it must actually stop.
 	cancel()
 	select {
-	case <-ended:
+	case err := <-ended:
+		// Being cancelled may or may not surface as an error; either way the
+		// forward stopped, which is all this checks.
+		t.Logf("forward stopped: %v", err)
 	case <-time.After(5 * time.Second):
 		t.Fatal("the forward did not stop when it was cancelled")
 	}

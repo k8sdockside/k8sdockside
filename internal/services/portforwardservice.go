@@ -351,7 +351,10 @@ func (s *PortForwardService) attempt(id string, kc kube.Context, want int32) err
 		// one worth keeping is the one that says what went wrong -- so it has
 		// to be written second.
 		select {
-		case <-ended:
+		case err := <-ended:
+			// s.down has already put this on the row; the timeout below is
+			// the reason worth returning.
+			_ = err
 		case <-time.After(time.Second):
 		}
 		return fmt.Errorf("the forward did not come up within %s", forwardStartTimeout)
