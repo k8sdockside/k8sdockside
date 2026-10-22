@@ -118,6 +118,17 @@ generate: ## Regenerate the TypeScript bindings from the Go services.
 	@wails3 generate bindings -clean=true -ts -i
 	@printf "$(GREEN)✓ Bindings generated$(RESET)\n"
 
+# The same bindings as `generate`: the services are the same in both builds,
+# and server mode compiles without cgo, so no GTK or WebKitGTK headers are
+# needed to read them. CI's frontend job and the server image use this; if a
+# service ever exists in one build and not the other, the two targets differ
+# and this one is wrong for the desktop app.
+.PHONY: generate-headless
+generate-headless: ## Regenerate the bindings without cgo or the GUI headers (CI, server image).
+	@printf "$(CYAN)Generating bindings (headless)...$(RESET)\n"
+	@CGO_ENABLED=0 wails3 generate bindings -clean=true -ts -i -f "-tags server"
+	@printf "$(GREEN)✓ Bindings generated$(RESET)\n"
+
 .PHONY: clean
 clean: clean-frontend ## Clean build artifacts, caches and frontend output.
 	@printf "$(YELLOW)Cleaning build artifacts...$(RESET)\n"

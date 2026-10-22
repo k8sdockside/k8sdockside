@@ -19,6 +19,10 @@ jobs:
   detect-changes:
     name: Detect Changes
     runs-on: ubuntu-24.04
+    # Several times what each job takes on a good day: a hung step -- an
+    # apt mirror that never answers, say -- fails here rather than sitting
+    # out GitHub's six-hour default.
+    timeout-minutes: 5
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -60,6 +64,7 @@ jobs:
   build:
     name: Build (Go)
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     needs: detect-changes
     if: needs.detect-changes.outputs.backend == 'true'
     steps:
@@ -82,6 +87,7 @@ jobs:
   build-server:
     name: Build (Go, server mode)
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     needs: detect-changes
     if: needs.detect-changes.outputs.backend == 'true'
     steps:
@@ -107,6 +113,7 @@ jobs:
   test:
     name: Test (Go)
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     needs: detect-changes
     if: needs.detect-changes.outputs.backend == 'true'
     steps:
@@ -138,6 +145,7 @@ jobs:
   lint:
     name: Lint (Go)
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     needs: detect-changes
     if: needs.detect-changes.outputs.backend == 'true'
     steps:
@@ -176,6 +184,7 @@ jobs:
   security:
     name: Security (Go)
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     needs: detect-changes
     if: needs.detect-changes.outputs.backend == 'true'
     steps:
@@ -207,22 +216,29 @@ jobs:
   frontend:
     name: Build, Test and Lint (Frontend)
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     needs: detect-changes
     if: needs.detect-changes.outputs.frontend == 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      # No GTK or WebKitGTK: the tests run in Node and headless Chromium, and
+      # the bindings are read from the server build, which needs no cgo. The
+      # apt install those headers took was the slowest -- and least reliable
+      # -- part of this job.
       - name: Setup build environment
         uses: ./.github/actions/setup-build
+        with:
+          gui-deps: 'false'
 
       # frontend/bindings is build output, not source: it is gitignored and
       # every component imports from it, so nothing under frontend/ compiles
       # until this has run. The flags must match the Makefile's `generate`
       # target and build/Taskfile.yml's generate:bindings, or each run quietly
-      # undoes the other's output.
+      # undoes the other's output; generate-headless runs the same ones.
       - name: Generate bindings
-        run: make generate
+        run: make generate-headless
 
       - name: Install dependencies
         working-directory: frontend
@@ -237,13 +253,15 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('frontend/package-lock.json') }}
+          key: ${{ runner.os }}-playwright-shell-${{ hashFiles('frontend/package-lock.json') }}
 
       # The component tests run in real Chromium: $effect, focus and pointer
       # handling only behave as they do in the app with a browser under them.
+      # Headless (vitest.config.ts), so only Chromium's headless shell: a
+      # smaller download, and fewer system libraries for --with-deps to apt.
       - name: Install Playwright Chromium
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps --only-shell chromium
 
       - name: Run tests
         working-directory: frontend
@@ -267,6 +285,7 @@ jobs:
   audit-frontend:
     name: Security (Frontend)
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     needs: detect-changes
     if: needs.detect-changes.outputs.frontend == 'true'
     steps:
@@ -290,6 +309,7 @@ jobs:
   helm:
     name: Lint (Helm chart)
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     needs: detect-changes
     if: needs.detect-changes.outputs.charts == 'true'
     steps:

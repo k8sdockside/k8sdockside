@@ -1,8 +1,8 @@
 name: Setup build environment
 description: >-
   Installs everything a k8sdockside build needs: the Linux GUI headers Wails
-  links against, Go from go.mod, the wails3 CLI pinned to the version go.mod
-  requires, and optionally Node.
+  links against (unless gui-deps is "false"), Go from go.mod, the wails3 CLI
+  pinned to the version go.mod requires, and optionally Node.
 
 inputs:
   node-version:
@@ -13,6 +13,13 @@ inputs:
     description: Install the wails3 CLI. Set to "false" to skip it.
     required: false
     default: 'true'
+  gui-deps:
+    description: >-
+      Install the GTK and WebKitGTK headers the desktop app links against. Set
+      to "false" for a job that only generates bindings or builds server mode:
+      the wails3 CLI is then built without cgo, which needs none of them.
+    required: false
+    default: 'true'
 
 runs:
   using: composite
@@ -21,11 +28,15 @@ runs:
     # a Go program in the same module, so it needs the headers too -- not only
     # the app. Without these, nothing here compiles.
     - name: Install Linux GUI build dependencies
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && inputs.gui-deps == 'true'
       shell: bash
+      # Composite steps take no timeout-minutes, so each apt call has its own:
+      # a mirror that stops answering is tried again a few times, and given
+      # up on after five minutes, instead of holding the job until its limit.
       run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends \
+        apt_opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+        timeout 300 sudo apt-get "${apt_opts[@]}" update
+        timeout 600 sudo apt-get "${apt_opts[@]}" install -y --no-install-recommends \
           build-essential \
           pkg-config \
           libgtk-4-dev \
@@ -59,17 +70,23 @@ runs:
           echo "gobin=$(go env GOPATH)/bin"
         } >> "$GITHUB_OUTPUT"
 
+    # The cgo and the pure-Go builds of the CLI are cached apart: a cgo build
+    # links GTK at run time, and would not start on a runner without it. Both
+    # branches of the expression are non-empty on purpose: `cond && '' || x`
+    # is always x, because '' counts as false.
     - name: Cache wails3 CLI
       if: inputs.wails == 'true'
       id: wails-cache
       uses: actions/cache@v6
       with:
         path: ${{ steps.wails-version.outputs.gobin }}
-        key: ${{ runner.os }}-${{ runner.arch }}-wails3-${{ steps.wails-version.outputs.version }}
+        key: ${{ runner.os }}-${{ runner.arch }}-wails3-${{ steps.wails-version.outputs.version }}-${{ inputs.gui-deps == 'true' && 'cgo' || 'nocgo' }}
 
     - name: Install wails3 CLI
       if: inputs.wails == 'true' && steps.wails-cache.outputs.cache-hit != 'true'
       shell: bash
+      env:
+        CGO_ENABLED: ${{ inputs.gui-deps == 'true' && '1' || '0' }}
       run: go install github.com/wailsapp/wails/v3/cmd/wails3@${{ steps.wails-version.outputs.version }}
 
     # setup-go generally puts GOPATH/bin on the PATH already; doing it here too

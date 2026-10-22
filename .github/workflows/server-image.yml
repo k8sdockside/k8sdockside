@@ -67,10 +67,13 @@ jobs:
         with:
           ref: ${{ steps.version.outputs.tag }}
 
-      # Node, and the wails3 CLI with the GTK headers it links against: the
-      # image embeds frontend/dist but cannot build it (see the Dockerfile).
+      # Node and the wails3 CLI: the image embeds frontend/dist but cannot
+      # build it (see the Dockerfile). No GTK headers: server mode does not
+      # link them, and the CLI is built without cgo.
       - name: Setup build environment
         uses: ./.github/actions/setup-build
+        with:
+          gui-deps: 'false'
 
       # The version the app shows under About is stamped into the source, as in
       # release.yml, so this has to happen before the build context is sent.
@@ -79,7 +82,7 @@ jobs:
 
       # Same flags as CI's frontend job, via the Makefile.
       - name: Generate bindings
-        run: make generate
+        run: make generate-headless
 
       - name: Build frontend
         working-directory: frontend
