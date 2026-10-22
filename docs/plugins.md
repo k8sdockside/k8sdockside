@@ -79,6 +79,7 @@ definitions.
 | --- | --- | --- | --- | --- |
 | cert-manager | Security | K8s Dockside | [k8sdockside/certmanager](https://github.com/k8sdockside/certmanager) | `crd:certificates.cert-manager.io` |
 | OpenBao & Vault | Security | K8s Dockside | [k8sdockside/openbao](https://github.com/k8sdockside/openbao) | `crd:vaultstaticsecrets.secrets.hashicorp.com`, or an OpenBao or Vault StatefulSet from their Helm charts |
+| Trivy | Security | K8s Dockside | [k8sdockside/trivy](https://github.com/k8sdockside/trivy) | `crd:vulnerabilityreports.aquasecurity.github.io` |
 | Longhorn | Storage | K8s Dockside | [k8sdockside/longhorn](https://github.com/k8sdockside/longhorn) | `crd:volumes.longhorn.io` |
 | Rook Ceph | Storage | K8s Dockside | [k8sdockside/rookceph](https://github.com/k8sdockside/rookceph) | `crd:cephclusters.ceph.rook.io` |
 | CloudNativePG | Storage | K8s Dockside | [k8sdockside/cnpg](https://github.com/k8sdockside/cnpg) | `crd:clusters.postgresql.cnpg.io` |

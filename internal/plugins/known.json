@@ -39,6 +39,24 @@
         "official": true
     },
     {
+        "id": "trivy",
+        "name": "Trivy",
+        "tagline": "vulnerabilities, misconfigurations, exposed secrets and compliance, from trivy-operator",
+        "category": "security",
+        "icon": "shield",
+        "description": "Everything trivy-operator found, as one picture: a security score and the gauges it is made of, vulnerabilities by severity and how many have a fix, a heatmap of the namespaces, the most vulnerable images and workloads, the CVEs that reach the furthest, failed config, RBAC and infra checks, secrets left inside images, and each compliance report's pass rate. Working pages to search and filter vulnerabilities by CVE, image or workload, misconfigurations by check or resource, exposed secrets and compliance controls, with Rescan. Panels on Deployments, StatefulSets, DaemonSets, CronJobs, Jobs, ReplicaSets and Pods.",
+        "repo": "https://github.com/k8sdockside/trivy.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
+        "detect": ["crd:vulnerabilityreports.aquasecurity.github.io"],
+        "links": [
+            { "label": "trivy-operator", "url": "https://aquasecurity.github.io/trivy-operator/latest/" },
+            { "label": "trivy.dev", "url": "https://trivy.dev" },
+            { "label": "GitHub", "url": "https://github.com/aquasecurity/trivy-operator" }
+        ],
+        "official": true
+    },
+    {
         "id": "longhorn",
         "name": "Longhorn",
         "tagline": "distributed block storage: volumes, replicas and the disks under them",

@@ -100,6 +100,22 @@
         }
     }
 
+    /** How far "Update all" has got, while it runs. */
+    let updatingAll = $state<{ done: number; total: number; name: string } | null>(null);
+
+    async function updateAll(): Promise<void> {
+        if (updatingAll || updating) return;
+        updatingAll = { done: 0, total: updatable.length, name: '' };
+        try {
+            await workspace.updateAllPluginsFromGit(
+                updatable.map((p) => p.id),
+                (done, total, name) => (updatingAll = { done, total, name }),
+            );
+        } finally {
+            updatingAll = null;
+        }
+    }
+
     /** The plugin being uninstalled, if one is. */
     let uninstalling = $state<string | null>(null);
 
@@ -163,6 +179,9 @@
      * nor deletes anything in it.
      */
     let watched = $derived(workspace.plugins.filter((p) => p.origin !== 'builtin' && !inPluginsDir(p)));
+
+    /** Every installed plugin the app can pull: cloned into the plugins folder from a repository. */
+    let updatable = $derived(installed.filter((p) => p.repo && inPluginsDir(p)));
     /**
      * The known plugins not installed here. One that is installed is already
      * under Installed, with its links and its update button; listing it here
@@ -249,6 +268,32 @@
                 {/each}
             </select>
         </label>
+        {#if session.admin && updatable.length > 0}
+            <!-- At the top, beside the search: the one button that touches every
+                 installed plugin, where it is seen without scrolling. -->
+            <div class="update-all-box">
+                <button
+                    class="update-all"
+                    disabled={updatingAll !== null || updating !== null}
+                    title="git pull every plugin installed from a repository, one after another"
+                    onclick={() => void updateAll()}
+                >
+                    <Icon name="refresh" size={14} />
+                    {#if updatingAll}
+                        Updating {Math.min(updatingAll.done + 1, updatingAll.total)} of {updatingAll.total}…
+                    {:else}
+                        Update all plugins
+                        <span class="update-all-n">{updatable.length}</span>
+                    {/if}
+                </button>
+                {#if updatingAll}
+                    <div class="update-all-progress" aria-hidden="true">
+                        <i style="width: {(updatingAll.done / Math.max(1, updatingAll.total)) * 100}%"></i>
+                    </div>
+                    {#if updatingAll.name}<span class="update-all-name">{updatingAll.name}</span>{/if}
+                {/if}
+            </div>
+        {/if}
     </div>
 
     <div class="chips">
@@ -566,7 +611,7 @@
                 {#if plugin.repo && inPluginsDir(plugin)}
                     <button
                         class="update"
-                        disabled={updating === plugin.id}
+                        disabled={updating === plugin.id || updatingAll !== null}
                         title="git pull in {plugin.repo}"
                         onclick={() => void update(plugin.id)}
                     >
@@ -1284,6 +1329,69 @@
         margin-top: 8px;
         padding: 3px 8px;
         font-size: 11px;
+    }
+
+    /* Accent-filled and full size: the one button here that touches every plugin at once. */
+    .update-all-box {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 4px;
+        margin-left: auto;
+    }
+
+    .update-all {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 7px 14px;
+        border-radius: var(--radius-sm);
+        font-size: 12.5px;
+        font-weight: 600;
+        background: var(--accent);
+        color: var(--accent-text);
+        box-shadow: 0 2px 10px -4px var(--accent);
+    }
+
+    .update-all:hover:not(:disabled) {
+        filter: brightness(1.08);
+    }
+
+    .update-all:disabled {
+        opacity: 0.85;
+        cursor: progress;
+    }
+
+    .update-all-n {
+        min-width: 18px;
+        padding: 0 6px;
+        border-radius: 999px;
+        font-size: 11px;
+        line-height: 17px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+        background: color-mix(in srgb, var(--accent-text) 22%, transparent);
+    }
+
+    .update-all-progress {
+        width: 100%;
+        min-width: 160px;
+        height: 4px;
+        border-radius: 999px;
+        background: var(--bg-hover);
+        overflow: hidden;
+    }
+
+    .update-all-progress i {
+        display: block;
+        height: 100%;
+        background: var(--accent);
+        transition: width 0.3s;
+    }
+
+    .update-all-name {
+        font-size: 11px;
+        color: var(--text-faint);
     }
 
     .card-actions {

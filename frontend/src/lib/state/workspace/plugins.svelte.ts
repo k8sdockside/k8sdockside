@@ -702,6 +702,43 @@ export abstract class WorkspacePlugins extends WorkspaceLayout {
     }
 
     /**
+     * Pulls the repository of every plugin in `ids`, one after another, and
+     * says once how it went. Plugins cloned from one repository are pulled
+     * once. `onProgress` hears which one is being pulled, for the button to
+     * say so. A failure does not stop the rest: each is named at the end.
+     */
+    async updateAllPluginsFromGit(ids: string[], onProgress?: (done: number, total: number, name: string) => void): Promise<void> {
+        const byRepo = new Map<string, string>();
+        for (const id of ids) {
+            const repo = this.plugins.find((p) => p.id === id)?.repo || id;
+            if (!byRepo.has(repo)) byRepo.set(repo, id);
+        }
+        const todo = [...byRepo.values()];
+        const failed: string[] = [];
+        let done = 0;
+        for (const id of todo) {
+            const name = this.plugins.find((p) => p.id === id)?.name || id;
+            onProgress?.(done, todo.length, name);
+            try {
+                this.pluginCatalogue = adoptPluginCatalogue(await PluginService.UpdateFromGit(id));
+            } catch (err) {
+                failed.push(`${name}: ${firstLine(message(err))}`);
+            }
+            done++;
+        }
+        onProgress?.(done, todo.length, '');
+        try {
+            this.metricsAttachments = (await MetricsService.Attachments()) ?? [];
+        } catch {
+            // The charts catch up on the next reload; the plugins are updated.
+        }
+        this.registerViews();
+        const ok = todo.length - failed.length;
+        if (!failed.length) notices.inform(`Updated ${ok} plugin${ok === 1 ? '' : 's'}`);
+        else notices.fail(`Updated ${ok} of ${todo.length} plugins. Could not update ${failed.join(' · ')}`);
+    }
+
+    /**
      * What uninstalling a plugin would delete -- its clone, folder or file, and
      * every plugin read from there -- for its card to ask about before
      * anything is deleted. `null` when the app refuses, with the reason shown.
