@@ -166,6 +166,16 @@
                 onchange={(v) => workspace.setCheckForUpdates(v)}
             />
         </SettingsRow>
+        <SettingsRow
+            label="Release lists for plugins"
+            hint="Lets a plugin's pages show the latest releases of what it is about — the Talos plugin, say, which Talos versions are out. Only for the GitHub repositories the plugin's manifest names, listed on its card under Plugins: the app asks GitHub anonymously when such a page is open, carrying nothing but the app's name and version, and keeps the answer for six hours. Off, those pages use the release table they were shipped with."
+        >
+            <Toggle
+                checked={workspace.pluginReleases}
+                label="Release lists for plugins"
+                onchange={(v) => workspace.setPluginReleases(v)}
+            />
+        </SettingsRow>
     {/if}
 </SettingsSection>
 

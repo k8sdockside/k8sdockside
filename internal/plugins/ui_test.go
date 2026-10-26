@@ -436,7 +436,9 @@ func TestTheBridgeTypesDeclareEveryCall(t *testing.T) {
 		t.Fatalf("found only %d calls in the bridge", len(calls))
 	}
 	for _, call := range calls {
-		if !regexp.MustCompile(`(?m)^\s+` + call[1] + `[<(]`).Match(dts) {
+		// releases?(...) or releases?: (...) => -- a call newer apps add is
+		// optional, so a page checks for it.
+		if !regexp.MustCompile(`(?m)^\s+` + call[1] + `(\?:?\s*)?[<(]`).Match(dts) {
 			t.Errorf("k8sdockside.d.ts does not declare %s()", call[1])
 		}
 	}

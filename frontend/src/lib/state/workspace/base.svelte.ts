@@ -332,6 +332,7 @@ export abstract class WorkspaceBase {
     restoreTabsOnLaunch = $derived(this.settings.preferences.restoreTabs);
     confirmSourceRemoval = $derived(this.settings.preferences.confirmSourceRemoval);
     checkForUpdates = $derived(this.settings.preferences.checkForUpdates);
+    pluginReleases = $derived(this.settings.preferences.pluginReleases);
     desktopNotifications = $derived(this.settings.preferences.desktopNotifications);
     /** Where cluster alerts go. */
     alertMode = $derived(this.settings.preferences.alerts);

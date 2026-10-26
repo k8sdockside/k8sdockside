@@ -34,7 +34,7 @@ func TestASoundPluginPasses(t *testing.T) {
 // reviewer reads it before anyone installs the plugin.
 func TestWhatThePagesReachIsSaid(t *testing.T) {
 	dir := writePlugin(t, `{"id": "flows", "minAppVersion": "0.0.27",
-		"ui": {"registries": true, "services": [{"id": "whisker", "label": "Whisker", "namespace": "calico-system", "name": "whisker", "port": 8081, "paths": ["/whisker-backend/flows"]}]},
+		"ui": {"registries": true, "releases": [{"github": "projectcalico/calico"}], "services": [{"id": "whisker", "label": "Whisker", "namespace": "calico-system", "name": "whisker", "port": 8081, "paths": ["/whisker-backend/flows"]}]},
 		"views": [{"id": "pods", "kind": "pods"}]}`)
 	if err := os.Mkdir(filepath.Join(dir, "ui"), 0o700); err != nil {
 		t.Fatal(err)
@@ -46,6 +46,7 @@ func TestWhatThePagesReachIsSaid(t *testing.T) {
 	for _, want := range []string{
 		"its pages read pods",
 		"its pages ask registries",
+		"its pages ask GitHub for the releases of projectcalico/calico",
 		"its pages call Whisker (calico-system/whisker:8081) at /whisker-backend/flows",
 	} {
 		if !strings.Contains(out.String(), want) {

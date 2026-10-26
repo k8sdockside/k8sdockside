@@ -434,8 +434,8 @@
         /**
          * Resolves once the app has answered, with what this page is looking at:
          * { pluginId, viewId, sectionId, object, contextId, contextName,
-         *   readable, write, registries, services, actions, plugin, theme,
-         *   datetime }.
+         *   readable, write, registries, releases, services, actions, plugin,
+         *   theme, datetime }.
          *
          * `datetime` is how the user wants dates and times written:
          * { clock, dates, zone, ages }. Write them with `format` rather than
@@ -665,6 +665,41 @@
         },
 
         /**
+         * The published releases of a public GitHub repository, asked for by
+         * the app: the page itself has no network. Needs "ui": { "releases":
+         * [{ "github": "owner/repo" }] } naming the repository.
+         *
+         * releases(repo, { refresh? }) -> [{ tag, name, prerelease, draft,
+         * publishedAt, url }], newest first, never a draft. The list also
+         * carries `repo`, `fetchedAt` (when GitHub last answered, RFC 3339)
+         * and `stale` (true when GitHub could not be asked just now and this
+         * is the last good list, `error` saying why). Rejects for a repository
+         * the manifest does not name, when the user has switched release lists
+         * off, or when GitHub cannot be reached and nothing is held: fall back
+         * on what the plugin ships with.
+         */
+        releases: function (repo, opts) {
+            var refresh = !!(opts && opts.refresh);
+            return call('releases', { repo: String(repo || ''), refresh: refresh }).then(function (answer) {
+                var list = ((answer && answer.releases) || []).map(function (r) {
+                    return {
+                        tag: r.tag,
+                        name: r.name,
+                        prerelease: !!r.prerelease,
+                        draft: false,
+                        publishedAt: r.publishedAt,
+                        url: r.url,
+                    };
+                });
+                list.repo = (answer && answer.repo) || String(repo || '');
+                list.fetchedAt = (answer && answer.fetchedAt) || '';
+                list.stale = !!(answer && answer.stale);
+                list.error = (answer && answer.error) || '';
+                return list;
+            });
+        },
+
+        /**
          * Services in the cluster, called by the app through the API server's
          * service proxy. Needs "ui": { "services": [...] } declaring each one
          * and the paths the page may request. GET only.
@@ -726,6 +761,15 @@
                     if (out.code !== 0) throw new Error(String(out.stderr || 'exit status ' + out.code).trim().slice(0, 500));
                     return JSON.parse(out.stdout);
                 });
+            },
+            /**
+             * Runs a command declared as an extraction -- a "read" entry
+             * { command, extract } -- and resolves with only the fields it
+             * names: [{ node, fields: { 'a.b': value }, error? }]. The app
+             * parses the output itself; it never reaches the page. 0.1.33.
+             */
+            extract: function (tool, args) {
+                return call('tools.extract', { tool: tool, args: args || [] });
             },
             /**
              * Asks to run a "run" command: { tool, args, defaults?, label?,

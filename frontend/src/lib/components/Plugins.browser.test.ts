@@ -76,6 +76,9 @@ vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services'
         Reload: vi.fn().mockResolvedValue({ plugins: [], dir: '', folders: [], problems: [] }),
         Summary,
         ServiceGet: vi.fn().mockResolvedValue({ service: 'calico-system/whisker:8081', status: 200, contentType: 'application/json', body: '{}' }),
+        Releases: vi.fn().mockResolvedValue({ repo: 'siderolabs/talos', releases: null, fetchedAt: '2026-10-26T12:00:00Z', stale: false, error: '' }),
+        ToolExec: vi.fn().mockResolvedValue({ stdout: '', stderr: '', code: 0, truncated: false }),
+        ToolExtract: vi.fn().mockResolvedValue([{ node: '10.0.0.2', fields: { 'machine.install.image': 'factory.talos.dev/nocloud-installer/abc:v1.13.0' } }]),
         InstallKnown: vi.fn().mockResolvedValue({ plugins: [], dir: '', folders: [], problems: [] }),
         HideSuggestion: vi.fn().mockResolvedValue({}),
     },
@@ -314,7 +317,7 @@ test('a plugin with an overview of its own opens that page in its frame', async 
                 id: 'acme',
                 name: 'Acme',
                 origin: '/plugins/acme/plugin.json',
-                ui: { readable: [], write: false, registries: false, tools: [], services: [] },
+                ui: { readable: [], write: false, registries: false, releases: [], tools: [], services: [] },
                 overview: { entry: 'home.html' },
             },
         ],
@@ -350,6 +353,7 @@ test('a page calls the services its plugin declares, and no others', async () =>
                     readable: [],
                     write: false,
                     registries: false,
+                    releases: [],
                     tools: [],
                     services: [{ id: 'whisker', label: 'Whisker', where: 'the service labelled k8s-app=whisker:8081', paths: ['/whisker-backend/'] }],
                 },
@@ -379,6 +383,109 @@ test('a page calls the services its plugin declares, and no others', async () =>
         filter: ['a', 'b'],
         watch: ['false'],
     });
+});
+
+// A page may ask for the releases of only the repositories its plugin names;
+// anything else is refused before Go is asked.
+test('a page asks for the releases of the repositories its plugin declares, and no others', async () => {
+    const { PluginService } = await import('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services');
+    const Releases = vi.mocked(PluginService.Releases);
+    Releases.mockClear();
+    const PluginFrame = (await import('./PluginFrame.svelte')).default;
+    workspace.pluginCatalogue = {
+        plugins: [
+            {
+                ...structuredClone(ARGO),
+                id: 'talos',
+                name: 'Talos',
+                origin: '/plugins/talos/plugin.json',
+                ui: { readable: [], write: false, registries: false, releases: ['siderolabs/talos'], tools: [], services: [] },
+                overview: { entry: 'index.html' },
+            },
+        ],
+        dir: '',
+        folders: [],
+        problems: [],
+    };
+    render(PluginFrame, { contextId: PROD, kind: 'plugin:talos/overview' });
+    const frame = document.querySelector('iframe')!;
+
+    const ask = (id: number, params: Record<string, unknown>) =>
+        window.dispatchEvent(
+            new MessageEvent('message', {
+                data: { protocol: 'k8sdockside/plugin@1', id, method: 'releases', params },
+                source: frame.contentWindow,
+            }),
+        );
+    ask(1, { repo: 'siderolabs/talos', refresh: true });
+    ask(2, { repo: 'siderolabs/omni' });
+    ask(3, { repo: 'SideroLabs/Talos' });
+
+    await vi.waitFor(() => expect(Releases).toHaveBeenCalledTimes(2));
+    expect(Releases).toHaveBeenNthCalledWith(1, 'talos', 'siderolabs/talos', true);
+    expect(Releases).toHaveBeenNthCalledWith(2, 'talos', 'SideroLabs/Talos', false);
+});
+
+// A page reads a command declared as an extraction through tools.extract,
+// which goes to Go's ToolExtract -- never ToolExec -- and only for a tool its
+// plugin declares. Go checks the command against the manifest again.
+test('a page reads named fields through tools.extract, for its own tools only', async () => {
+    const { PluginService } = await import('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services');
+    const ToolExtract = vi.mocked(PluginService.ToolExtract);
+    const ToolExec = vi.mocked(PluginService.ToolExec);
+    ToolExtract.mockClear();
+    ToolExec.mockClear();
+    const PluginFrame = (await import('./PluginFrame.svelte')).default;
+    workspace.pluginCatalogue = {
+        plugins: [
+            {
+                ...structuredClone(ARGO),
+                id: 'talos',
+                name: 'Talos',
+                origin: '/plugins/talos/plugin.json',
+                ui: {
+                    readable: [],
+                    write: false,
+                    registries: false,
+                    releases: [],
+                    tools: [
+                        {
+                            id: 'talosctl',
+                            label: 'talosctl',
+                            command: 'talosctl',
+                            files: [],
+                            read: ['version **'],
+                            run: [],
+                            interactive: [],
+                            extract: [{ command: 'get machineconfig **', fields: ['machine.install.image'] }],
+                        },
+                    ],
+                    services: [],
+                },
+                overview: { entry: 'index.html' },
+            },
+        ],
+        dir: '',
+        folders: [],
+        problems: [],
+    };
+    render(PluginFrame, { contextId: PROD, kind: 'plugin:talos/overview' });
+    const frame = document.querySelector('iframe')!;
+    const ask = (id: number, params: Record<string, unknown>) =>
+        window.dispatchEvent(
+            new MessageEvent('message', {
+                data: { protocol: 'k8sdockside/plugin@1', id, method: 'tools.extract', params },
+                source: frame.contentWindow,
+            }),
+        );
+    // An undeclared tool is refused before Go is asked; the declared one goes
+    // to ToolExtract with the page's words, strings only.
+    ask(1, { tool: 'kubectl', args: ['get', 'secrets'] });
+    ask(2, { tool: 'talosctl', args: ['get', 'machineconfig', 42, '--nodes', '10.0.0.2'] });
+
+    await vi.waitFor(() => expect(ToolExtract).toHaveBeenCalledTimes(1));
+    expect(ToolExtract).toHaveBeenCalledWith(PROD, 'talos', 'talosctl', ['get', 'machineconfig', '--nodes', '10.0.0.2']);
+    expect(ToolExec).not.toHaveBeenCalled();
 });
 
 // The links say what a plugin is about; the generated overview carries them
@@ -482,7 +589,7 @@ test("a plugin's frame follows the app's zoom by scaling, not by zooming", async
                 id: 'acme',
                 name: 'Acme',
                 origin: '/plugins/acme/plugin.json',
-                ui: { readable: [], write: false, registries: false, tools: [], services: [] },
+                ui: { readable: [], write: false, registries: false, releases: [], tools: [], services: [] },
                 overview: { entry: 'home.html' },
             },
         ],

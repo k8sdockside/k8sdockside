@@ -56,6 +56,7 @@ export function adoptPlugin(plugin: bindings.Plugin): Plugin {
                   readable: [...(plugin.ui.readable ?? [])],
                   write: plugin.ui.write ?? false,
                   registries: plugin.ui.registries ?? false,
+                  releases: (plugin.ui.releases ?? []).map((r) => r.github),
                   tools: (plugin.ui.tools ?? []).map((tool) => ({
                       id: tool.id,
                       label: tool.label || tool.command,
@@ -64,6 +65,7 @@ export function adoptPlugin(plugin: bindings.Plugin): Plugin {
                       read: [...(tool.read ?? [])],
                       run: [...(tool.run ?? [])],
                       interactive: [...(tool.interactive ?? [])],
+                      extract: (tool.extract ?? []).map((e) => ({ command: e.command, fields: [...(e.extract.fields ?? [])] })),
                   })),
                   services: (plugin.ui.services ?? []).map((svc) => ({
                       id: svc.id,

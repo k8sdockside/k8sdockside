@@ -120,9 +120,20 @@ func details(p plugins.Plugin) []string {
 		if p.UI.Registries {
 			out = append(out, "its pages ask registries about the images the cluster runs")
 		}
+		if len(p.UI.Releases) > 0 {
+			repos := make([]string, 0, len(p.UI.Releases))
+			for _, r := range p.UI.Releases {
+				repos = append(repos, r.GitHub)
+			}
+			out = append(out, "its pages ask GitHub for the releases of "+strings.Join(repos, ", ")+"")
+		}
 		for _, tool := range p.UI.Tools {
 			out = append(out, fmt.Sprintf("its pages run %s on your machine: %d read, %d run (confirmed), %d interactive command patterns",
 				tool.Command, len(tool.Read), len(tool.Run), len(tool.Interactive)))
+			for _, e := range tool.Extract {
+				out = append(out, fmt.Sprintf("its pages read only %s from `%s %s` -- the app parses the output and hands back just those values",
+					strings.Join(e.Extract.Fields, ", "), tool.Command, e.Command))
+			}
 		}
 		for _, svc := range p.UI.Services {
 			out = append(out, fmt.Sprintf("its pages call %s (%s) at %s", svc.Label, svc.Describe(), strings.Join(svc.Paths, ", ")))

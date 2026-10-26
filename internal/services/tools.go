@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/k8sdockside/k8sdockside/internal/plugins"
@@ -57,22 +58,31 @@ type invocation struct {
 
 func toolKey(pluginID, toolID string) string { return pluginID + "/" + toolID }
 
-// prepareTool checks a plugin may use a tool and works out how it is run for
-// a cluster. A tool that is not installed is an error only with ready set.
-func (s *PluginService) prepareTool(contextID, pluginID, toolID string, ready bool) (invocation, error) {
+// declaredTool is one of an enabled plugin's tools, as its manifest declares it.
+func (s *PluginService) declaredTool(pluginID, toolID string) (plugins.UITool, error) {
 	if s.server {
-		return invocation{}, errDesktopOnly
+		return plugins.UITool{}, errDesktopOnly
 	}
 	plugin, ok := s.catalogue().Find(pluginID)
 	if !ok {
-		return invocation{}, fmt.Errorf("no plugin called %q is installed", pluginID)
+		return plugins.UITool{}, fmt.Errorf("no plugin called %q is installed", pluginID)
 	}
 	if plugin.Disabled {
-		return invocation{}, fmt.Errorf("the %s plugin is switched off in Settings", plugin.Name)
+		return plugins.UITool{}, fmt.Errorf("the %s plugin is switched off in Settings", plugin.Name)
 	}
 	tool, ok := plugin.Tool(toolID)
 	if !ok {
-		return invocation{}, fmt.Errorf("the %s plugin does not declare a tool %q in \"ui\": {\"tools\": [...]}", plugin.Name, toolID)
+		return plugins.UITool{}, fmt.Errorf("the %s plugin does not declare a tool %q in \"ui\": {\"tools\": [...]}", plugin.Name, toolID)
+	}
+	return tool, nil
+}
+
+// prepareTool checks a plugin may use a tool and works out how it is run for
+// a cluster. A tool that is not installed is an error only with ready set.
+func (s *PluginService) prepareTool(contextID, pluginID, toolID string, ready bool) (invocation, error) {
+	tool, err := s.declaredTool(pluginID, toolID)
+	if err != nil {
+		return invocation{}, err
 	}
 	kc, ok := s.configs.lookup(contextID)
 	if !ok {
@@ -168,15 +178,66 @@ func (s *PluginService) ToolForgetFile(contextID, pluginID, toolID, fileID strin
 }
 
 // ToolExec runs one of the tool's read commands and returns what it wrote.
+// A command that matches one of the tool's extractions is refused: its output
+// is read only for its fields, by ToolExtract.
 func (s *PluginService) ToolExec(ctx context.Context, contextID, pluginID, toolID string, args []string) (toolcli.Output, error) {
+	tool, err := s.declaredTool(pluginID, toolID)
+	if err != nil {
+		return toolcli.Output{}, err
+	}
+	if err := tool.Allows(plugins.ToolRead, args); err != nil {
+		return toolcli.Output{}, err
+	}
 	inv, err := s.prepareTool(contextID, pluginID, toolID, true)
 	if err != nil {
 		return toolcli.Output{}, err
 	}
-	if err := inv.tool.Allows(plugins.ToolRead, args); err != nil {
-		return toolcli.Output{}, err
-	}
 	return toolcli.Run(ctx, inv.status.Tool.Path, append(args, inv.always...), inv.env)
+}
+
+// ToolExtract runs one of the tool's extract commands and returns only the
+// fields its manifest entry names, read out of the output by the app: one
+// entry per resource the command printed. The output itself, and what the
+// tool wrote to stderr, never leave this function.
+func (s *PluginService) ToolExtract(ctx context.Context, contextID, pluginID, toolID string, args []string) ([]toolcli.Extracted, error) {
+	tool, err := s.declaredTool(pluginID, toolID)
+	if err != nil {
+		return nil, err
+	}
+	extraction, err := tool.Extraction(args)
+	if err != nil {
+		return nil, err
+	}
+	inv, err := s.prepareTool(contextID, pluginID, toolID, true)
+	if err != nil {
+		return nil, err
+	}
+	full := slices.Concat(args, extraction.Output, inv.always)
+	out, err := toolcli.Run(ctx, inv.status.Tool.Path, full, inv.env)
+	if err != nil {
+		return nil, err
+	}
+	return extractFrom(tool, out, extraction)
+}
+
+// extractFrom reads the fields out of a command's output. A command that
+// failed outright is reported by its exit code alone: its stderr is the
+// tool's, and could say anything.
+func extractFrom(tool plugins.UITool, out toolcli.Output, extraction plugins.UIToolExtraction) ([]toolcli.Extracted, error) {
+	if out.Truncated {
+		return nil, fmt.Errorf("%s wrote more than the app reads for fields", tool.Label)
+	}
+	found, err := toolcli.Extract(extraction.Format, out.Stdout, extraction.Fields)
+	if err != nil {
+		if out.Code != 0 {
+			return nil, fmt.Errorf("%s exited with code %d (its output is read only for its fields, so it is not shown)", tool.Label, out.Code)
+		}
+		return nil, err
+	}
+	if len(found) == 0 && out.Code != 0 {
+		return nil, fmt.Errorf("%s exited with code %d (its output is read only for its fields, so it is not shown)", tool.Label, out.Code)
+	}
+	return found, nil
 }
 
 // ToolPlan checks a command a page asks to run -- in the dock, or in the
@@ -185,11 +246,15 @@ func (s *PluginService) ToolPlan(contextID, pluginID, toolID, how string, args [
 	if how != plugins.ToolRun && how != plugins.ToolInteractive {
 		return ToolPlan{}, fmt.Errorf("%q is not a way to run a command", how)
 	}
-	inv, err := s.prepareTool(contextID, pluginID, toolID, true)
+	tool, err := s.declaredTool(pluginID, toolID)
 	if err != nil {
 		return ToolPlan{}, err
 	}
-	if err := inv.tool.Allows(how, args); err != nil {
+	if err := tool.Allows(how, args); err != nil {
+		return ToolPlan{}, err
+	}
+	inv, err := s.prepareTool(contextID, pluginID, toolID, true)
+	if err != nil {
 		return ToolPlan{}, err
 	}
 	return ToolPlan{Display: toolcli.Display(inv.tool.Command, append(args, inv.always...))}, nil

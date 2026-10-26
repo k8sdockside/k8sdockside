@@ -48,6 +48,8 @@ export interface PluginUI {
     write: boolean;
     /** Whether the views may ask registries about the images the cluster runs. */
     registries: boolean;
+    /** The GitHub repositories, `owner/repo`, whose release lists the views may ask for. */
+    releases: string[];
     /** The command line tools on this machine the views may run, and which commands. */
     tools: PluginToolAccess[];
     /** The in-cluster Services the views may make GET requests to. */
@@ -63,6 +65,14 @@ export interface PluginToolAccess {
     read: string[];
     run: string[];
     interactive: string[];
+    /** Read entries the app answers with named fields of the output, never the output. */
+    extract: PluginToolExtract[];
+}
+
+/** A command a page may read only for named fields of its output (`tools.extract`). */
+export interface PluginToolExtract {
+    command: string;
+    fields: string[];
 }
 
 /**

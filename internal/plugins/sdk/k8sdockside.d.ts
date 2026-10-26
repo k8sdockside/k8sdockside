@@ -255,6 +255,11 @@ declare namespace K8sDockside {
          */
         registries?: boolean;
         /**
+         * The GitHub repositories, `owner/repo`, the manifest lets the page
+         * ask `releases` about. Absent on an app older than 0.1.33.
+         */
+        releases?: string[];
+        /**
          * The in-cluster services the manifest lets the page call with
          * `services.get`. Absent on an app older than 0.0.27.
          */
@@ -500,6 +505,47 @@ declare namespace K8sDockside {
         lookup(query: RegistryLookupQuery): Promise<RegistryLookup>;
     }
 
+    // ----- releases on GitHub ---------------------------------------------------
+
+    /** One published release of a GitHub repository. */
+    interface GitHubRelease {
+        /** The release's tag: `v1.14.5`. */
+        tag: string;
+        /** Its title, or the tag when it has none. */
+        name: string;
+        /** Whether GitHub marks it a pre-release. */
+        prerelease: boolean;
+        /** Always false: drafts are never handed to a page. */
+        draft: false;
+        /** When it was published, RFC 3339. */
+        publishedAt: string;
+        /** Its page on github.com; `''` when GitHub gave none. Open it with `openUrl`. */
+        url: string;
+    }
+
+    /** What `releases` resolves with: the releases, newest first, and where they came from. */
+    interface GitHubReleaseList extends Array<GitHubRelease> {
+        /** The repository asked about, `owner/repo`. */
+        repo: string;
+        /** When GitHub last answered for this list, RFC 3339. */
+        fetchedAt: string;
+        /**
+         * GitHub could not be asked just now -- unreachable, failing or
+         * rate-limiting -- and this is the last good list instead.
+         */
+        stale: boolean;
+        /** Why the list is stale; `''` otherwise. */
+        error: string;
+    }
+
+    interface ReleasesOptions {
+        /**
+         * Ask GitHub again rather than use the app's answer, which it keeps
+         * for six hours. An answer under a minute old is used anyway.
+         */
+        refresh?: boolean;
+    }
+
     // ----- services in the cluster ---------------------------------------------
 
     /** One of the services the manifest declares in `"ui": { "services": [...] }`. */
@@ -596,6 +642,18 @@ declare namespace K8sDockside {
         truncated: boolean;
     }
 
+    /**
+     * What `tools.extract` resolves with, one per resource the command
+     * printed: the machine it came from, and the named fields that were there.
+     * A field that is not there is not in `fields`.
+     */
+    interface ToolExtracted {
+        node: string;
+        fields: Record<string, string | number | boolean>;
+        /** Why a field could not be read -- one that is not a single value, say. Absent when all were read or absent. */
+        error?: string;
+    }
+
     interface ToolRunRequest {
         tool: string;
         /** Must match one of the tool's `run` patterns. Never the files' flags: the app adds them. */
@@ -627,6 +685,15 @@ declare namespace K8sDockside {
         exec(tool: string, args: string[]): Promise<ToolOutput>;
         /** `exec`, then stdout as JSON. Rejects with stderr on a non-zero code. */
         json<T = unknown>(tool: string, args: string[]): Promise<T>;
+        /**
+         * Runs a command the manifest declares as an extraction -- a `read`
+         * entry `{ command, extract }` -- and resolves with only the fields it
+         * names, read out of the output by the app. The output itself, and
+         * stderr, never reach the page. Rejects for a command that is not an
+         * extraction, and when the command failed with nothing to read, by
+         * its exit code alone. Absent on an app older than 0.1.33.
+         */
+        extract?: (tool: string, args: string[]) => Promise<ToolExtracted[]>;
         /** Asks to run a `run` command, confirmed by the user, in the tool's console in the dock. */
         run(request: ToolRunRequest): Promise<{ command: string }>;
         /** Opens the tool's console in the dock. */
@@ -852,6 +919,17 @@ declare namespace K8sDockside {
          * an app older than 0.0.25: check for it.
          */
         registry?: Registry;
+
+        /**
+         * The published releases of a GitHub repository the manifest names in
+         * `"ui": { "releases": [{ "github": "owner/repo" }] }`, asked for by
+         * the app: newest first, never a draft. Rejects for a repository the
+         * manifest does not name, when the user has switched release lists
+         * off, or when GitHub cannot be reached and the app holds no earlier
+         * list -- so keep a list of your own to fall back on. Absent on an app
+         * older than 0.1.33: check for it.
+         */
+        releases?: (repo: string, opts?: ReleasesOptions) => Promise<GitHubReleaseList>;
 
         /**
          * The in-cluster services the manifest declares, called by the app on
