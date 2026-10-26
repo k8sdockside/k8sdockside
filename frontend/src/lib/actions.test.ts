@@ -53,7 +53,7 @@ describe('what every object can do', () => {
 
 describe('what particular kinds can do', () => {
     test('a pod offers its logs, and to be evicted rather than deleted', () => {
-        expect(ids('pods')).toEqual(['edit', 'logs', 'shell', 'forward', 'evict', 'compare', 'delete']);
+        expect(ids('pods')).toEqual(['edit', 'logs', 'shell', 'debug', 'forward', 'evict', 'compare', 'delete']);
     });
 
     // A workload's logs are every container of every pod its selector finds,
@@ -73,7 +73,7 @@ describe('what particular kinds can do', () => {
     test('a node can be cordoned and drained, and says what is on it first', () => {
         // Pods comes before both: "what is actually running here" is the
         // question asked immediately before cordoning or draining.
-        expect(ids('nodes')).toEqual(['edit', 'shell', 'nodepods', 'cordon', 'drain', 'compare', 'delete']);
+        expect(ids('nodes')).toEqual(['edit', 'shell', 'debug', 'nodepods', 'cordon', 'drain', 'compare', 'delete']);
     });
 
     // A shell on a node is a privileged pod created on it rather than an exec,
@@ -189,6 +189,16 @@ describe('how the bar treats each one', () => {
     // use: which shell and which terminal are settings, answered once.
     test('a shell just opens', () => {
         expect(actionsFor('pods').find((a) => a.id === 'shell')?.form).toBe('immediate');
+    });
+
+    // Every way of debugging creates something in the cluster, so it asks --
+    // and only the two kinds kubectl debug takes offer it.
+    test('debug asks first, and only on a pod or a node', () => {
+        expect(actionsFor('pods').find((a) => a.id === 'debug')?.form).toBe('debug');
+        expect(actionsFor('nodes').find((a) => a.id === 'debug')?.form).toBe('debug');
+        for (const kind of ['deployments', 'services', 'configmaps']) {
+            expect(ids(kind)).not.toContain('debug');
+        }
     });
 
     test('cordon and restart just happen', () => {

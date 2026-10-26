@@ -16,6 +16,7 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { TerminalService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
 import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
+import type { DebugRequest } from './debug.svelte';
 
 /** What a terminal is open on. */
 export interface ShellTarget {
@@ -38,6 +39,17 @@ export interface ShellDoc {
     node: string;
     /** Every container that could be attached to, for the picker. */
     containers: kube.ContainerRef[];
+    /** The namespace the session's pod is in, which for a node is the debug pod's. */
+    namespace: string;
+    /** The pod a debug session made -- a copy, or a pod on a node -- if any. */
+    created: string;
+    /** Whether that pod outlives the session, and so is the user's to delete. */
+    kept: boolean;
+    /**
+     * How a local terminal's shell ended, when it ended by itself: its exit
+     * status. Null while it runs, and for every other kind of session.
+     */
+    exitCode: number | null;
 }
 
 const BLANK: ShellDoc = {
@@ -48,6 +60,10 @@ const BLANK: ShellDoc = {
     container: '',
     node: '',
     containers: [],
+    namespace: '',
+    created: '',
+    kept: false,
+    exitCode: null,
 };
 
 function message(err: unknown): string {
@@ -85,10 +101,32 @@ function decode(data: string): Uint8Array {
  */
 export const TOOL_CONSOLE = 'tool';
 
+/**
+ * The kind a debug session is opened with. Its namespace and name are the
+ * object debugged -- a pod's, or a node's with no namespace -- and what it is
+ * asked for is held beside it rather than in the tab: see primeDebug.
+ */
+export const DEBUG_SESSION = 'debug';
+
+/**
+ * The kind a local terminal is opened with: a shell on this machine, behind a
+ * real pseudo-terminal. Its contextId is the cluster it is scoped to -- the
+ * shell's KUBECONFIG holds that context alone -- or empty for a plain one; its
+ * namespace only keeps one tab apart from the next, and its name is what the
+ * dock tab is called.
+ */
+export const LOCAL_SHELL = 'local';
+
 /** What a tool console is given: defaults for every command, and one to run first. */
 interface ToolStart {
     defaults: string[];
     initial: string[];
+    /**
+     * Whether the first command is one of the tool's interactive ones -- a
+     * full-screen program, run in the console's pseudo-terminal -- rather
+     * than a run command. The backend checks it against that allow-list.
+     */
+    interactive: boolean;
 }
 
 /** One terminal's xterm instance and the addon that sizes it. */
@@ -105,6 +143,8 @@ class Terminals {
     private routes = new Map<string, string>();
     /** What each tool console is started with; the initial command is used once. */
     private toolStarts = new Map<string, ToolStart>();
+    /** What each debug session was asked for, kept so the tab can start it. */
+    private debugStarts = new Map<string, DebugRequest>();
     private fontSize = 12;
     private scrollback = 5000;
 
@@ -128,6 +168,14 @@ class Terminals {
                 doc.status = 'error';
                 doc.error = chunk.error;
                 attached?.term.write(`\r\n\x1b[31m${chunk.error}\x1b[0m\r\n`);
+            } else if (chunk.exited) {
+                // A local shell that ended by itself: `exit`, or Ctrl-D. Its
+                // status is worth saying, and is not an error either way.
+                doc.status = 'ended';
+                doc.exitCode = chunk.exitCode ?? 0;
+                attached?.term.write(
+                    `\r\n\x1b[2mThe shell exited with status ${doc.exitCode}. Press Restart to start it again.\x1b[0m\r\n`,
+                );
             } else {
                 doc.status = 'ended';
                 attached?.term.write('\r\n\x1b[2mThe session has ended.\x1b[0m\r\n');
@@ -316,7 +364,12 @@ class Terminals {
         // The picker's contents, which a node shell does not have: a node's
         // "containers" are the one this app is about to create, and it is not
         // something to choose between.
-        if (target.kind !== 'nodes' && target.kind !== TOOL_CONSOLE) {
+        if (
+            target.kind !== 'nodes' &&
+            target.kind !== TOOL_CONSOLE &&
+            target.kind !== DEBUG_SESSION &&
+            target.kind !== LOCAL_SHELL
+        ) {
             try {
                 const containers = await TerminalService.Containers(
                     target.contextId,
@@ -341,9 +394,43 @@ class Terminals {
      * command to run is started again, so that the command runs where the
      * user is looking rather than in a session they may have closed.
      */
-    async primeTool(id: string, target: ShellTarget, defaults: string[], initial: string[]): Promise<void> {
-        this.toolStarts.set(id, { defaults, initial });
+    async primeTool(
+        id: string,
+        target: ShellTarget,
+        defaults: string[],
+        initial: string[],
+        interactive = false,
+    ): Promise<void> {
+        this.toolStarts.set(id, { defaults, initial, interactive });
         if (this.docs[id] && initial.length) await this.start(id, target, '', '');
+    }
+
+    /**
+     * Says what a debug session is to be. A tab already open on the same
+     * object is started again with the new request, so asking to debug twice
+     * runs what was asked the second time rather than focusing the first.
+     */
+    async primeDebug(id: string, target: ShellTarget, request: DebugRequest): Promise<void> {
+        this.debugStarts.set(id, request);
+        if (this.docs[id]) await this.start(id, target, '', '');
+    }
+
+    /** Whether a tab has a debug request to start, which a restored one would not. */
+    hasDebug(id: string): boolean {
+        return this.debugStarts.has(id);
+    }
+
+    /**
+     * Deletes the pod a debug session made and kept. The backend refuses any
+     * pod that does not carry the debug label, so this cannot reach further
+     * than what the session itself created.
+     */
+    async removeDebugPod(id: string, contextId: string): Promise<void> {
+        const doc = this.docs[id];
+        if (!doc?.created) return;
+        await TerminalService.DeleteDebugPod(contextId, doc.namespace, doc.created);
+        doc.created = '';
+        doc.kept = false;
     }
 
     /** Attaches to a different container, which is a new session. */
@@ -366,6 +453,7 @@ class Terminals {
         this.terms.get(id)?.term.dispose();
         this.terms.delete(id);
         this.toolStarts.delete(id);
+        this.debugStarts.delete(id);
         delete this.docs[id];
     }
 
@@ -383,6 +471,7 @@ class Terminals {
         this.stop(id);
         doc.status = 'opening';
         doc.error = '';
+        doc.exitCode = null;
 
         const attached = this.terms.get(id);
         attached?.term.reset();
@@ -391,6 +480,10 @@ class Terminals {
             const session =
                 target.kind === TOOL_CONSOLE
                     ? await this.openTool(id, target)
+                    : target.kind === DEBUG_SESSION
+                    ? await this.openDebug(id, target)
+                    : target.kind === LOCAL_SHELL
+                    ? await TerminalService.OpenLocal(target.contextId)
                     : target.kind === 'nodes'
                     ? await TerminalService.OpenNode(target.contextId, target.name)
                     : await TerminalService.Open(
@@ -411,6 +504,9 @@ class Terminals {
             current.pod = session.pod;
             current.container = session.container;
             current.node = session.node;
+            current.namespace = session.namespace ?? '';
+            current.created = session.created ?? '';
+            current.kept = session.kept ?? false;
             current.status = 'running';
             this.routes.set(session.id, id);
 
@@ -431,10 +527,25 @@ class Terminals {
     /** Opens a tool console, running its initial command once. */
     private openTool(id: string, target: ShellTarget) {
         const [pluginId, toolId] = target.namespace.split('/');
-        const start = this.toolStarts.get(id) ?? { defaults: [], initial: [] };
+        const start = this.toolStarts.get(id) ?? { defaults: [], initial: [], interactive: false };
         // Used once: reconnecting must not run an upgrade a second time.
-        this.toolStarts.set(id, { defaults: start.defaults, initial: [] });
+        this.toolStarts.set(id, { defaults: start.defaults, initial: [], interactive: false });
+        if (start.interactive && start.initial.length) {
+            return TerminalService.OpenToolInteractive(target.contextId, pluginId ?? '', toolId ?? '', start.initial);
+        }
         return TerminalService.OpenTool(target.contextId, pluginId ?? '', toolId ?? '', start.defaults, start.initial);
+    }
+
+    /** Opens a debug session from what primeDebug was given. */
+    private openDebug(id: string, target: ShellTarget) {
+        const request = this.debugStarts.get(id);
+        if (!request) {
+            // A debug tab with nothing to start: one the window brought back
+            // without its request. Creating something in a cluster is not
+            // done on a guess, so it says so instead.
+            return Promise.reject(new Error(`Nothing to debug on ${target.name} — start it again from its Debug button.`));
+        }
+        return TerminalService.OpenDebug(target.contextId, request);
     }
 
     /** Closes whatever session a tab is on, if any. */

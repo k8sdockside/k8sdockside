@@ -168,8 +168,9 @@ through `window.k8sdockside`. Each call is a promise; a failure rejects with an
 | Staying in step | `on('theme', fn)`, `on('datetime', fn)`, `resize(height)` in a panel |
 | Dates and times | `format.date(when)`, `format.time(when)`, `format.dateTime(when)`, `format.age(when)`, `format.moment(when)` — written the way the user chose in **Settings → Dates and times**, as the app writes them (0.1.10 and newer; check it exists) |
 | Registries | `registry.lookup({ image })` — the tags an image's registry lists and what its tag points at now, asked by the app for an image the cluster runs (0.0.25 and newer; needs `"ui": { "registries": true }`) |
+| Releases on GitHub | `releases('owner/repo')` — a public repository's releases, newest first, asked by the app; `stale` when GitHub could not be asked just now (0.1.33 and newer; needs `"ui": { "releases": [{ "github": "owner/repo" }] }`; check it exists, and fall back on a table of your own — the user can switch it off) |
 | Services in the cluster | `services.get({ service, path, query })`, `services.json(...)` — a GET to a Service the manifest declares, made by the app through the API server (0.0.27 and newer; needs `"ui": { "services": [...] }`) |
-| Command line tools | `tools.status(id)`, `tools.exec(id, args)`, `tools.json(id, args)`, `tools.run({ tool, args })`, `tools.console({ tool })`, `tools.external(id, args)`, `tools.chooseFile(id, file)` — a CLI on the user's machine, run by the app with the files the user chose for the cluster (0.1.23 and newer, desktop only; needs `"ui": { "tools": [...] }` — see below) |
+| Command line tools | `tools.status(id)`, `tools.exec(id, args)`, `tools.json(id, args)`, `tools.extract(id, args)` (0.1.33 and newer), `tools.run({ tool, args })`, `tools.console({ tool })`, `tools.external(id, args)`, `tools.chooseFile(id, file)` — a CLI on the user's machine, run by the app with the files the user chose for the cluster (0.1.23 and newer, desktop only; needs `"ui": { "tools": [...] }` — see below) |
 | Remembering | `storage.get(key)`, `storage.set(key, value)`, `storage.remove(key)`, `storage.keys()` — kept by the app per plugin and per cluster, across restarts (0.0.19 and newer; check it exists) |
 
 Every call, with what it takes and returns, is in
@@ -219,6 +220,8 @@ Content-Security-Policy that repeats it. It:
 - has **no network**: `fetch`, XHR and websockets are refused. With
   `"ui": { "registries": true }` the app asks image registries on its behalf
   — anonymously, and only about images the tab's cluster runs. With
+  `"ui": { "releases": [{ "github": "owner/repo" }] }` the app asks GitHub
+  for those repositories' release lists, and no others. With
   `"ui": { "services": [...] }` the app makes GET requests for it to the
   Services declared there, under the paths declared there, and nowhere else.
 
@@ -257,19 +260,91 @@ manifest can declare it:
 - `read` commands run when the page asks (`tools.exec`), and their output comes
   back. Allow only commands that look: a `**` after a command that has
   sub-actions (`service **`) would let a page stop a service.
+- A `read` entry may instead be an **extraction** (0.1.33 and newer), for a
+  command whose output holds secrets next to the one thing a page needs. The
+  app runs it, parses the output itself, and hands the page only the named
+  fields -- never the output, and never stderr. See below.
 - `run` commands (`tools.run`) are shown to the user as the exact command line,
   files included, and run in a console in the dock only if they say yes.
-- `interactive` commands (`tools.external`) open in the user's own terminal.
+- `interactive` commands (`tools.external`) are full-screen ones -- a
+  dashboard, a TUI. They run in a tool console in the dock, behind a real
+  pseudo-terminal, unless the user has set *Settings → Terminal → Open shells*
+  to their own terminal, in which case they open there.
 - `tools.console` opens the tool's console in the dock: the user types the
   tool's commands, with the files and the page's `defaults` added. It is not a
-  shell -- no pipes, no variables -- and runs nothing but the tool.
+  shell -- no pipes, no variables -- and runs nothing but the tool. Each
+  command runs in a pseudo-terminal, so it sees a terminal of the dock's size
+  and gets every key typed while it runs, Ctrl-C included.
 
 Every command is a process with its arguments, never a shell line. The plugin's
 card in Settings lists every pattern before any page runs one.
 
+#### Reading only named fields: extractions
+
+Talos keeps the installer image a machine was installed from in its machine
+config, next to the cluster's certificates and tokens. A page that needs the
+image should not be handed the config. An extraction is a `read` entry that is
+an object rather than a pattern:
+
+```json
+"read": [
+    "get machinestatus **",
+    {
+        "command": "get machineconfig **",
+        "extract": {
+            "format": "yaml-documents",
+            "output": ["-o", "yaml"],
+            "fields": ["machine.install.image"]
+        }
+    }
+]
+```
+
+```js
+const found = await k8sdockside.tools.extract('talosctl', ['get', 'machineconfig', '--nodes', '10.0.0.2']);
+// [{ node: '10.0.0.2', fields: { 'machine.install.image': 'factory.talos.dev/nocloud-installer/…:v1.13.0' } }]
+```
+
+The guarantee: **the app parses the output itself, and the page only ever
+receives the named fields' values** -- each a string, a number or true/false.
+
+- `format` is how the output is read. `yaml-documents`: one or more YAML
+  documents, each a resource with a `spec` (what `talosctl get … -o yaml`
+  prints, one per machine). A `spec` that is a mapping is used as it is; one
+  that is text is parsed as YAML documents in turn, as a Talos machine config
+  is. Each field is looked for in those documents, and the first that has it
+  wins. The answer is one `{ node, fields, error? }` per resource. A field that
+  is not there is left out of `fields`.
+- `fields` are dotted names -- letters, digits, `_` and `-`, at most 8 deep,
+  at most 16 of them. A field that leads to a mapping or a list is not handed
+  back: `error` says so, and the other fields still are.
+- `output` are arguments the app adds after the page's own, to fix the format
+  the tool prints. The page may not give those flags itself, nor `--`; coming
+  last, they are the tool's last word on the format. Without them a page could
+  ask for a format -- a template, say -- that dresses the secrets up as one of
+  the fields.
+- A command that fails with nothing to read is refused with its exit code
+  alone: stderr is not passed on.
+- A command an extraction matches may be run **no other way**: not by
+  `tools.exec`, not by `tools.run`, not as an `interactive` one. The manifest
+  is refused if any plain `read`, `run` or `interactive` pattern could match
+  the same command -- `get **` or `get *` next to `get machineconfig **`, say --
+  and at run time an extraction wins over every other list anyway.
+- The app matches words, not the tool's meaning: it cannot know that
+  `talosctl get mc` is the same as `get machineconfig`. Do not allow a
+  command's aliases in plain patterns; the card lists every pattern, so a user
+  can see if a plugin does.
+- `k8sdockside.tools.extract` is absent on an app older than 0.1.33: test for
+  it, and fall back.
+
+The plugin's card says, for each extraction, which fields of which command its
+pages read. The console in the dock is the user's own: what they type there
+runs as they type it.
+
 The plugin's card in Settings says how many kinds its pages read, whether
-they may ask to change them, whether they ask registries, and which services
-they call, before anyone opens one. Keep `ui.kinds` to what
+they may ask to change them, whether they ask registries, which GitHub
+repositories' releases they ask for, and which services they call, before
+anyone opens one. Keep `ui.kinds` to what
 you use: it is the first thing a careful user reads.
 
 ## Credit

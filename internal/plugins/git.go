@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/k8sdockside/k8sdockside/internal/procattr"
 )
 
 // A plugin kept in a repository of its own is installed by cloning it into the
@@ -68,6 +70,16 @@ func gitPath() (string, error) {
 	return path, nil
 }
 
+// GitAvailable reports whether git can be found, with the reason in words
+// when it cannot. Installing and updating ask it before doing anything else,
+// so that a machine without git hears so up front -- not as the failure of
+// whichever step happened to need git first -- and the settings view asks it
+// to say so before anyone presses Install.
+func GitAvailable() error {
+	_, err := gitPath()
+	return err
+}
+
 func runGit(dir string, args ...string) error {
 	_, err := gitOutput(dir, args...)
 	return err
@@ -84,6 +96,7 @@ func gitOutput(dir string, args ...string) (string, error) {
 
 	cmd := exec.CommandContext(ctx, git, args...) // #nosec G204 -- the URL is checked by ValidGitURL and passed after --
 	cmd.Dir = dir
+	procattr.Hide(cmd)
 	// Never stop to ask for a password: there is no terminal to ask in, and a
 	// clone waiting on one would hang until the timeout.
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=")
@@ -155,6 +168,9 @@ func gitSaid(text string) string {
 // A folder already there is left alone: that is Update's job, and cloning over
 // it would throw away whatever is in it.
 func Clone(dir, url string) (string, error) {
+	if err := GitAvailable(); err != nil {
+		return "", err
+	}
 	url = strings.TrimSpace(url)
 	if !ValidGitURL(url) {
 		return "", fmt.Errorf("%q is not a repository address this app will clone -- use https://, ssh:// or git@host:owner/repo", url)
@@ -188,6 +204,9 @@ func Clone(dir, url string) (string, error) {
 // is taken would leave no way forward in the app at all. A folder of that
 // name holding anything else is still left alone.
 func Install(dir, url string) (string, error) {
+	if err := GitAvailable(); err != nil {
+		return "", err
+	}
 	url = strings.TrimSpace(url)
 	if !ValidGitURL(url) {
 		return "", fmt.Errorf("%q is not a repository address this app will clone -- use https://, ssh:// or git@host:owner/repo", url)
@@ -271,5 +290,8 @@ func RepoOf(p Plugin) (string, bool) {
 // only: a clone someone has edited in place is theirs, and merging into it is
 // not a decision to make for them.
 func Pull(repo string) error {
+	if err := GitAvailable(); err != nil {
+		return err
+	}
 	return runGit(repo, "pull", "--ff-only")
 }

@@ -150,6 +150,7 @@ func normalise(s Settings) Settings {
 		s.Preferences.MetricsRange = 0
 	}
 	s.Preferences.Terminal = normaliseTerminal(s.Preferences.Terminal)
+	s.Preferences.Debug = normaliseDebug(s.Preferences.Debug)
 	s.Preferences.Helm = normaliseHelm(s.Preferences.Helm)
 	s.Preferences.Background = normaliseBackground(s.Preferences.Background)
 	s.Preferences.DateTime = normaliseDateTime(s.Preferences.DateTime)
@@ -159,8 +160,8 @@ func normalise(s Settings) Settings {
 		s.PortForwards = []PortForward{}
 	}
 	s.Updates.ReadVersion = strings.TrimSpace(s.Updates.ReadVersion)
-	// RestoreTabs, ShowLineNumbers, CheckForUpdates and DesktopNotifications
-	// are deliberately not defaulted: nil is a value in its own right for
+	// RestoreTabs, ShowLineNumbers, CheckForUpdates, PluginReleases and
+	// DesktopNotifications are deliberately not defaulted: nil is a value in its own right for
 	// each, meaning "never chosen", and it is resolved to true where it is
 	// read.
 	return s
@@ -436,7 +437,53 @@ func normaliseTerminal(t Terminal) Terminal {
 	if t.Scrollback < MinScrollback || t.Scrollback > MaxScrollback {
 		t.Scrollback = d.Scrollback
 	}
+	// A path typed with a stray space around it is still that path. Whether
+	// it exists is not checked here: that is a question about this machine,
+	// asked when a terminal opens, with an answer the terminal can show.
+	t.LocalShell = strings.TrimSpace(t.LocalShell)
 	return t
+}
+
+// normaliseDebug fills in what a settings file does not say about debugging,
+// and tidies the list of added images: trimmed, each once, and never one of the
+// presets, which are offered anyway.
+//
+// The default image is kept as written whatever it is -- an image typed into
+// the launch form and made the default does not have to be in either list --
+// and only an empty one falls back.
+func normaliseDebug(d Debug) Debug {
+	def := DefaultDebug()
+	d.Image = strings.TrimSpace(d.Image)
+	if d.Image == "" {
+		d.Image = def.Image
+	}
+
+	images := make([]string, 0, len(d.Images))
+	for _, image := range d.Images {
+		trimmed := strings.TrimSpace(image)
+		if trimmed == "" || slices.Contains(images, trimmed) || isDebugPreset(trimmed) {
+			continue
+		}
+		images = append(images, trimmed)
+	}
+	d.Images = images
+
+	// An unknown profile is one kubectl would refuse, so it is not kept to
+	// fail later: it falls back to the one kubectl itself uses.
+	if !slices.Contains(DebugProfiles, d.Profile) {
+		d.Profile = def.Profile
+	}
+	return d
+}
+
+// isDebugPreset reports whether an image is one of the presets.
+func isDebugPreset(image string) bool {
+	for _, preset := range debugPresets {
+		if preset.Image == image {
+			return true
+		}
+	}
+	return false
 }
 
 // normaliseHelm repairs a timeout a settings file states impossibly, and tidies
@@ -573,7 +620,12 @@ func clone(s Settings) Settings {
 		notify := *s.Preferences.DesktopNotifications
 		out.Preferences.DesktopNotifications = &notify
 	}
+	if s.Preferences.PluginReleases != nil {
+		releases := *s.Preferences.PluginReleases
+		out.Preferences.PluginReleases = &releases
+	}
 	out.Preferences.Terminal.Shells = slices.Clone(s.Preferences.Terminal.Shells)
+	out.Preferences.Debug.Images = slices.Clone(s.Preferences.Debug.Images)
 	out.PortForwards = slices.Clone(s.PortForwards)
 	out.PluginState = make(map[string]map[string]map[string]string, len(s.PluginState))
 	for plugin, contexts := range s.PluginState {

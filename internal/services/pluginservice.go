@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/k8sdockside/k8sdockside/internal/appconfig"
+	"github.com/k8sdockside/k8sdockside/internal/ghreleases"
 	"github.com/k8sdockside/k8sdockside/internal/kube"
 	"github.com/k8sdockside/k8sdockside/internal/plugins"
 	"github.com/k8sdockside/k8sdockside/internal/registry"
@@ -52,6 +53,11 @@ type PluginService struct {
 
 	// registries answers the views that ask what tags an image has.
 	registries *registry.Client
+	// releases answers the views that ask for a GitHub repository's
+	// releases; releasesOff forbids that (the web version's operator
+	// switched off requests to GitHub).
+	releases    *ghreleases.Client
+	releasesOff bool
 
 	mu     sync.RWMutex
 	cached *plugins.Catalogue
@@ -71,6 +77,7 @@ func NewPluginService(store *appconfig.Store, configs *KubeconfigService, watche
 		configs:    configs,
 		watcher:    watcher,
 		registries: registry.New("k8sdockside/" + DisplayVersion() + " (+https://github.com/" + updates.Repo + ")"),
+		releases:   newReleasesClient(),
 		running:    map[string]runningImages{},
 		found:      map[string]foundService{},
 	}
@@ -636,6 +643,12 @@ type ClusterProbe struct {
 //
 // It is one list per probe or object requirement and nothing at all for a
 // plugin that has none, so a cluster is usually one request or none.
+//
+// The plugins are asked about at once rather than one after another. Each
+// question is a round trip, and this runs every time a cluster is opened:
+// against a cluster at the far end of a VPN, asking in turn kept the plugin
+// rows unsettled for the sum of them rather than for the slowest. The answers
+// are still listed in the catalogue's order.
 func (s *PluginService) Probe(contextID string) (ClusterProbe, error) {
 	out := ClusterProbe{Known: []string{}, Absent: []string{}}
 	ctx, ok := s.configs.lookup(contextID)
@@ -645,24 +658,46 @@ func (s *PluginService) Probe(contextID string) (ClusterProbe, error) {
 	catalogue := s.catalogue()
 	cl := &clusterFor{watcher: s.watcher, ctx: ctx}
 
-	for _, known := range plugins.KnownPlugins() {
-		if len(known.DetectWorkloads) == 0 {
+	var known []plugins.Known
+	for _, k := range plugins.KnownPlugins() {
+		if len(k.DetectWorkloads) == 0 {
 			continue
 		}
-		if _, installed := catalogue.InstalledHere(known.ID); installed {
+		if _, installed := catalogue.InstalledHere(k.ID); installed {
 			continue
 		}
-		if here, _ := known.RunsIn(cl); here {
-			out.Known = append(out.Known, known.ID)
+		known = append(known, k)
+	}
+	var installed []plugins.Plugin
+	for _, plugin := range catalogue.Plugins {
+		if !plugin.Disabled {
+			installed = append(installed, plugin)
 		}
 	}
 
-	for _, plugin := range catalogue.Plugins {
-		if plugin.Disabled {
-			continue
+	running := make([]bool, len(known))
+	missing := make([]bool, len(installed))
+	var wg sync.WaitGroup
+	for i, k := range known {
+		wg.Go(func() {
+			running[i], _ = k.RunsIn(cl)
+		})
+	}
+	for i, plugin := range installed {
+		wg.Go(func() {
+			here, told := s.hasWhatItNeeds(plugin, cl)
+			missing[i] = told && !here
+		})
+	}
+	wg.Wait()
+
+	for i, k := range known {
+		if running[i] {
+			out.Known = append(out.Known, k.ID)
 		}
-		here, told := s.hasWhatItNeeds(plugin, cl)
-		if told && !here {
+	}
+	for i, plugin := range installed {
+		if missing[i] {
 			out.Absent = append(out.Absent, plugin.ID)
 		}
 	}
@@ -762,6 +797,16 @@ func (s *PluginService) InstallFromGit(ctx context.Context, url string) (plugins
 	s.forget()
 	cat := s.catalogue()
 	return cat, installed(cat, dest)
+}
+
+// GitMissing says why installing from a repository cannot work on this
+// machine -- git is not installed -- or nothing when it can. The settings view
+// shows it beside the Install buttons, before anyone presses one.
+func (s *PluginService) GitMissing() string {
+	if err := plugins.GitAvailable(); err != nil {
+		return err.Error()
+	}
+	return ""
 }
 
 // InstallKnown installs one of the plugins the app knows of, from the

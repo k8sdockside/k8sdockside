@@ -330,6 +330,7 @@
                     readable: [...(p.ui?.readable ?? [])],
                     write: p.ui?.write ?? false,
                     registries: p.ui?.registries ?? false,
+                    releases: [...(p.ui?.releases ?? [])],
                     tools: (p.ui?.tools ?? []).map((t) => ({ id: t.id, label: t.label, command: t.command })),
                     services: (p.ui?.services ?? []).map((svc) => ({ id: svc.id, label: svc.label, paths: [...svc.paths] })),
                     actions: (p.actions ?? []).map((a) => ({ id: a.id, label: a.label, kind: a.kind })),
@@ -476,6 +477,16 @@
                 );
                 return { ...found, tags: found?.tags ?? [] };
             }
+            case 'releases': {
+                // Asked by the app, since the page has no network; Go checks
+                // the declaration again, and whether the user allows it.
+                const repo = text(params.repo);
+                if (!(p.ui?.releases ?? []).some((r) => r.toLowerCase() === repo.toLowerCase())) {
+                    throw new Error(`${p.name} does not declare "ui": { "releases": [{ "github": "${repo}" }] }`);
+                }
+                const found = await PluginService.Releases(p.id, repo, params.refresh === true);
+                return { ...found, releases: found?.releases ?? [] };
+            }
             case 'services.get': {
                 // A GET to one of the plugin's declared in-cluster services,
                 // made by the app through the API server. Go checks the
@@ -496,6 +507,13 @@
                 return PluginService.ToolForgetFile(contextId, p.id, toolOf(p, params).id, text(params.file));
             case 'tools.exec':
                 return PluginService.ToolExec(contextId, p.id, toolOf(p, params).id, wordsOf(params.args));
+            case 'tools.extract':
+                // A read entry that is an extraction: Go runs the command,
+                // parses its output and answers with only the fields the
+                // manifest names. The output itself never comes this way.
+                return (
+                    (await PluginService.ToolExtract(contextId, p.id, toolOf(p, params).id, wordsOf(params.args))) ?? []
+                ).map((r) => ({ node: r.node, fields: { ...(r.fields ?? {}) }, ...(r.error ? { error: r.error } : {}) }));
             case 'tools.run': {
                 // Written out by Go exactly as it would be typed, shown to the
                 // user, and run only if they say yes -- in a console in the
@@ -521,9 +539,19 @@
                 workspace.openToolConsole(contextId, p.id, tool.id, consoleName(tool, params), wordsOf(params.defaults), []);
                 return null;
             }
-            case 'tools.external':
-                await TerminalService.LaunchTool(contextId, p.id, toolOf(p, params).id, wordsOf(params.args));
+            case 'tools.external': {
+                // An interactive, full-screen command. In the dock's own
+                // terminal unless the user has chosen theirs in Settings --
+                // the console there has a real pseudo-terminal, so it draws
+                // as it would anywhere else.
+                const tool = toolOf(p, params);
+                if (workspace.terminal.mode === 'external') {
+                    await TerminalService.LaunchTool(contextId, p.id, tool.id, wordsOf(params.args));
+                } else {
+                    workspace.openToolCommand(contextId, p.id, tool.id, consoleName(tool, params), wordsOf(params.args));
+                }
                 return null;
+            }
             case 'patch': {
                 const target = targetOf(params);
                 if (!p.ui?.write) throw new Error(`${p.name} does not declare "ui": { "write": true }`);

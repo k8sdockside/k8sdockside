@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -67,6 +68,10 @@ type clusterClient struct {
 	resetMu sync.Mutex
 	resetAt time.Time
 
+	// warming is set while warmDiscovery is filling the cache in the
+	// background, so a burst of pings starts one fill rather than several.
+	warming atomic.Bool
+
 	// delaySamples is the last scrape of each kubelet's counters, keyed by node.
 	// A counter says nothing on its own -- a rate needs the one before it -- so
 	// the previous reading is kept here, beside the connection it was read
@@ -126,7 +131,7 @@ func newClusterClient(kc Context) (*clusterClient, error) {
 		return nil, fmt.Errorf("client for context %q: %w", kc.Name, err)
 	}
 
-	disco, err := discovery.NewDiscoveryClientForConfig(cfg)
+	disco, err := discovery.NewDiscoveryClientForConfig(discoveryConfig(cfg))
 	if err != nil {
 		return nil, fmt.Errorf("discovery client for context %q: %w", kc.Name, err)
 	}
@@ -145,6 +150,46 @@ func newClusterClient(kc Context) (*clusterClient, error) {
 		// reset keeps that first miss from fetching the same listing twice.
 		resetAt: time.Now(),
 	}, nil
+}
+
+// discoveryBurst is the discovery client's burst, which is client-go's own
+// default for discovery and what kubectl uses. Against a server without
+// aggregated discovery, filling the cache is one GET per group-version -- well
+// over a hundred on a cluster with a few operators installed -- and at the
+// burst the other clients share, the tail of that fan-out queued behind the
+// rate limiter on exactly the request the first tab of a context waits for.
+const discoveryBurst = 300
+
+// discoveryConfig is the connection the discovery client is built from: the
+// same credentials and dialer, with a burst sized for the fan-out and a request
+// timeout of callTimeout rather than client-go's thirty-two seconds, so a
+// cluster that has stopped answering mid-discovery fails a tab in the same
+// time any other one-shot read would.
+func discoveryConfig(cfg *rest.Config) *rest.Config {
+	d := rest.CopyConfig(cfg)
+	d.Burst = discoveryBurst
+	d.Timeout = callTimeout
+	return d
+}
+
+// warmDiscovery fills the discovery cache if nothing has yet. The first lookup
+// of any kind needs the whole listing, and every caller on the context waits
+// behind whichever of them fetches it; starting it the moment the cluster is
+// known to answer means the tab opened a moment later usually finds it done.
+//
+// Once at a time: a second call while one is running returns at once rather
+// than queueing behind the cache's lock for a listing already on its way.
+func (c *clusterClient) warmDiscovery() {
+	if !c.warming.CompareAndSwap(false, true) {
+		return
+	}
+	defer c.warming.Store(false)
+	if c.disco.Fresh() {
+		return
+	}
+	// The error is not this caller's to report: whoever needs the listing
+	// next asks for it again and reports what they get.
+	_, _ = serverResources(c.disco)
 }
 
 // refreshDiscovery throws the discovery cache away so the next lookup asks

@@ -279,6 +279,10 @@ type UI struct {
 	// which tags they have -- anonymously, through the app, since the views
 	// themselves cannot reach the network. See registry.Client.
 	Registries bool `json:"registries,omitzero"`
+	// Releases are the public GitHub repositories whose release lists the
+	// views may ask for -- by the app, anonymously, since the views cannot
+	// reach the network. Only these. See ghreleases.Client.
+	Releases []UIRelease `json:"releases,omitzero"`
 	// Services are the in-cluster Services the views may make GET requests
 	// to, through the API server. See UIService.
 	Services []UIService `json:"services,omitzero"`
@@ -484,6 +488,20 @@ func (p Plugin) CanWrite(kind string) bool {
 // registries about the images a cluster runs.
 func (p Plugin) CanAskRegistries() bool {
 	return p.UI != nil && p.UI.Registries
+}
+
+// CanAskReleases reports whether the plugin's own views may ask for the
+// release list of a GitHub repository: only one its manifest names.
+func (p Plugin) CanAskReleases(repo string) bool {
+	if p.UI == nil {
+		return false
+	}
+	for _, r := range p.UI.Releases {
+		if strings.EqualFold(r.GitHub, repo) {
+			return true
+		}
+	}
+	return false
 }
 
 // UIRoot is the folder on disk the plugin's own views are served from. Only a

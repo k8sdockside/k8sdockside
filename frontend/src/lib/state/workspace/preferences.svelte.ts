@@ -112,6 +112,10 @@ export abstract class WorkspacePreferences extends WorkspacePlugins {
         this.updatePreferences({ checkForUpdates });
     }
 
+    setPluginReleases(pluginReleases: boolean): void {
+        this.updatePreferences({ pluginReleases });
+    }
+
     setDesktopNotifications(desktopNotifications: boolean): void {
         this.updatePreferences({ desktopNotifications });
     }
@@ -170,6 +174,42 @@ export abstract class WorkspacePreferences extends WorkspacePlugins {
      */
     setTerminal(patch: Partial<Settings['preferences']['terminal']>): void {
         this.updatePreferences({ terminal: { ...this.settings.preferences.terminal, ...patch } });
+    }
+
+    // ----- debugging --------------------------------------------------------
+
+    /** The debug image, the images added beside the presets, and the profile. */
+    debug = $derived(this.settings.preferences.debug);
+
+    /**
+     * Changes part of the debug settings. A patch, for the reason setTerminal
+     * takes one: the settings view edits a field at a time.
+     */
+    setDebug(patch: Partial<Settings['preferences']['debug']>): void {
+        this.updatePreferences({ debug: { ...this.settings.preferences.debug, ...patch } });
+    }
+
+    /**
+     * Adds an image beside the presets. One already there, or one of the
+     * presets, is not added twice -- the store would drop it anyway.
+     */
+    addDebugImage(image: string, presets: string[] = []): void {
+        const trimmed = image.trim();
+        const current = this.settings.preferences.debug.images;
+        if (!trimmed || current.includes(trimmed) || presets.includes(trimmed)) return;
+        this.setDebug({ images: [...current, trimmed] });
+    }
+
+    /**
+     * Removes an added image. When it was the default, the default goes back
+     * to busybox rather than pointing at an image no longer offered.
+     */
+    removeDebugImage(image: string): void {
+        const debug = this.settings.preferences.debug;
+        this.setDebug({
+            images: debug.images.filter((i) => i !== image),
+            image: debug.image === image ? 'busybox' : debug.image,
+        });
     }
 
     // ----- helm -----------------------------------------------------------

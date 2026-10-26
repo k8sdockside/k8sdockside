@@ -151,6 +151,16 @@
             workspace.openHelp();
             return;
         }
+        // Ctrl+` on every platform, as in VS Code: a local terminal for the
+        // cluster in front, or a plain one. Ctrl rather than Cmd on macOS,
+        // where Cmd+` already cycles the app's windows.
+        if (event.ctrlKey && !event.metaKey && !event.altKey && (event.key === '`' || event.code === 'Backquote')) {
+            if (workspace.localTerminalAvailable) {
+                event.preventDefault();
+                workspace.openLocalTerminalHere();
+            }
+            return;
+        }
         if (!event.metaKey && !event.ctrlKey) return;
         // `code` as well as `key`, so the numeric keypad works and so that a
         // layout where + needs shift is still recognised.

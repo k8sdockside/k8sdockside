@@ -169,6 +169,10 @@ func (s *Store) SetPreferences(p Preferences) (Settings, error) {
 			notify := *p.DesktopNotifications
 			p.DesktopNotifications = &notify
 		}
+		if p.PluginReleases != nil {
+			releases := *p.PluginReleases
+			p.PluginReleases = &releases
+		}
 		p.DateTime = normaliseDateTime(p.DateTime)
 		p = normaliseAlerts(p)
 		d.Preferences = p
@@ -183,6 +187,14 @@ func (s *Store) CheckForUpdates() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.data.Preferences.CheckForUpdates == nil || *s.data.Preferences.CheckForUpdates
+}
+
+// PluginReleases is whether the app may ask GitHub for the release lists a
+// plugin's pages ask for, with "never chosen" resolved to yes.
+func (s *Store) PluginReleases() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.data.Preferences.PluginReleases == nil || *s.data.Preferences.PluginReleases
 }
 
 // MarkUpdateRead records that the user has seen the notice about one release.

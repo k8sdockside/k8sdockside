@@ -19,6 +19,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/k8sdockside/k8sdockside/internal/procattr"
 )
 
 const (
@@ -98,7 +100,9 @@ func version(path string, args []string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
 	// #nosec G204 -- a binary located above, with the manifest's own arguments.
-	out, _ := exec.CommandContext(ctx, path, args...).Output()
+	cmd := exec.CommandContext(ctx, path, args...)
+	procattr.Hide(cmd)
+	out, _ := cmd.Output()
 	return versionPattern.FindString(string(out))
 }
 
@@ -130,6 +134,7 @@ func Run(ctx context.Context, path string, args, env []string) (Output, error) {
 	// #nosec G204 -- a located binary; the arguments were matched against the
 	// manifest's patterns by the caller. No shell.
 	cmd := exec.CommandContext(ctx, path, args...)
+	procattr.Hide(cmd)
 	cmd.Env = append(os.Environ(), env...)
 	stdout, stderr := &limited{max: maxOutput}, &limited{max: maxOutput}
 	cmd.Stdout, cmd.Stderr = stdout, stderr

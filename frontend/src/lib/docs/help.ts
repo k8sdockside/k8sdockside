@@ -187,6 +187,7 @@ export const HELP: Page = {
                         ['`⌘,` / `Ctrl+,`', 'Open settings'],
                         ['`F1`', 'Open this help'],
                         ['`⌘B` / `Ctrl+B`', 'Show or hide the cluster tree'],
+                        ['**Ctrl+`**', 'Open a terminal on this machine, for the cluster in front (desktop app)'],
                         ['`⌘+` / `⌘-` / `⌘0`', 'Zoom in, out, and back to 100%'],
                         ['`⌘S` / `Ctrl+S`', 'Save the YAML being edited, or apply the YAML patch being written'],
                         ['`Esc`', 'Close a menu or the details panel'],
@@ -221,6 +222,8 @@ export const HELP: Page = {
                     items: [
                         '**Shell** opens a terminal in a container, in the dock or in your own terminal emulator. On a node it does what `kubectl debug node` does: a privileged pod, removed when the terminal closes.',
                         '**Forward** opens a port forward to a pod or a service, resolving the service port to the pod port for you. Forwards are listed under Network → Port Forwards, where they can be stopped, and are remembered between sessions as requests.',
+                        '**Terminal** — the terminal button on a cluster’s row, **File → New terminal**, or **Ctrl+`** — opens a shell on this machine in the dock. Opened for a cluster, its `KUBECONFIG` is a temporary file holding that cluster’s context alone, so `kubectl`, `helm` and the rest talk to that cluster and your own kubeconfig is not touched; the file is deleted when the tab closes. Which shell it runs is under **Settings → Terminal → Local shell**. When the shell exits, the tab shows its status and a **Restart** button.',
+                        'A plugin’s full-screen commands — `talosctl dashboard`, say — run in the dock too, in a real terminal, unless **Settings → Terminal** says to open shells in your own terminal.',
                     ],
                 },
                 {

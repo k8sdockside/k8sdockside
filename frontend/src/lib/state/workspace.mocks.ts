@@ -57,6 +57,7 @@ export const PluginService = {
     Known: vi.fn().mockResolvedValue([]),
     InstallKnown: vi.fn().mockResolvedValue({ plugins: [], dir: '', folders: [], problems: [] }),
     InstallFromGit: vi.fn().mockResolvedValue({ plugins: [], dir: '', folders: [], problems: [] }),
+    GitMissing: vi.fn().mockResolvedValue(''),
     HideSuggestion: vi.fn().mockResolvedValue({}),
     Probe: vi.fn().mockResolvedValue({ known: [], absent: [] }),
 };
@@ -81,6 +82,10 @@ export const TerminalService = {
     Externals: vi.fn().mockResolvedValue({ terminals: [], kubectl: '', reason: '' }),
     Launch: vi.fn().mockResolvedValue(undefined),
     LaunchNode: vi.fn().mockResolvedValue(undefined),
+    LaunchTool: vi.fn().mockResolvedValue(undefined),
+    OpenLocal: vi.fn().mockResolvedValue({ id: 'term-9', namespace: '', pod: '/bin/zsh', container: '', node: '' }),
+    OpenToolInteractive: vi.fn().mockResolvedValue({ id: 'term-8', namespace: '', pod: '', container: '', node: '' }),
+    LocalShells: vi.fn().mockResolvedValue({ shells: [], supported: true, reason: '' }),
 };
 
 export const PortForwardService = {

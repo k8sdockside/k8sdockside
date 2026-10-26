@@ -1,5 +1,6 @@
 <!--
-  A terminal: one container, or one node, with a shell running in it.
+  A terminal: one container, or one node, with a shell running in it -- or a
+  shell on this machine (a local terminal), scoped to one cluster or to none.
 
   What is on screen is xterm, and xterm does not live here. It lives in the
   terminals store, because this component is destroyed and rebuilt every time
@@ -15,9 +16,11 @@
     import { singularFor } from '../catalogue';
     import { alpha } from '../colors';
     import { session } from '../state/session.svelte';
-    import { terminals, TOOL_CONSOLE } from '../state/terminals.svelte';
+    import { DEBUG_SESSION, LOCAL_SHELL, terminals, TOOL_CONSOLE } from '../state/terminals.svelte';
+    import { notices } from '../state/notices.svelte';
     import { workspace, type DockTab } from '../state/workspace.svelte';
     import ErrorState from './ErrorState.svelte';
+    import { rememberSection } from './settings/section.svelte';
     import Icon from './Icon.svelte';
 
     interface Props {
@@ -31,6 +34,17 @@
     let onNode = $derived(tab.kind === 'nodes');
     /** A plugin tool's console rather than a shell: it has no container, and no other terminal to move to. */
     let onTool = $derived(tab.kind === TOOL_CONSOLE);
+    /**
+     * A kubectl debug session. It has no Reconnect: starting it again makes
+     * something new in the cluster, which is the Debug button's question to
+     * ask, not this bar's.
+     */
+    let onDebug = $derived(tab.kind === DEBUG_SESSION);
+    /** A shell on this machine, rather than in a cluster. */
+    let onLocal = $derived(tab.kind === LOCAL_SHELL);
+    /** Whether the kept debug pod's delete is waiting on its confirmation. */
+    let confirmingDelete = $state(false);
+    let deleting = $state(false);
 
     let host = $state<HTMLElement | null>(null);
 
@@ -75,11 +89,38 @@
     }
 
     let subject = $derived(
-        onTool ? `${tab.name} console` : onNode ? `node ${tab.name}` : `${singularFor(tab.kind)} ${tab.name}`,
+        onTool
+            ? `${tab.name} console`
+            : onLocal
+              ? tab.contextId
+                  ? `local terminal for ${tab.name}`
+                  : 'local terminal'
+              : onDebug
+              ? `debugging ${tab.name}`
+              : onNode
+                ? `node ${tab.name}`
+                : `${singularFor(tab.kind)} ${tab.name}`,
     );
+
+    /** Deletes the pod a kept debug session made, once confirmed. */
+    async function deleteDebugPod(): Promise<void> {
+        const pod = doc.created;
+        deleting = true;
+        try {
+            await terminals.removeDebugPod(tab.id, tab.contextId);
+            notices.inform(`Debug pod ${pod} deleted`);
+        } catch (err) {
+            notices.fail(err instanceof Error ? err.message : String(err));
+        } finally {
+            deleting = false;
+            confirmingDelete = false;
+        }
+    }
 
     /** What the bar says about where the session actually is. */
     let where = $derived.by(() => {
+        // A local terminal's "pod" is the shell it runs.
+        if (onLocal) return doc.pod;
         if (doc.node) return doc.pod ? `${doc.node} — via ${doc.pod}` : doc.node;
         if (!doc.pod) return '';
         return doc.pod === tab.name ? doc.container : `${doc.pod} · ${doc.container}`;
@@ -88,6 +129,17 @@
 
 <div class="shell" style:--ctx-color={color} style:--ctx-tint={alpha(color, 0.12)}>
     <div class="bar">
+        {#if onDebug}
+            <span class="tag" title="A kubectl debug session">debug</span>
+        {/if}
+        {#if onLocal}
+            <span
+                class="tag local"
+                title={tab.contextId
+                    ? 'A shell on this machine. Its KUBECONFIG holds this cluster’s context alone, so kubectl and helm talk to this cluster.'
+                    : 'A shell on this machine'}>local</span
+            >
+        {/if}
         <span class="what" title={subject}>{tab.name}</span>
 
         {#if where}
@@ -116,24 +168,41 @@
             {#if doc.status === 'opening'}
                 Opening…
             {:else if doc.status === 'running'}
-                Connected
+                {onLocal ? 'Running' : 'Connected'}
             {:else if doc.status === 'ended'}
-                Ended
+                {doc.exitCode !== null ? `Exited (${doc.exitCode})` : 'Ended'}
             {:else if doc.status === 'error'}
                 Failed
             {/if}
         </span>
 
-        {#if doc.status === 'ended' || doc.status === 'error'}
+        {#if onDebug && doc.created && doc.kept && doc.status !== 'opening'}
+            {#if confirmingDelete}
+                <span class="ask">Delete pod {doc.created}?</span>
+                <button class="toggle" onclick={() => (confirmingDelete = false)}>Cancel</button>
+                <button class="toggle danger" disabled={deleting} onclick={deleteDebugPod}>Delete</button>
+            {:else}
+                <button
+                    class="toggle"
+                    title="Delete the pod this debug session made and kept"
+                    onclick={() => (confirmingDelete = true)}
+                >
+                    <Icon name="trash" size={13} />
+                    Delete pod
+                </button>
+            {/if}
+        {/if}
+
+        {#if (doc.status === 'ended' || doc.status === 'error') && !onDebug}
             <button class="toggle" onclick={() => terminals.restart(tab.id, tab)}>
                 <Icon name="refresh" size={13} />
-                Reconnect
+                {onLocal ? 'Restart' : 'Reconnect'}
             </button>
         {/if}
 
         <!-- Not in the web version: "your own terminal" would be one on the
              server, where nobody is looking. -->
-        {#if !session.server && !onTool}
+        {#if !session.server && !onTool && !onDebug && !onLocal}
             <button
                 class="toggle"
                 title="Open this shell in your own terminal instead"
@@ -150,6 +219,20 @@
              failure is shown as a page rather than as a line in a terminal
              nobody can see. -->
         <ErrorState message={doc.error} compact />
+        {#if onLocal}
+            <div class="fix">
+                <button
+                    class="toggle"
+                    onclick={() => {
+                        rememberSection('terminal');
+                        workspace.openSettings();
+                    }}
+                >
+                    <Icon name="settings" size={13} />
+                    Open Settings
+                </button>
+            </div>
+        {/if}
     {/if}
 
     <div class="body" bind:this={host}></div>
@@ -243,6 +326,37 @@
         background: var(--bg-raised);
         box-shadow: inset 0 0 0 1px var(--border);
         white-space: nowrap;
+    }
+
+    .tag {
+        font-size: 10.5px;
+        padding: 1px 6px;
+        border-radius: var(--radius-sm);
+        color: var(--warn);
+        box-shadow: inset 0 0 0 1px var(--warn);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .tag.local {
+        color: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--accent);
+    }
+
+    .fix {
+        display: flex;
+        justify-content: center;
+        padding: 0 10px 10px;
+    }
+
+    .ask {
+        font-size: 11.5px;
+        color: var(--text);
+        white-space: nowrap;
+    }
+
+    .toggle.danger {
+        color: var(--error);
     }
 
     .toggle:hover {

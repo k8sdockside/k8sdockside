@@ -163,11 +163,16 @@ guide to everything else is in the app: press **F1**.
 - **One other automatic request:** an update check with GitHub that carries
   nothing but the app's version. You can switch it off in *Settings →
   Notifications*. The web version never checks on its own.
+- **Release lists for plugins:** a plugin page that follows a product's
+  releases (Talos does) can have the app ask GitHub for the public release
+  list of a repository its manifest names, at most every six hours. It carries
+  nothing but the app's version and which repository; switch it off in
+  *Settings → Notifications*.
 - **Everything else happens only when you ask for it:** installing a plugin,
   upgrading a Helm release, opening a link.
 - **Your data goes to no one.** Beyond your clusters, the one fixed
   destination is GitHub (a US company owned by Microsoft), and it receives only
-  the update check. The app contacts no server in China, or anywhere else.
+  the update check and those release-list requests. The app contacts no server in China, or anywhere else.
 - **Plugins are fenced in.** Their pages run sandboxed with no network access,
   and read only the resource kinds they declare, never Secrets.
 
@@ -205,8 +210,11 @@ Results arrive cluster by cluster, and a Secret's values are never read.
 
 ### 💻 Shells, logs and port forwards
 A shell in any container, or on a node, in the app's dock or in your own
-terminal. Live logs per container. Port forwards that work out the pod's port
-from the service for you, and are remembered between sessions.
+terminal. A local terminal in the dock, like Lens has: your own shell, with
+`kubectl` and `helm` pointed at the one cluster you opened it from (desktop
+app; macOS, Linux and Windows). Live logs per container. Port forwards that
+work out the pod's port from the service for you, and are remembered between
+sessions.
 
 ### 📈 Metrics without setup
 A dashboard of capacity, requests and workload health. Prometheus is found

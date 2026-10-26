@@ -53,6 +53,19 @@ const resync = 10 * time.Minute
 // its own, whether or not this struct is still around.
 const idleGrace = 2 * time.Minute
 
+// informerGrace is how long a watch is kept after the last tab reading from it
+// closes.
+//
+// Only the active tab of a pane is mounted, so moving from a Pods tab on one
+// cluster to a tab on another unsubscribes the first -- and coming back to it
+// used to start its watch from nothing: a full LIST of every pod, decoded and
+// cached again, with the tab showing its loading state for as long as that
+// took on a large cluster. Kept for a while, the watch is still there and
+// still current, and the tab repaints from the cache at once. What lingers is
+// a collection that was in memory a moment ago, and a watch connection on the
+// HTTP/2 connection the cluster's other requests already share.
+const informerGrace = time.Minute
+
 // Watcher owns every live connection: one client and one set of informers per
 // kubeconfig context, shared by all the tabs looking at that context.
 //
@@ -117,6 +130,11 @@ type liveInformer struct {
 	lister   cache.GenericLister
 	scope    meta.RESTScopeName
 	stop     chan struct{}
+
+	// linger is armed when the last subscription lets go and disarmed by the
+	// next one; it stops the watch only if nobody came back within
+	// informerGrace. See releaseInformer.
+	linger *time.Timer
 }
 
 // subscription is one open tab. It holds the namespace filter, because the
@@ -250,20 +268,83 @@ func (w *Watcher) Unsubscribe(id string) {
 		return
 	}
 	delete(w.subs, id)
-
-	live := sub.live
-	live.refs--
-	stopInformer := live.refs == 0
-	if stopInformer {
-		delete(sub.cluster.informers, live.key)
-	}
+	stop := w.releaseInformer(sub.contextID, sub.cluster, sub.live)
 	w.mu.Unlock()
 
 	close(sub.done)
-	if stopInformer {
-		close(live.stop)
-		w.releaseCluster(sub.contextID, sub.cluster)
+	if stop != nil {
+		stop()
 	}
+	// Every subscription took a reference on its cluster in clusterFor, and
+	// gives it back here whether or not it was the last one on its watch --
+	// the watch holds a reference of its own for as long as it runs.
+	w.releaseCluster(sub.contextID, sub.cluster)
+}
+
+// releaseInformer drops one subscription's hold on a watch. The caller holds
+// the lock.
+//
+// At zero the watch is normally left to linger for informerGrace -- see there
+// for why -- and stopped by a timer if nobody takes it back. A watch that
+// never synced is the exception and goes at once: it is a cluster that would
+// not answer or a kind this user may not list, and keeping it would only keep
+// it retrying against a server that has already said no.
+//
+// What it returns, when not nil, stops the watch, and is called after the
+// lock is let go.
+func (w *Watcher) releaseInformer(contextID string, cl *cluster, live *liveInformer) func() {
+	live.refs--
+	if live.refs > 0 {
+		return nil
+	}
+	if !live.informer.HasSynced() {
+		return w.dropInformer(contextID, cl, live)
+	}
+	live.linger = time.AfterFunc(informerGrace, func() { w.stopIdleInformer(contextID, cl, live) })
+	return nil
+}
+
+// stopIdleInformer stops a watch whose grace ran out unused. Like evictIdle it
+// checks by identity and count, because the timer can fire just as a tab takes
+// the watch back.
+func (w *Watcher) stopIdleInformer(contextID string, cl *cluster, live *liveInformer) {
+	w.mu.Lock()
+	if live.refs > 0 || cl.informers[live.key] != live {
+		w.mu.Unlock()
+		return
+	}
+	stop := w.dropInformer(contextID, cl, live)
+	w.mu.Unlock()
+	stop()
+}
+
+// dropInformer takes an unused watch out of its cluster and returns what
+// stops it: closing the watch and giving back the reference it held on the
+// cluster. The caller holds the lock, and calls what is returned after
+// letting go of it.
+func (w *Watcher) dropInformer(contextID string, cl *cluster, live *liveInformer) func() {
+	if live.linger != nil {
+		live.linger.Stop()
+		live.linger = nil
+	}
+	delete(cl.informers, live.key)
+	return func() {
+		close(live.stop)
+		w.releaseCluster(contextID, cl)
+	}
+}
+
+// dropIdleInformers takes every lingering watch out of a cluster and returns
+// what stops them. The caller holds the lock. For Disconnect and Close, which
+// are letting go of everything rather than waiting for the grace to run out.
+func (w *Watcher) dropIdleInformers(contextID string, cl *cluster) []func() {
+	var stops []func()
+	for _, live := range cl.informers {
+		if live.refs == 0 {
+			stops = append(stops, w.dropInformer(contextID, cl, live))
+		}
+	}
+	return stops
 }
 
 // Disconnect lets go of a context at once: every subscription to it is
@@ -286,13 +367,22 @@ func (w *Watcher) Disconnect(contextID string) int {
 	}
 
 	w.mu.Lock()
-	defer w.mu.Unlock()
-	if cl, ok := w.clusters[contextID]; ok {
+	cl, ok := w.clusters[contextID]
+	var stops []func()
+	if ok {
+		// The watches its tabs just let go of are lingering; a context let go
+		// of on purpose keeps none of them.
+		stops = w.dropIdleInformers(contextID, cl)
 		if cl.evict != nil {
 			cl.evict.Stop()
 			cl.evict = nil
 		}
 		delete(w.clusters, contextID)
+	}
+	w.mu.Unlock()
+
+	for _, stop := range stops {
+		stop()
 	}
 	return len(ids)
 }
@@ -323,6 +413,19 @@ func (w *Watcher) Close() {
 
 	for _, id := range ids {
 		w.Unsubscribe(id)
+	}
+
+	// The watches those left lingering go first, giving back the references
+	// they hold, so that their clusters are idle by the time they are looked
+	// at below.
+	w.mu.Lock()
+	var stops []func()
+	for id, cl := range w.clusters {
+		stops = append(stops, w.dropIdleInformers(id, cl)...)
+	}
+	w.mu.Unlock()
+	for _, stop := range stops {
+		stop()
 	}
 
 	// Nothing is coming back for the idle clients now, so they go too, and
@@ -429,8 +532,7 @@ func (w *Watcher) informerFor(cl *cluster, mapping *meta.RESTMapping, field stri
 	defer w.mu.Unlock()
 
 	key := informerKey{gvr: mapping.Resource, field: field}
-	if live, ok := cl.informers[key]; ok {
-		live.refs++
+	if live := reuseInformer(cl, key); live != nil {
 		return live
 	}
 
@@ -461,6 +563,9 @@ func (w *Watcher) informerFor(cl *cluster, mapping *meta.RESTMapping, field stri
 		stop:     make(chan struct{}),
 	}
 	cl.informers[key] = live
+	// The watch's own reference on its cluster, given back when it stops --
+	// which, lingering, can be well after the last subscription has gone.
+	cl.refs++
 
 	handler := cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(any) { w.markKind(live) },
@@ -480,6 +585,22 @@ func (w *Watcher) informerFor(cl *cluster, mapping *meta.RESTMapping, field stri
 	return live
 }
 
+// reuseInformer takes a reference on a watch the cluster already has, taking
+// it back from its grace if it was lingering. Nil when there is none. The
+// caller holds the lock.
+func reuseInformer(cl *cluster, key informerKey) *liveInformer {
+	live, ok := cl.informers[key]
+	if !ok {
+		return nil
+	}
+	if live.linger != nil {
+		live.linger.Stop()
+		live.linger = nil
+	}
+	live.refs++
+	return live
+}
+
 // metadataInformerFor is informerFor for a watch that is only a signal: it
 // fetches objects' metadata and never their bodies. The Helm release watch is
 // the one user -- a release Secret carries its whole gzipped chart and values,
@@ -492,8 +613,7 @@ func (w *Watcher) metadataInformerFor(cl *cluster, mapping *meta.RESTMapping, fi
 	defer w.mu.Unlock()
 
 	key := informerKey{gvr: mapping.Resource, field: "metadata:" + field}
-	if live, ok := cl.informers[key]; ok {
-		live.refs++
+	if live := reuseInformer(cl, key); live != nil {
 		return live
 	}
 
@@ -513,6 +633,7 @@ func (w *Watcher) metadataInformerFor(cl *cluster, mapping *meta.RESTMapping, fi
 		stop:     make(chan struct{}),
 	}
 	cl.informers[key] = live
+	cl.refs++
 
 	_, _ = inf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(any) { w.markKind(live) },
@@ -584,6 +705,15 @@ func (w *Watcher) pump(sub *subscription) {
 		case <-sub.done:
 			return
 		case <-time.After(coalesce):
+		}
+
+		// Nothing before the cache has synced. The informer's handlers fire
+		// for each object as the initial list is unpacked, and a push then
+		// would send a half-filled table -- the whole of it, every time, on
+		// a large cluster -- only for the next push to replace it.
+		// firstSnapshot marks the subscription again once it has synced.
+		if !sub.live.informer.HasSynced() {
+			continue
 		}
 
 		w.mu.Lock()

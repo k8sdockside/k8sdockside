@@ -24,6 +24,7 @@
         { id: 'behaviour', label: 'Behaviour', icon: 'sliders' },
         { id: 'notifications', label: 'Notifications', icon: 'bell' },
         { id: 'terminal', label: 'Terminal', icon: 'terminal' },
+        { id: 'debug', label: 'Debug', icon: 'bug' },
         { id: 'helm', label: 'Helm', icon: 'helm' },
         { id: 'sources', label: 'Kubeconfig sources', icon: 'folder' },
         { id: 'about', label: 'About', icon: 'info' },
@@ -49,6 +50,7 @@
     import SourcesSection from './SourcesSection.svelte';
     import StartPageSection from './StartPageSection.svelte';
     import TerminalSection from './TerminalSection.svelte';
+    import DebugSection from './DebugSection.svelte';
     import PluginsSection from './PluginsSection.svelte';
     import ThemesSection from './ThemesSection.svelte';
     import DateTimeSection from './DateTimeSection.svelte';
@@ -126,6 +128,8 @@
             <NotificationsSection />
         {:else if active === 'terminal'}
             <TerminalSection />
+        {:else if active === 'debug'}
+            <DebugSection />
         {:else if active === 'helm'}
             <HelmSection />
         {:else if active === 'sources'}

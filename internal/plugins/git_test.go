@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -223,5 +224,27 @@ func TestAFailedCloneKeepsGitsOwnWordsUnderTheReason(t *testing.T) {
 	}
 	if strings.Contains(first, "Cloning into") {
 		t.Errorf("the message leads with progress: %q", first)
+	}
+}
+
+func TestInstallWithoutGitSaysSoBeforeDoingAnything(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	if err := GitAvailable(); err == nil {
+		t.Skip("git is still reachable without PATH on this machine")
+	}
+	dir := filepath.Join(t.TempDir(), "plugins")
+	for name, run := range map[string]func() error{
+		"Install": func() error { _, err := Install(dir, "https://github.com/example/plugin.git"); return err },
+		"Clone":   func() error { _, err := Clone(dir, "https://github.com/example/plugin.git"); return err },
+		"Pull":    func() error { return Pull(dir) },
+	} {
+		err := run()
+		if err == nil || !strings.Contains(err.Error(), "needs git") {
+			t.Errorf("%s: err = %v, want the missing-git reason", name, err)
+		}
+	}
+	// Nothing was started: not even the plugins folder was made.
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the plugins folder was made before git was checked: %v", err)
 	}
 }

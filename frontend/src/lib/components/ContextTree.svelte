@@ -13,6 +13,8 @@
         PLUGIN_OVERVIEW,
         PLUGINS_GROUP,
         PORT_FORWARDS,
+        parseCustomKind,
+        parsePluginKind,
         pluginKindFor,
         type NavGroup,
         type NavItem,
@@ -134,10 +136,15 @@
         // the definitions section is what sends the app to ask the cluster which
         // kinds it serves. Waiting for that answer is the difference between the
         // reveal landing on the row and landing on the header a moment before
-        // the row appears. Nothing else is waited for, so a kind that simply is
-        // not in the tree still falls back at once.
+        // the row appears. A plugin's rows are placed by the same answer -- it
+        // is what says whether the cluster has the plugin -- so they wait too.
+        // Nothing else is waited for, so a kind that simply is not in the tree
+        // still falls back at once, rather than holding the sidebar still for
+        // as long as a freshly opened cluster takes to list its definitions.
         const until = Date.now() + REVEAL_DEADLINE;
+        const late = parseCustomKind(kind) !== null || parsePluginKind(kind) !== null;
         while (
+            late &&
             !target &&
             !cancelled() &&
             Date.now() < until &&
@@ -405,6 +412,21 @@
                 aria-label={shutting ? 'Collapse every section here' : 'Expand every section here'}
             >
                 <Icon name={shutting ? 'collapse-all' : 'expand-all'} size={13} />
+            </button>
+        {/if}
+
+        <!-- A shell on this machine whose KUBECONFIG holds this context alone,
+             in the dock. Desktop only: in the web version it would be a shell
+             on the server. Brings an open one forward rather than piling up
+             another; File → New terminal always opens a new one. -->
+        {#if workspace.localTerminalAvailable}
+            <button
+                class="remove terminal"
+                onclick={() => workspace.openLocalTerminal(context.id, true)}
+                title="Terminal: a shell on this machine with kubectl pointed at this cluster alone"
+                aria-label="Open a terminal for {workspace.displayName(context)}"
+            >
+                <Icon name="terminal" size={12} />
             </button>
         {/if}
 
@@ -858,6 +880,10 @@
 
     .remove.disconnect:hover {
         color: var(--warn);
+    }
+
+    .remove.terminal:hover {
+        color: var(--accent);
     }
 
     .remove:hover {

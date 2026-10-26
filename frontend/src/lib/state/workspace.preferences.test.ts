@@ -30,6 +30,7 @@ describe('preferences', () => {
             contextSort: 'name',
             showLineNumbers: true,
             checkForUpdates: true,
+            pluginReleases: true,
             desktopNotifications: true,
             alerts: 'system',
             alertsSnoozedUntil: '',
@@ -43,7 +44,9 @@ describe('preferences', () => {
                 nodeNamespace: 'default',
                 fontSize: 12,
                 scrollback: 5000,
+                localShell: '',
             },
+            debug: { image: 'busybox', images: [], profile: 'general' },
             helm: { path: '', wait: false, atomic: false, timeoutSeconds: 300 },
             background: { source: 'builtin', pinned: '', minutes: 15, palette: 'varied' },
         };

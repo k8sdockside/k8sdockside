@@ -15,8 +15,10 @@ happens and nothing has a refresh button.
   is what lets a custom resource open in a tab without anything being compiled
   in for it.
 - **One watch per kind per context**, shared by every tab looking at it, closed
-  when the last of them does. The namespace filter is applied to the informer's
-  cache, so changing it repaints without reopening anything.
+  a minute after the last of them does -- so switching to another cluster's tab
+  and back repaints from the cache instead of listing everything again. The
+  namespace filter is applied to the informer's cache, so changing it repaints
+  without reopening anything.
 - **Columns are data.** Most are JSONPath expressions; the few that are computed
   rather than read (a pod's ready count, a workload's condition) have a Go
   function instead. Custom resources supply their own columns from the CRD's
@@ -44,6 +46,22 @@ happens and nothing has a refresh button.
   executable" as "try the next one"; while it is doing that, what you type is
   held for whichever attempt is live, because a failed attempt's copier would
   otherwise still be holding the keyboard.
+- **A local terminal is a real pseudo-terminal, on this machine.** The dock's
+  Terminal (a cluster row's terminal button, **File → New terminal**, Ctrl+`)
+  runs a shell here rather than in a pod: through `github.com/creack/pty` on
+  Unix, and through ConPTY -- `CreatePseudoConsole` and `CreateProcess` with
+  the console as a process attribute, called directly via
+  `golang.org/x/sys/windows` -- on Windows, both behind one API in
+  [`internal/localpty`](../internal/localpty). Opened for a cluster, the
+  shell's `KUBECONFIG` is a temporary file holding that one context, its
+  cluster and its user (mode 0600, under the user cache directory), deleted
+  when the tab closes or the app quits -- so `kubectl` and `helm` in it talk to
+  that cluster and nothing typed there can change the user's own kubeconfig.
+  Closing the tab ends the whole process tree: the process group on Unix, a
+  kill-on-close job object on Windows. Plugin tool consoles run each command
+  in a pseudo-terminal the same way, which is what lets a full-screen tool
+  (`talosctl dashboard`) draw in the dock. Off in server mode, where it would
+  be a shell on the server.
 - **Node and dashboard figures are capacity and requests, not usage.** Live
   usage comes from the metrics API, a separate server that is not always
   installed.
@@ -70,7 +88,8 @@ internal/services/           the services the frontend calls, wired together in 
   themeservice.go            the theme catalogue, and the folders it is read from
   pluginservice.go           the solution plugins, and each one's per-cluster overview
   metricsservice.go          finding a cluster's Prometheus, and drawing plugin charts
-  terminalservice.go         shells: the sessions open, and the external terminals
+  terminalservice.go         shells and kubectl debug sessions: the sessions open, and the external terminals
+  localterminal.go           the local terminal: a shell on this machine, scoped to one cluster's kubeconfig
   portforwardservice.go      the tunnels open, and the ones remembered from last time
   updateservice.go           whether a newer release exists, and whether the user has heard
   notifyservice.go           posting cluster alerts as the system's own notifications
@@ -91,7 +110,13 @@ cmd/plugincheck/             the loader's checks, run on a plugin's folder outsi
 docs/plugin.schema.json      the plugin manifest as a JSON Schema, for editors
 internal/metrics/            PromQL, Prometheus discovery, and reading its answers
 internal/termapp/            the terminal emulators on this machine, and how to run one in it
+internal/localpty/           a program behind a pseudo-terminal: creack/pty on Unix, ConPTY on Windows,
+                             a clear error elsewhere
+internal/localshell/         the shells on this machine, the default, and resolving the user's choice
+internal/procattr/           how background processes are created (no console window on Windows)
 internal/updates/            asking GitHub for the latest release, and ordering versions
+internal/ghreleases/         asking GitHub for a repository's releases on a plugin page's behalf,
+                             cached in memory and on disk
 frontend/src/
   App.svelte                 shell: sidebar | tabs + view | detail panel | dock
   lib/state/workspace.svelte.ts   all application state

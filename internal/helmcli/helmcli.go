@@ -26,6 +26,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/k8sdockside/k8sdockside/internal/procattr"
 )
 
 // probeTimeout bounds asking helm what version it is. It is a local process
@@ -164,7 +166,9 @@ func described(path string, configured bool) Tool {
 
 	// #nosec G204 -- the program is a path the user configured or one this
 	// package found itself, and the argument is a constant.
-	out, err := exec.CommandContext(ctx, path, "version", "--short").Output()
+	cmd := exec.CommandContext(ctx, path, "version", "--short")
+	procattr.Hide(cmd)
+	out, err := cmd.Output()
 	version := ""
 	if err == nil {
 		version = strings.TrimSpace(string(out))

@@ -42,6 +42,7 @@ func TestTerminalSettingsSurviveAReopen(t *testing.T) {
 		NodeNamespace: "kube-system",
 		FontSize:      14,
 		Scrollback:    20000,
+		LocalShell:    " /opt/homebrew/bin/fish ",
 	}
 	if _, err := store.SetPreferences(prefs); err != nil {
 		t.Fatalf("SetPreferences: %v", err)
@@ -64,6 +65,15 @@ func TestTerminalSettingsSurviveAReopen(t *testing.T) {
 	}
 	if got.FontSize != 14 || got.Scrollback != 20000 {
 		t.Errorf("appearance came back as %d/%d", got.FontSize, got.Scrollback)
+	}
+	if got.LocalShell != "/opt/homebrew/bin/fish" {
+		t.Errorf("the local shell came back as %q, want it kept and trimmed", got.LocalShell)
+	}
+}
+
+func TestTheLocalShellDefaultsToTheMachinesOwn(t *testing.T) {
+	if got := openIn(t).Get().Preferences.Terminal.LocalShell; got != "" {
+		t.Errorf("local shell = %q, want empty: the default is this machine's", got)
 	}
 }
 

@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/k8sdockside/k8sdockside/internal/procattr"
 )
 
 // DefaultTimeout is how long a change is given before it is called off.
@@ -211,6 +213,7 @@ func (h *Helm) Versions(ctx context.Context, chart string) ([]ChartVersion, erro
 	// either a constant or a chart reference checked above; no shell is
 	// involved, so nothing here can become a second command.
 	cmd := exec.CommandContext(ctx, h.path, "search", "repo", chart, "--versions", "--output", "json")
+	procattr.Hide(cmd)
 	var out, errs bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errs
@@ -277,6 +280,7 @@ func (h *Helm) run(ctx context.Context, t Target, timeout time.Duration, args []
 	// reference already checked, and a path to a file written above. Nothing
 	// goes through a shell.
 	cmd := exec.CommandContext(ctx, h.path, args...)
+	procattr.Hide(cmd)
 	var out, errs bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errs

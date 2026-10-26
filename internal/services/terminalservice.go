@@ -13,6 +13,7 @@ import (
 
 	"github.com/k8sdockside/k8sdockside/internal/appconfig"
 	"github.com/k8sdockside/k8sdockside/internal/kube"
+	"github.com/k8sdockside/k8sdockside/internal/localshell"
 	"github.com/k8sdockside/k8sdockside/internal/plugins"
 	"github.com/k8sdockside/k8sdockside/internal/session"
 	"github.com/k8sdockside/k8sdockside/internal/termapp"
@@ -54,6 +55,11 @@ type TerminalSession struct {
 	// Node is set for a node shell, naming the machine rather than the pod that
 	// is only the way into it.
 	Node string `json:"node"`
+	// Created names the pod a debug session made -- a copy, or a pod on a
+	// node -- and Kept says it outlives the session, so the terminal can
+	// offer to delete it once the session is over.
+	Created string `json:"created"`
+	Kept    bool   `json:"kept"`
 }
 
 // ExternalTerminals is what the settings view needs to offer the choice: the
@@ -89,6 +95,11 @@ type TerminalService struct {
 	// plugins answers which command line tools a plugin declares, for the
 	// tool console. See OpenTool.
 	plugins *PluginService
+	// scratch is where a local terminal's temporary kubeconfigs are written,
+	// and shells the machine the local terminal looks for shells on. Both
+	// are left zero outside tests: see kubeconfigDir and shellSystem.
+	scratch string
+	shells  *localshell.System
 
 	mu       sync.Mutex
 	sessions map[string]*live
@@ -119,6 +130,8 @@ func (s *TerminalService) ServiceShutdown() error {
 	s.sessions = map[string]*live{}
 	s.mu.Unlock()
 
+	// Stopping a local terminal ends its process tree and removes its
+	// temporary kubeconfig there and then; see OpenLocal.
 	for _, sess := range open {
 		sess.stop()
 	}
@@ -211,6 +224,230 @@ func (s *TerminalService) OpenNode(ctx context.Context, contextID, node string) 
 	}()
 
 	return TerminalSession{ID: id, Node: node, Namespace: spec.Namespace}, nil
+}
+
+// OpenDebug starts a `kubectl debug` session in the dock: an ephemeral
+// container in a running pod, a copy of a pod, or a pod on a node, with a
+// terminal attached to the debug container.
+//
+// It returns once the request has been checked and the names decided, rather
+// than when the container runs, for the reason OpenNode does: pulling a debug
+// image takes long enough that a window with nothing in it would look broken.
+func (s *TerminalService) OpenDebug(ctx context.Context, contextID string, req kube.DebugRequest) (TerminalSession, error) {
+	kc, err := s.resolve(contextID)
+	if err != nil {
+		return TerminalSession{}, err
+	}
+	plan, err := s.planDebug(req)
+	if err != nil {
+		return TerminalSession{}, err
+	}
+
+	id, sess := s.register(ctx)
+	s.say(id, describeDebug(plan))
+
+	go func() {
+		defer s.finished(id)
+		err := s.watcher.Debug(sess.ctx, kc, plan, sess.in, sess.batch, sess.sizes,
+			func(line string) { s.say(id, line) })
+		s.ended(id, sess, err)
+	}()
+
+	out := TerminalSession{ID: id, Namespace: plan.Namespace, Pod: plan.Pod, Container: plan.Container}
+	if plan.Mode == kube.DebugNode {
+		out.Node = plan.Name
+	}
+	if plan.Creates() {
+		out.Created = plan.Pod
+		out.Kept = plan.Keep
+	}
+	return out, nil
+}
+
+// planDebug fills a request in from the settings -- the image, the profile and,
+// for a node, the namespace the node shell uses -- and checks it.
+func (s *TerminalService) planDebug(req kube.DebugRequest) (kube.DebugPlan, error) {
+	prefs := s.store.Get().Preferences
+	if req.Profile == "" {
+		req.Profile = prefs.Debug.Profile
+	}
+	if req.Mode == kube.DebugNode && strings.TrimSpace(req.Namespace) == "" {
+		req.Namespace = prefs.Terminal.NodeNamespace
+	}
+	plan, err := req.Plan()
+	if err != nil {
+		return plan, err
+	}
+	// The image is left empty in the plan when the request left it so: in a
+	// copy, that is how changing an existing container keeps its own image.
+	// A new container runs the settings' default instead.
+	plan.FallbackImage = prefs.Debug.Image
+	return plan, nil
+}
+
+// DebugInfo is what the launch form needs to know about a pod: its containers,
+// and whether it runs as non-root, which some profiles' capabilities do not
+// survive.
+func (s *TerminalService) DebugInfo(contextID, namespace, name string) (kube.DebugInfo, error) {
+	kc, err := s.resolve(contextID)
+	if err != nil {
+		return kube.DebugInfo{}, err
+	}
+	return s.watcher.DebugInfo(kc, namespace, name)
+}
+
+// describeDebug is the first line a debug session shows: what is about to be
+// made in the cluster, in so many words.
+func describeDebug(plan kube.DebugPlan) string {
+	image := plan.Image
+	if image == "" {
+		image = plan.FallbackImage
+	}
+	fate := "It is deleted when this terminal closes."
+	if plan.Keep {
+		fate = "It is kept when this terminal closes."
+	}
+	switch plan.Mode {
+	case kube.DebugCopy:
+		line := fmt.Sprintf("Copying pod %s/%s to %s, with debug container %s (profile %s). %s",
+			plan.Namespace, plan.Name, plan.Pod, plan.Container, plan.Profile, fate)
+		if plan.Replace {
+			line += fmt.Sprintf(" The original pod %s is deleted once the copy exists.", plan.Name)
+		}
+		return line
+	case kube.DebugNode:
+		return fmt.Sprintf("Creating pod %s/%s on node %s from %s (profile %s). %s",
+			plan.Namespace, plan.Pod, plan.Name, image, plan.Profile, fate)
+	}
+	target := ""
+	if plan.Target != "" {
+		target = ", sharing the processes of " + plan.Target
+	}
+	return fmt.Sprintf("Adding ephemeral container %s from %s to pod %s/%s (profile %s%s).",
+		plan.Container, image, plan.Namespace, plan.Name, plan.Profile, target)
+}
+
+// DeleteDebugPod removes a pod a debug session made and kept. Only a pod
+// carrying the debug label is removed: anything else is refused.
+func (s *TerminalService) DeleteDebugPod(contextID, namespace, name string) error {
+	kc, err := s.resolve(contextID)
+	if err != nil {
+		return err
+	}
+	return s.watcher.DeleteDebugPod(kc, namespace, name)
+}
+
+// DebugPresets are the debug images offered without being added, for the
+// settings page and the launch form.
+func (s *TerminalService) DebugPresets() []appconfig.DebugImage {
+	return appconfig.DebugPresets()
+}
+
+// LaunchDebug is OpenDebug in the user's own terminal, by way of kubectl
+// debug. kubectl does not delete a copy or a node pod when it ends, so neither
+// does this: Keep is what kubectl always does.
+func (s *TerminalService) LaunchDebug(contextID string, req kube.DebugRequest) error {
+	if s.server {
+		return errDesktopOnly
+	}
+	kc, err := s.resolve(contextID)
+	if err != nil {
+		return err
+	}
+	kubectl, err := termapp.Kubectl()
+	if err != nil {
+		return err
+	}
+	plan, err := s.planDebug(req)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(plan.Custom) != "" {
+		return fmt.Errorf("a custom container spec is only supported in the app's own terminal -- kubectl reads it from a file")
+	}
+
+	prefs := s.store.Get().Preferences.Terminal
+	args := append(connectArgs(kc), debugArgs(plan)...)
+	title := fmt.Sprintf("debug %s — %s", plan.Name, kc.Name)
+	return termapp.Launch(prefs.External, title, append([]string{kubectl}, args...))
+}
+
+// debugArgs is the kubectl debug command line for a plan. --custom is not
+// here: kubectl reads it from a file, and LaunchDebug refuses a plan that has
+// one rather than write the user's spec to disk.
+func debugArgs(plan kube.DebugPlan) []string {
+	subject := plan.Name
+	if plan.Mode == kube.DebugNode {
+		subject = "node/" + plan.Name
+	}
+	args := []string{"debug", subject}
+	if plan.Attaches() {
+		args = append(args, "-it")
+	} else {
+		args = append(args, "--attach=false")
+	}
+	args = append(args, "-n", plan.Namespace, "--profile="+plan.Profile)
+
+	image := plan.Image
+	if image == "" && (plan.Mode != kube.DebugCopy || plan.Container == "") {
+		image = plan.FallbackImage
+	}
+	if image != "" {
+		args = append(args, "--image="+image)
+	}
+	if plan.ImagePullPolicy != "" {
+		args = append(args, "--image-pull-policy="+plan.ImagePullPolicy)
+	}
+	for _, pair := range plan.Env {
+		args = append(args, "--env="+pair)
+	}
+
+	switch plan.Mode {
+	case kube.DebugEphemeral:
+		args = append(args, "--container="+plan.Container)
+		if plan.Target != "" {
+			args = append(args, "--target="+plan.Target)
+		}
+	case kube.DebugCopy:
+		args = append(args,
+			"--container="+plan.Container,
+			"--copy-to="+plan.CopyTo,
+			fmt.Sprintf("--share-processes=%t", plan.ShareProcesses == nil || *plan.ShareProcesses))
+		if plan.SameNode {
+			args = append(args, "--same-node")
+		}
+		if plan.Replace {
+			args = append(args, "--replace")
+		}
+		for _, pair := range plan.SetImages {
+			args = append(args, "--set-image="+strings.TrimSpace(pair))
+		}
+		for _, keep := range []struct {
+			flag string
+			on   bool
+		}{
+			{"--keep-labels", plan.KeepLabels},
+			{"--keep-annotations", plan.KeepAnnotations},
+			{"--keep-liveness", plan.KeepLiveness},
+			{"--keep-readiness", plan.KeepReadiness},
+			{"--keep-startup", plan.KeepStartup},
+		} {
+			if keep.on {
+				args = append(args, keep.flag)
+			}
+		}
+		if plan.KeepInitContainers != nil && !*plan.KeepInitContainers {
+			args = append(args, "--keep-init-containers=false")
+		}
+	}
+	if len(plan.Command) > 0 {
+		if plan.ArgumentsOnly {
+			args = append(args, "--arguments-only")
+		}
+		args = append(args, "--")
+		args = append(args, plan.Command...)
+	}
+	return args
 }
 
 // Send passes what was typed to the shell. The data is base64 for the same
@@ -369,6 +606,21 @@ func (s *TerminalService) LaunchNode(contextID, node string) error {
 // added to a command that does not give the flag; initial, when given, is a
 // run command the user has just confirmed, run first. See toolcli.Console.
 func (s *TerminalService) OpenTool(ctx context.Context, contextID, pluginID, toolID string, defaults, initial []string) (TerminalSession, error) {
+	return s.openTool(ctx, contextID, pluginID, toolID, defaults, initial, plugins.ToolRun)
+}
+
+// OpenToolInteractive is LaunchTool in the dock: one of a plugin tool's
+// interactive commands -- one that draws a full screen, like `talosctl
+// dashboard` -- run first in a tool console, behind a real pseudo-terminal.
+// The command is checked against the tool's interactive allow-list exactly as
+// LaunchTool checks it.
+func (s *TerminalService) OpenToolInteractive(ctx context.Context, contextID, pluginID, toolID string, args []string) (TerminalSession, error) {
+	return s.openTool(ctx, contextID, pluginID, toolID, nil, args, plugins.ToolInteractive)
+}
+
+// openTool opens a tool console; initial, when given, must be allowed as the
+// given kind of command.
+func (s *TerminalService) openTool(ctx context.Context, contextID, pluginID, toolID string, defaults, initial []string, kind string) (TerminalSession, error) {
 	if s.server || s.plugins == nil {
 		return TerminalSession{}, errDesktopOnly
 	}
@@ -380,7 +632,7 @@ func (s *TerminalService) OpenTool(ctx context.Context, contextID, pluginID, too
 		return TerminalSession{}, err
 	}
 	if len(initial) > 0 {
-		if err := inv.tool.Allows(plugins.ToolRun, initial); err != nil {
+		if err := inv.tool.Allows(kind, initial); err != nil {
 			return TerminalSession{}, err
 		}
 	}
@@ -395,6 +647,18 @@ func (s *TerminalService) OpenTool(ctx context.Context, contextID, pluginID, too
 		Banner: strings.TrimSpace(fmt.Sprintf("%s %s — %s · type ? for help, exit to close",
 			inv.tool.Label, inv.status.Tool.Version, strings.Join(inv.always, " "))),
 	}
+	// The window's size, for the commands the console runs behind a
+	// pseudo-terminal.
+	go func() {
+		for {
+			select {
+			case <-sess.ctx.Done():
+				return
+			case size := <-sess.sizes:
+				console.Resize(size.Cols, size.Rows)
+			}
+		}
+	}()
 	go func() {
 		defer s.finished(id)
 		err := console.Run(sess.ctx, sess.in, sess.batch, initial)
@@ -469,6 +733,14 @@ type live struct {
 	// once guards the shutdown, which both the window (Close) and the stream
 	// ending on its own can reach.
 	once sync.Once
+
+	// cleanups run when the session stops, however it stops: a local
+	// terminal's process and its temporary kubeconfig are released here, so
+	// that closing the tab and quitting the app do it synchronously rather
+	// than by way of a goroutine that may not get the chance.
+	mu       sync.Mutex
+	stopped  bool
+	cleanups []func()
 }
 
 // stop ends a session. Cancelling the context hangs up on the cluster; closing
@@ -477,7 +749,27 @@ func (l *live) stop() {
 	l.once.Do(func() {
 		l.cancel()
 		_ = l.stdin.Close()
+		l.mu.Lock()
+		l.stopped = true
+		cleanups := l.cleanups
+		l.cleanups = nil
+		l.mu.Unlock()
+		for _, f := range cleanups {
+			f()
+		}
 	})
+}
+
+// atStop runs f when the session stops, or now if it already has.
+func (l *live) atStop(f func()) {
+	l.mu.Lock()
+	if l.stopped {
+		l.mu.Unlock()
+		f()
+		return
+	}
+	l.cleanups = append(l.cleanups, f)
+	l.mu.Unlock()
 }
 
 // register makes a session and files it under a new id, claimed for the caller

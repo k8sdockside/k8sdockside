@@ -9,7 +9,9 @@
   click away in the terminal's own bar.
 
   The rest of the section is the two things a shell cannot work out for itself:
-  which shell a container actually has, and what a node shell is made of.
+  which shell a container actually has, and what a node shell is made of --
+  and, for the local terminal (a shell on this machine, in the dock), which of
+  this machine's shells it runs.
 
   The web version has only the first answer. "The terminal you already have" is
   one on the user's machine, and the server running this cannot open a window
@@ -18,7 +20,10 @@
 -->
 <script lang="ts">
     import { TerminalService } from '../../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
-    import type { ExternalTerminals } from '../../../../bindings/github.com/k8sdockside/k8sdockside/internal/services/models.js';
+    import type {
+        ExternalTerminals,
+        LocalShells,
+    } from '../../../../bindings/github.com/k8sdockside/k8sdockside/internal/services/models.js';
     import { session } from '../../state/session.svelte';
     import { workspace } from '../../state/workspace.svelte';
     import Icon from '../Icon.svelte';
@@ -93,6 +98,47 @@
         workspace.setTerminal({ shells });
     }
 
+    /**
+     * The shells on this machine for the local terminal, read once when the
+     * section opens, for the reason the emulators are.
+     */
+    let locals = $state<LocalShells | null>(null);
+
+    $effect(() => {
+        if (session.server) return;
+        void (async () => {
+            try {
+                locals = await TerminalService.LocalShells();
+            } catch {
+                locals = { shells: [], supported: false, reason: 'The shells on this machine could not be listed.' };
+            }
+        })();
+    });
+
+    const CUSTOM = '__custom__';
+
+    /** Whether the setting names a shell that was not detected: one typed in by hand. */
+    let customShell = $derived(
+        terminal.localShell !== '' && !(locals?.shells ?? []).some((s) => s.path === terminal.localShell),
+    );
+    /** Shown while "Custom…" is picked and nothing has been typed yet. */
+    let choosingCustom = $state(false);
+    let localChoice = $derived(customShell || choosingCustom ? CUSTOM : terminal.localShell);
+
+    function chooseLocal(value: string): void {
+        if (value === CUSTOM) {
+            choosingCustom = true;
+            return;
+        }
+        choosingCustom = false;
+        workspace.setTerminal({ localShell: value });
+    }
+
+    function localDefaultName(): string {
+        const found = locals?.shells?.find((s) => s.default);
+        return found ? found.name : 'none found';
+    }
+
     /** The terminal chosen for external mode, including "whatever is default". */
     let chosenExternal = $derived(terminal.external);
 
@@ -111,7 +157,7 @@
     {#if !session.server}
     <SettingsRow
         label="Open shells"
-        hint="In this window, a terminal opens in the dock beside the logs and the editor — nothing needs to be installed. In your own terminal, the app runs kubectl in the emulator you use, and everything you have set up there applies."
+        hint="In this window, a terminal opens in the dock beside the logs and the editor — nothing needs to be installed. In your own terminal, the app runs kubectl in the emulator you use, and everything you have set up there applies. The same choice decides where a plugin's full-screen commands run."
     >
         <SegmentedControl
             options={MODES}
@@ -156,9 +202,55 @@
     {/if}
     {/if}
 
+    {#if !session.server}
+        <SettingsRow
+            label="Local shell"
+            hint="The shell the local terminal runs on this machine — opened from a cluster's terminal button, the File menu, or Ctrl+`. Opened for a cluster, its KUBECONFIG holds that cluster's context alone, so kubectl and helm there cannot reach another one. The default is your login shell; on Windows, PowerShell 7, then Windows PowerShell, then Command Prompt."
+        >
+            <div class="terminals">
+                {#if !locals}
+                    <span class="note">Looking…</span>
+                {:else if !locals.supported}
+                    <span class="note warn">{locals.reason}</span>
+                {:else}
+                    <select
+                        aria-label="Local shell"
+                        value={localChoice}
+                        onchange={(event) => chooseLocal((event.currentTarget as HTMLSelectElement).value)}
+                    >
+                        <option value="">Default ({localDefaultName()})</option>
+                        {#each locals.shells ?? [] as shell (shell.path)}
+                            <option value={shell.path}>{shell.name}</option>
+                        {/each}
+                        <option value={CUSTOM}>Custom…</option>
+                    </select>
+                {/if}
+            </div>
+        </SettingsRow>
+
+        {#if locals?.supported && localChoice === CUSTOM}
+            <SettingsRow
+                label="Custom shell"
+                hint="The full path of the program, or a name found on your PATH. Started as a login shell when it is one known to take -l."
+            >
+                <input
+                    class="text"
+                    aria-label="Custom shell path"
+                    placeholder={navigator.platform.startsWith('Win') ? 'C:\\path\\to\\shell.exe' : '/path/to/shell'}
+                    value={customShell ? terminal.localShell : ''}
+                    onchange={(event) => {
+                        const value = (event.currentTarget as HTMLInputElement).value.trim();
+                        choosingCustom = value === '';
+                        workspace.setTerminal({ localShell: value });
+                    }}
+                />
+            </SettingsRow>
+        {/if}
+    {/if}
+
     <SettingsRow
         label="Shells to try"
-        hint="In order, until one of them runs. A container image is free to have bash, only sh, or neither, and there is no way to know which without asking it."
+        hint="In a container, in order, until one of them runs. A container image is free to have bash, only sh, or neither, and there is no way to know which without asking it."
     >
         <input
             class="text"

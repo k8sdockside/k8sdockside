@@ -14,6 +14,7 @@
   administrators. Everyone else still sees what is installed and what it does.
 -->
 <script lang="ts">
+    import { PluginService } from '../../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import { SETTINGS } from '../../catalogue';
     import { onExternalClick } from '../../links';
     import {
@@ -56,6 +57,24 @@
     $effect(() => fields.keep(fieldScope, 'plugins.repoUrl', repoUrl));
     let cloning = $state(false);
     let updating = $state<string | null>(null);
+
+    /**
+     * Why installing from a repository cannot work here -- git is missing --
+     * asked when the section opens, so it is said beside the Install buttons
+     * before anyone presses one rather than only after. Empty when git is
+     * there. The backend checks again before every install regardless.
+     */
+    let gitMissing = $state('');
+    $effect(() => {
+        if (!session.admin) return;
+        void (async () => {
+            try {
+                gitMissing = (await PluginService.GitMissing()) ?? '';
+            } catch {
+                gitMissing = '';
+            }
+        })();
+    });
 
     async function install(): Promise<void> {
         const url = repoUrl.trim();
@@ -327,6 +346,9 @@
             Plugins kept in repositories of their own. Installing one clones it into the plugins folder; its card
             then updates it from there. The sidebar suggests one for any cluster running what it is about.
         </p>
+        {#if session.admin && gitMissing}
+            {@render noGit()}
+        {/if}
         <div class="gallery wide">
             {#each shownKnown as offer (offer.id)}
                 {@render knownCard(offer)}
@@ -402,6 +424,9 @@
             A plugin kept in a repository of its own — with <code>plugin.json</code> at its root — is cloned into the
             plugins folder, and updated from its card. Needs <code>git</code> on this machine.
         </p>
+        {#if gitMissing}
+            {@render noGit()}
+        {/if}
         <form
             class="repo-row"
             onsubmit={(e) => {
@@ -553,6 +578,7 @@
                 Own views · reads {plugin.ui.readable.length} kind{plugin.ui.readable.length === 1 ? '' : 's'}
                 {#if plugin.ui.write}· may ask to change them{/if}
                 {#if plugin.ui.registries}· asks registries about the images it sees{/if}
+                {#if plugin.ui.releases.length}<span title="Asked by the app, anonymously, when one of its pages wants them. Settings → Notifications switches it off.">· asks GitHub for the releases of {plugin.ui.releases.join(', ')}</span>{/if}
             </p>
             {#if plugin.ui.services.length}
                 <p
@@ -569,11 +595,15 @@
                     class="counts"
                     title={[
                         ...tool.read.map((p) => `reads: ${tool.command} ${p}`),
+                        ...tool.extract.map(
+                            (e) => `reads only ${e.fields.join(', ')} from: ${tool.command} ${e.command} (the app parses the output; the plugin never sees the rest)`,
+                        ),
                         ...tool.run.map((p) => `asks to run: ${tool.command} ${p}`),
                         ...tool.interactive.map((p) => `opens in your terminal: ${tool.command} ${p}`),
                     ].join('\n')}
                 >
                     Runs <code>{tool.command}</code> on this machine · {tool.read.length} read command{tool.read.length === 1 ? '' : 's'}
+                    {#each tool.extract as e (e.command)}· reads only {e.fields.join(', ')} from <code>{tool.command} {e.command.replace(/\s*\*\*$/, '')}</code>{/each}
                     {#if tool.run.length}· {tool.run.length} that change things, each confirmed{/if}
                     {#if tool.files.length}· with your {tool.files.map((f) => f.label).join(', ')}{/if}
                 </p>
@@ -709,6 +739,15 @@
             </button>
         </div>
     {/if}
+{/snippet}
+
+<!-- Said before Install is pressed, where it is pressed: an install on a
+     machine without git can only fail, and the fix is to install git. -->
+{#snippet noGit()}
+    <div class="failure" role="alert">
+        <Icon name="alert" size={13} />
+        <p class="why selectable">{gitMissing} — install git (and restart the app if it was installed while it was open) to install plugins from a repository.</p>
+    </div>
 {/snippet}
 
 {#snippet knownCard(offer: KnownPlugin)}

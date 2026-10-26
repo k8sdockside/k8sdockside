@@ -104,6 +104,24 @@ export interface TerminalSettings {
     nodeNamespace: string;
     fontSize: number;
     scrollback: number;
+    /**
+     * The shell the local terminal runs on this machine: a path, or empty for
+     * the machine's default ($SHELL; pwsh, powershell, then cmd on Windows).
+     */
+    localShell: string;
+}
+
+/**
+ * What `kubectl debug` from the app is made of, resolved. Every field has a
+ * value for the reason TerminalSettings does.
+ */
+export interface DebugSettings {
+    /** The image a debug container runs unless the launch form says otherwise. */
+    image: string;
+    /** The images the user added beside the presets. */
+    images: string[];
+    /** The profile a debug container is given: legacy, general, baseline, netadmin, restricted or sysadmin. */
+    profile: string;
 }
 
 /**
@@ -266,6 +284,8 @@ export interface Settings {
         showLineNumbers: boolean;
         /** Whether the app asks GitHub, on its own, if a newer release is out. */
         checkForUpdates: boolean;
+        /** Whether the app asks GitHub for the release lists plugins' pages ask for. */
+        pluginReleases: boolean;
         /** Whether cluster alerts are posted as the system's notifications too. Superseded by alerts. */
         desktopNotifications: boolean;
         /** Where cluster alerts go: the bell and the system, the bell only, or nowhere. */
@@ -278,6 +298,8 @@ export interface Settings {
         metricsRange: number;
         /** How a shell opens, and what it opens with. */
         terminal: TerminalSettings;
+        /** The debug images and profile. */
+        debug: DebugSettings;
         /** Where helm is, and how it is run. */
         helm: HelmSettings;
         /** The picture behind the start page. */
@@ -399,6 +421,8 @@ export function adoptSettings(settings: appconfig.Settings): Settings {
             // again: an older file must not read as having switched it off.
             checkForUpdates: settings.preferences?.checkForUpdates ?? true,
             // On by default, nullable on the Go side for the same reason.
+            pluginReleases: settings.preferences?.pluginReleases ?? true,
+            // On by default, nullable on the Go side for the same reason.
             desktopNotifications: settings.preferences?.desktopNotifications ?? true,
             // Filled in by the store from the switch before it; empty only
             // from an older backend, where the switch still says.
@@ -428,6 +452,14 @@ export function adoptSettings(settings: appconfig.Settings): Settings {
                 nodeNamespace: settings.preferences?.terminal?.nodeNamespace || 'default',
                 fontSize: settings.preferences?.terminal?.fontSize || 12,
                 scrollback: settings.preferences?.terminal?.scrollback || 5000,
+                localShell: settings.preferences?.terminal?.localShell ?? '',
+            },
+            debug: {
+                // The store fills these in; the fallbacks only cover a call
+                // that failed before it got there.
+                image: settings.preferences?.debug?.image || 'busybox',
+                images: [...(settings.preferences?.debug?.images ?? [])],
+                profile: settings.preferences?.debug?.profile || 'general',
             },
             helm: {
                 // Empty is the right default rather than an omission: helm is

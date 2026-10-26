@@ -428,6 +428,14 @@ running it some other way.
   anonymous https requests, only to hosts a pod already pulls from, answers
   kept for half an hour. Without egress to those registries the page says it
   could not reach them.
+- **Plugins can make the pod ask GitHub for release lists.** A plugin that
+  declares `"ui": { "releases": [{ "github": "owner/repo" }] }` (Talos does,
+  for `siderolabs/talos`) has the pod ask `api.github.com` for those public
+  repositories' releases when one of its pages is open: one anonymous `GET`
+  per repository, kept for six hours (on disk under the pod's cache directory
+  when it has one, else in memory). Install with `updateCheck: false` and it
+  asks nothing; the pages then use the release tables they ship with. The
+  desktop app's per-user switch does not apply here.
 - **Plugins can make the pod call services in the cluster.** A plugin that
   declares `"ui": { "services": [...] }` has the pod make GET requests,
   through the API server's service proxy and as the pod's own identity, to
@@ -457,6 +465,14 @@ running it some other way.
   user's machine.
 - **No external terminal.** Shells open in the dock in the browser; there is no
   terminal emulator on the server to hand them to.
+- **No local terminal.** The desktop app's Terminal -- a shell on the machine
+  it runs on -- would here be a shell inside the server's container, as the
+  server's user, for everyone who can sign in, with the pod's credentials to
+  hand. It is off in server mode, with no setting to turn it on: the button,
+  menu entry and shortcut are not offered, the Local shell setting is not
+  shown, and the backend refuses to open one whatever it is asked. Shells into
+  containers and nodes work as usual. Plugins' command line tools are likewise
+  desktop-only.
 - **Clusters come from the pod**, as described in [Clusters](#clusters), rather
   than from discovering `~/.kube` and watched folders on your machine.
 

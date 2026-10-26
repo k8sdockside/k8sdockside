@@ -20,6 +20,7 @@
     import { session } from '../state/session.svelte';
     import { workspace, type DetailTarget } from '../state/workspace.svelte';
     import Icon from './Icon.svelte';
+    import DebugForm from './DebugForm.svelte';
     import { notices } from '../state/notices.svelte';
     import { detail } from '../state/detail.svelte';
     import { PluginService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
@@ -384,6 +385,10 @@
             workspace.showPodsOnNode(object.contextId, object.name);
             return;
         }
+        if (action.form === 'debug') {
+            asking = action.id;
+            return;
+        }
         if (action.form === 'history') {
             asking = action.id;
             void loadHistory();
@@ -697,7 +702,7 @@
 />
 
 {#if available.length > 0 || offeredHere.length > 0}
-    <div class="bar" class:stacked={asked?.id === 'drain' || asked?.form === 'number'}>
+    <div class="bar" class:stacked={asked?.id === 'drain' || asked?.form === 'number' || asked?.form === 'debug'}>
         {#if askingPlugin}
             {@const a = askingPlugin}
             <p class="question">{a.confirm}</p>
@@ -766,6 +771,9 @@
                     {asked.label}
                 </button>
             </div>
+        {:else if asked && asked.form === 'debug'}
+            <!-- kubectl debug's question is a form of its own; see DebugForm. -->
+            <DebugForm {object} onclose={() => (asking = null)} />
         {:else if asked && asked.form === 'ports'}
             {#if loadingPorts}
                 <p class="question">Reading {subject}'s ports…</p>

@@ -120,6 +120,7 @@
                         "grant",
                         "puzzle",
                         "terminal",
+                        "bug",
                         "forward",
                         "chevron-left",
                         "chevron-right",
@@ -364,6 +365,7 @@
                         "grant",
                         "puzzle",
                         "terminal",
+                        "bug",
                         "forward",
                         "chevron-left",
                         "chevron-right",
@@ -612,6 +614,23 @@
                     "type": "boolean",
                     "description": "Lets the pages ask the registries of images the cluster runs which tags they have (k8sdockside.registry.lookup). The app asks, anonymously and over https; the pages still have no network access. Needs K8s Dockside 0.0.25 or newer."
                 },
+                "releases": {
+                    "type": "array",
+                    "maxItems": 10,
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["github"],
+                        "properties": {
+                            "github": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$",
+                                "description": "A public GitHub repository, owner/repo: \"siderolabs/talos\"."
+                            }
+                        }
+                    },
+                    "description": "Public GitHub repositories whose release lists the pages may ask for (k8sdockside.releases). The app asks GitHub anonymously, keeps the answer for six hours, and only for the repositories named here; the user can switch it off. Needs K8s Dockside 0.1.33 or newer."
+                },
                 "tools": {
                     "type": "array",
                     "maxItems": 4,
@@ -644,7 +663,17 @@
                     "items": { "$ref": "#/definitions/uiToolFile" },
                     "description": "Files the tool reads, chosen by the user per cluster and passed to every command. Pages cannot choose the paths or pass the flags themselves."
                 },
-                "read": { "$ref": "#/definitions/toolPatterns", "description": "Commands a page may run and read the output of, without asking. A pattern is words: a literal word, * for any one argument that is not a flag, and ** (last only) for whatever follows." },
+                "read": {
+                    "type": "array",
+                    "maxItems": 128,
+                    "items": {
+                        "oneOf": [
+                            { "type": "string", "minLength": 1 },
+                            { "$ref": "#/definitions/toolExtract" }
+                        ]
+                    },
+                    "description": "Commands a page may run and read the output of, without asking. A pattern is words: a literal word, * for any one argument that is not a flag, and ** (last only) for whatever follows. An entry may instead be an extraction, { command, extract }: the app runs the command, parses its output itself and hands the page only the named scalar fields, never the output (0.1.33 and newer)."
+                },
                 "run": { "$ref": "#/definitions/toolPatterns", "description": "Commands a page may ask to run. The user sees the exact command line and it runs in a console in the dock only if they say yes." },
                 "interactive": { "$ref": "#/definitions/toolPatterns", "description": "Commands a page may open in the user's own terminal, for ones that draw a full screen." }
             }
@@ -659,6 +688,45 @@
                 "flag": { "type": "string", "description": "The flag that passes it, e.g. --talosconfig." },
                 "env": { "type": "string", "description": "An environment variable that passes it as well, e.g. TALOSCONFIG." },
                 "default": { "type": "string", "description": "Where it is when the user has not chosen one; ~ is their home." }
+            }
+        },
+        "toolExtract": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["command", "extract"],
+            "description": "A read whose output never reaches the page (k8sdockside.tools.extract): the app parses it and hands back only the named fields, each a string, number or true/false. No read, run or interactive pattern may match the same command -- the manifest is refused if one could. Needs K8s Dockside 0.1.33 or newer.",
+            "properties": {
+                "command": { "type": "string", "minLength": 1, "description": "A pattern, as in the other lists, e.g. \"get machineconfig **\"." },
+                "extract": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["format", "fields"],
+                    "properties": {
+                        "format": {
+                            "type": "string",
+                            "enum": ["yaml-documents"],
+                            "description": "yaml-documents: the output is YAML documents, each a resource with a spec -- a mapping, or text that is itself YAML documents (talosctl get ... -o yaml). The fields are looked for in each resource's spec; the first document that has one wins; the answer is one entry per resource, by its node."
+                        },
+                        "output": {
+                            "type": "array",
+                            "maxItems": 8,
+                            "items": { "type": "string", "minLength": 1 },
+                            "description": "Arguments the app adds after the page's own to fix the output format, e.g. [\"-o\", \"yaml\"]. The page may not give these flags, nor --."
+                        },
+                        "fields": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 16,
+                            "uniqueItems": true,
+                            "items": {
+                                "type": "string",
+                                "maxLength": 200,
+                                "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,63}(\\.[A-Za-z_][A-Za-z0-9_-]{0,63}){0,7}$"
+                            },
+                            "description": "Dotted paths, e.g. machine.install.image. Only a single value is handed back; a path that leads to a mapping or a list is refused."
+                        }
+                    }
+                }
             }
         },
         "toolPatterns": {
@@ -847,6 +915,7 @@
                         "grant",
                         "puzzle",
                         "terminal",
+                        "bug",
                         "forward",
                         "chevron-left",
                         "chevron-right",

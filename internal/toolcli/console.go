@@ -3,12 +3,17 @@ package toolcli
 // The console: a terminal in the dock that runs one tool's commands, already
 // given the files the user chose for the cluster.
 //
-// It is not a shell. A shell needs a pseudo-terminal, and the app has none to
-// give -- its other terminals are the far ends of `kubectl exec` streams. So
-// this reads a line, splits it the way a shell would split words (and nothing
-// more: no pipes, no variables, no globbing), runs the tool with those words,
-// and streams what it writes. It does its own echoing and line editing, which
-// is what a pseudo-terminal's line discipline would have done.
+// It is not a shell. It reads a line, splits it the way a shell would split
+// words (and nothing more: no pipes, no variables, no globbing), and runs the
+// tool with those words. The prompt does its own echoing and line editing.
+//
+// Each command runs behind a real pseudo-terminal (internal/localpty), so a
+// tool that draws a full screen -- `talosctl dashboard`, say -- works here as
+// it does in a terminal emulator: it sees a terminal of the dock's size, every
+// keystroke reaches it while it runs, and Ctrl-C is the terminal's interrupt
+// rather than this console's. Where no pseudo-terminal can be opened the
+// command runs on pipes instead, as it always used to: output only, with
+// Ctrl-C stopping it.
 
 import (
 	"context"
@@ -19,8 +24,17 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 	"unicode/utf8"
+
+	"github.com/k8sdockside/k8sdockside/internal/localpty"
+	"github.com/k8sdockside/k8sdockside/internal/procattr"
 )
+
+// drainWait is how long a command that has exited is given for the last of
+// its output to arrive before its terminal is closed under it.
+const drainWait = 500 * time.Millisecond
 
 // Console runs one tool's commands typed into a terminal.
 type Console struct {
@@ -37,15 +51,98 @@ type Console struct {
 	// Banner is said once, before the first prompt.
 	Banner string
 
-	out     io.Writer
+	// NoPTY runs commands on pipes even where a pseudo-terminal could be
+	// opened. For tests.
+	NoPTY bool
+
+	out io.Writer
+	// raw is out without the newline translation: a pseudo-terminal does
+	// its own.
+	raw     io.Writer
 	history []string
 	// ahead is what was typed while a command ran.
 	ahead []byte
+
+	// mu guards the window size and the command running in it, which
+	// Resize reaches from another goroutine.
+	mu      sync.Mutex
+	cols    uint16
+	rows    uint16
+	running *localpty.Process
+	// sized is closed by the first Resize, for a command that should not
+	// start before the window's size is known. Made on first use.
+	sized chan struct{}
+}
+
+// firstSizeWait is how long a command behind a pseudo-terminal waits for the
+// window to say how big it is. The dock reports its size as soon as the
+// session exists, which is usually well inside this; a command started at the
+// 80x24 default instead draws a full screen into a corner of the window, and
+// one that only reads the size at start -- talosctl dashboard -- stays there.
+const firstSizeWait = 500 * time.Millisecond
+
+// Resize records the window's size, and passes it on to the command running
+// now, if any. Safe to call from any goroutine.
+func (c *Console) Resize(cols, rows uint16) {
+	if cols == 0 || rows == 0 {
+		return
+	}
+	c.mu.Lock()
+	c.cols, c.rows = cols, rows
+	running := c.running
+	sized := c.sizedLocked()
+	c.mu.Unlock()
+	select {
+	case <-sized:
+	default:
+		close(sized)
+	}
+	if running != nil {
+		_ = running.Resize(cols, rows)
+	}
+}
+
+func (c *Console) size() (uint16, uint16) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cols, c.rows
+}
+
+// sizedLocked returns the channel the first Resize closes. c.mu must be held.
+func (c *Console) sizedLocked() chan struct{} {
+	if c.sized == nil {
+		c.sized = make(chan struct{})
+	}
+	return c.sized
+}
+
+// waitForSize gives the window up to firstSizeWait to report its size, and
+// returns whatever is known by then -- zero for both when nothing came, which
+// localpty takes as its default.
+func (c *Console) waitForSize(ctx context.Context) (uint16, uint16) {
+	c.mu.Lock()
+	sized := c.sizedLocked()
+	c.mu.Unlock()
+	timer := time.NewTimer(firstSizeWait)
+	defer timer.Stop()
+	select {
+	case <-sized:
+	case <-timer.C:
+	case <-ctx.Done():
+	}
+	return c.size()
+}
+
+func (c *Console) setRunning(p *localpty.Process) {
+	c.mu.Lock()
+	c.running = p
+	c.mu.Unlock()
 }
 
 // Run reads keystrokes from in until it closes, the context ends, or the user
 // types exit. initial, when given, is run first, as if typed.
 func (c *Console) Run(ctx context.Context, in io.Reader, out io.Writer, initial []string) error {
+	c.raw = out
 	c.out = crlf{out}
 	keys := make(chan []byte)
 	go func() {
@@ -134,13 +231,14 @@ func (c *Console) Run(ctx context.Context, in io.Reader, out io.Writer, initial 
 						c.history = append(c.history, typed)
 					}
 					// The rest of this chunk was typed before anything
-					// the command saw, so it goes ahead of it.
-					rest := slices.Clone(chunk)
+					// the command saw, so it goes ahead of it: to the
+					// command, when it runs in a terminal and so can
+					// read it; to the next prompt otherwise.
+					c.ahead = append(slices.Clone(chunk), c.ahead...)
 					chunk = nil
 					if c.typed(ctx, keys, typed) {
 						return nil
 					}
-					c.ahead = append(rest, c.ahead...)
 				}
 				recall = len(c.history)
 				c.prompt()
@@ -237,14 +335,114 @@ func (c *Console) args(words []string) []string {
 	return append(out, c.Always...)
 }
 
-// exec runs one command, streaming its output, until it ends or the
-// user presses Ctrl-C.
+// exec runs one command until it ends: behind a pseudo-terminal where one can
+// be opened, on pipes where not.
 func (c *Console) exec(ctx context.Context, keys <-chan []byte, args []string) {
+	if !c.NoPTY && localpty.Supported() {
+		c.execPTY(ctx, keys, args)
+		return
+	}
+	c.execPiped(ctx, keys, args)
+}
+
+// execPTY runs one command behind a pseudo-terminal. Everything typed goes to
+// it, Ctrl-C included, until it exits; the window's size follows it.
+//
+// procattr.Hide is not used here, and must not be: on Windows it asks for
+// CREATE_NO_WINDOW, which gives the process a hidden console of its own
+// instead of the pseudo console, and nothing it writes would reach the dock.
+// localpty starts the process itself; see localpty_windows.go.
+func (c *Console) execPTY(ctx context.Context, keys <-chan []byte, args []string) {
+	cols, rows := c.waitForSize(ctx)
+	env := append(os.Environ(), c.Env...)
+	env = append(env, "TERM=xterm-256color", "COLORTERM=truecolor")
+	p, err := localpty.Start(localpty.Options{Path: c.Path, Args: args, Env: env, Cols: cols, Rows: rows})
+	if err != nil {
+		c.fail("could not run " + c.Name + ": " + err.Error())
+		return
+	}
+	c.setRunning(p)
+	// A Resize that came between reading the size and setRunning found no
+	// command to pass it to; pass it on now.
+	if nowCols, nowRows := c.size(); nowCols != 0 && (nowCols != cols || nowRows != rows) {
+		_ = p.Resize(nowCols, nowRows)
+	}
+	defer c.setRunning(nil)
+	defer func() { _ = p.Close() }()
+	// What was typed after the command's line is the command's to read, as
+	// it would be in a terminal.
+	if len(c.ahead) > 0 {
+		_, _ = p.Write(c.ahead)
+		c.ahead = nil
+	}
+
+	copied := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(c.raw, p)
+		close(copied)
+	}()
+	type result struct {
+		code int
+		err  error
+	}
+	exited := make(chan result, 1)
+	go func() {
+		code, err := p.Wait()
+		exited <- result{code, err}
+	}()
+
+	stopped := false
+	closing := ctx.Done()
+	for {
+		select {
+		case r := <-exited:
+			select {
+			case <-copied:
+			case <-time.After(drainWait):
+				_ = p.Close()
+				<-copied
+			}
+			switch {
+			case ctx.Err() != nil:
+			case stopped:
+				c.say("Stopped.")
+			case r.err != nil:
+				c.fail(r.err.Error())
+			case r.code != 0:
+				c.say(fmt.Sprintf("%s exited with status %d", c.Name, r.code))
+			}
+			return
+		case <-closing:
+			// The console is closing: end the command and wait for it.
+			closing = nil
+			stopped = true
+			_ = p.Close()
+		case k, ok := <-keys:
+			if !ok {
+				// The terminal closed: stop the command and wait for it.
+				keys = nil
+				stopped = true
+				_ = p.Close()
+				continue
+			}
+			// Everything typed is the command's -- an interactive tool
+			// reads its own keys, and Ctrl-C is its terminal's interrupt.
+			_, _ = p.Write(k)
+		}
+	}
+}
+
+// execPiped runs one command on pipes, streaming its output, until it ends or
+// the user presses Ctrl-C.
+func (c *Console) execPiped(ctx context.Context, keys <-chan []byte, args []string) {
 	run, cancel := context.WithCancel(ctx)
 	defer cancel()
 	// #nosec G204 -- the declared tool, with the words the user typed into
 	// their own terminal as its arguments. No shell.
 	cmd := exec.CommandContext(run, c.Path, args...)
+	// No pseudo-terminal here, so the process gets a console of its own on
+	// Windows; Hide keeps that console's window from flashing up.
+	procattr.Hide(cmd)
 	cmd.Env = append(os.Environ(), c.Env...)
 	cmd.Stdout, cmd.Stderr = c.out, c.out
 	if err := cmd.Start(); err != nil {

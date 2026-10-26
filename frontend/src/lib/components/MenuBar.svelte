@@ -87,6 +87,14 @@
         if (webAdmin) {
             file.push({ label: 'Manage clusters…', run: () => window.location.assign(session.clustersUrl) }, 'separator');
         }
+        if (workspace.localTerminalAvailable) {
+            file.push({
+                label: 'New terminal',
+                shortcut: 'Ctrl+`',
+                title: 'A shell on this machine, in the dock — for the cluster in front, if there is one',
+                run: () => workspace.openLocalTerminalHere(),
+            });
+        }
         file.push({ label: 'Settings…', shortcut: `${MOD},`, run: () => openSettings() });
 
         const clusters: Entry[] = [

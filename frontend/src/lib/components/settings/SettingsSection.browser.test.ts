@@ -53,6 +53,18 @@ vi.mock('../../../../bindings/github.com/k8sdockside/k8sdockside/internal/servic
         Externals: vi.fn().mockResolvedValue({ terminals: [], kubectl: '', reason: '' }),
         Launch: vi.fn().mockResolvedValue(undefined),
         LaunchNode: vi.fn().mockResolvedValue(undefined),
+        LocalShells: vi.fn().mockResolvedValue({
+            shells: [
+                { path: '/bin/zsh', name: 'Login shell (zsh)', args: ['-l'], default: true },
+                { path: '/bin/bash', name: 'bash (/bin/bash)', args: ['-l'], default: false },
+            ],
+            supported: true,
+            reason: '',
+        }),
+        DebugPresets: vi.fn().mockResolvedValue([
+            { image: 'busybox', label: 'BusyBox', hint: 'tiny' },
+            { image: 'nicolaka/netshoot', label: 'netshoot', hint: 'network' },
+        ]),
     },
     PortForwardService: {
         List: vi.fn().mockResolvedValue([]),
@@ -70,7 +82,10 @@ vi.mock('../../../../bindings/github.com/k8sdockside/k8sdockside/internal/servic
         About: vi.fn().mockResolvedValue({ version: 'test', wails: 'test', go: 'test', platform: 'test' }),
         SetPanes: vi.fn().mockResolvedValue({}),
         SetLayout: vi.fn().mockResolvedValue({}),
-        SetPreferences: vi.fn().mockResolvedValue({}),
+        // Answered with what was written, as the store answers: an empty
+        // answer would read as every preference back at its default, and land
+        // in the middle of a test that had just changed one.
+        SetPreferences: vi.fn((preferences: unknown) => Promise.resolve({ preferences })),
         SetContextPrefs: vi.fn().mockResolvedValue({}),
     },
     UpdateService: {
@@ -112,6 +127,7 @@ test('the sections are ordered with the everyday ones first and About last', asy
         'Behaviour',
         'Notifications',
         'Terminal',
+        'Debug',
         'Helm',
         'Kubeconfig sources',
         'About',
@@ -183,4 +199,60 @@ test('an open settings view follows a link to another section', async () => {
 
     await expect.element(page.getByRole('tab', { name: 'Notifications' })).toHaveAttribute('aria-selected', 'true');
     await expect.element(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
+});
+
+// The debug images: the presets to choose from, images of your own added beside
+// them and removed again, and the default following a removed one back.
+test('debug images can be chosen, added and removed', async () => {
+    const { workspace } = await import('../../state/workspace.svelte');
+    workspace.setDebug({ image: 'busybox', images: [], profile: 'general' });
+    render(SettingsView);
+    await page.getByRole('tab', { name: 'Debug' }).click();
+
+    await page.getByRole('radio', { name: /netshoot/ }).click();
+    expect(workspace.debug.image).toBe('nicolaka/netshoot');
+
+    await page.getByRole('textbox', { name: 'Debug image to add' }).fill('registry.internal/toolbox:2');
+    await page.getByRole('button', { name: 'Add' }).click();
+    expect(workspace.debug.images).toEqual(['registry.internal/toolbox:2']);
+
+    // A preset is not added twice.
+    await page.getByRole('textbox', { name: 'Debug image to add' }).fill('busybox');
+    await page.getByRole('button', { name: 'Add' }).click();
+    expect(workspace.debug.images).toEqual(['registry.internal/toolbox:2']);
+
+    await page.getByRole('radio', { name: /toolbox/ }).click();
+    expect(workspace.debug.image).toBe('registry.internal/toolbox:2');
+    await page.getByRole('button', { name: 'Remove registry.internal/toolbox:2' }).click();
+    expect(workspace.debug.images).toEqual([]);
+    expect(workspace.debug.image).toBe('busybox');
+
+    await page.getByRole('combobox', { name: 'Default debug profile' }).selectOptions('netadmin');
+    expect(workspace.debug.profile).toBe('netadmin');
+    workspace.setDebug({ image: 'busybox', images: [], profile: 'general' });
+});
+
+// The local terminal's shell: the default, one detected, or a path of your own.
+test('the local shell can be left on the default, picked, or typed in', async () => {
+    const { workspace } = await import('../../state/workspace.svelte');
+    workspace.setTerminal({ localShell: '' });
+    render(SettingsView);
+    await page.getByRole('tab', { name: 'Terminal' }).click();
+
+    const picker = page.getByRole('combobox', { name: 'Local shell' });
+    await expect.element(picker).toBeVisible();
+    await expect.element(page.getByRole('option', { name: 'Default (Login shell (zsh))' })).toBeInTheDocument();
+
+    await picker.selectOptions('/bin/bash');
+    expect(workspace.terminal.localShell).toBe('/bin/bash');
+
+    await picker.selectOptions('Custom…');
+    const custom = page.getByRole('textbox', { name: 'Custom shell path' });
+    await custom.fill('/opt/homebrew/bin/nu');
+    await custom.element().dispatchEvent(new Event('change', { bubbles: true }));
+    expect(workspace.terminal.localShell).toBe('/opt/homebrew/bin/nu');
+    // A path nothing detected stays shown as the custom one.
+    await expect.element(custom).toHaveValue('/opt/homebrew/bin/nu');
+
+    workspace.setTerminal({ localShell: '' });
 });

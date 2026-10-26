@@ -82,6 +82,9 @@ vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services'
         Externals: vi.fn().mockResolvedValue({ terminals: [], kubectl: '', reason: '' }),
         Launch: vi.fn().mockResolvedValue(undefined),
         LaunchNode: vi.fn().mockResolvedValue(undefined),
+        OpenDebug: vi.fn(),
+        DeleteDebugPod: vi.fn().mockResolvedValue(undefined),
+        OpenLocal: vi.fn(),
     },
     PortForwardService: {
         List: vi.fn().mockResolvedValue([]),
@@ -120,7 +123,11 @@ const POD_TAB = {
 
 const NODE_TAB = { ...POD_TAB, id: 'shell:node', kind: 'nodes', namespace: '', name: 'wrkr01', title: 'wrkr01' };
 
-const SESSION = { id: 'term-1', namespace: 'default', pod: 'web', container: 'app', node: '' };
+const SESSION = { id: 'term-1', namespace: 'default', pod: 'web', container: 'app', node: '', created: '', kept: false };
+
+const DEBUG_TAB = { ...POD_TAB, id: 'shell:debug', kind: 'debug' };
+
+const LOCAL_TAB = { ...POD_TAB, id: 'shell:local', kind: 'local', namespace: 'abc', name: 'prod', title: 'prod' };
 
 /** Encodes what the backend would send, which is bytes in base64. */
 function chunk(text: string, over: Record<string, unknown> = {}) {
@@ -141,7 +148,30 @@ beforeEach(() => {
         pod: '',
         container: '',
         node: 'wrkr01',
+        created: '',
+        kept: false,
     });
+    terminals.forget(DEBUG_TAB.id);
+    terminals.forget(LOCAL_TAB.id);
+    vi.mocked(TerminalService.OpenLocal).mockReset().mockResolvedValue({
+        id: 'term-1',
+        namespace: '',
+        pod: '/bin/zsh',
+        container: '',
+        node: '',
+        created: '',
+        kept: false,
+    });
+    vi.mocked(TerminalService.OpenDebug).mockReset().mockResolvedValue({
+        id: 'term-1',
+        namespace: 'default',
+        pod: 'web-debug',
+        container: 'debugger-abcde',
+        node: '',
+        created: 'web-debug',
+        kept: true,
+    });
+    vi.mocked(TerminalService.DeleteDebugPod).mockReset().mockResolvedValue(undefined);
     vi.mocked(TerminalService.Close).mockReset();
     vi.mocked(TerminalService.Resize).mockReset();
     vi.mocked(TerminalService.Launch).mockReset().mockResolvedValue(undefined);
@@ -216,4 +246,75 @@ test('a shell that could not be opened says why instead of sitting empty', async
     render(TerminalView, { tab: POD_TAB });
 
     await expect.element(page.getByText(/pods\/exec/)).toBeVisible();
+});
+
+test('a debug session opens what it was asked for, and offers neither Reconnect nor External', async () => {
+    const { blankDebugRequest } = await import('../state/debug.svelte');
+    const request = blankDebugRequest('copy', 'default', 'web');
+    await terminals.primeDebug(DEBUG_TAB.id, DEBUG_TAB, request);
+    render(TerminalView, { tab: DEBUG_TAB });
+
+    await expect.element(page.getByText('Connected')).toBeVisible();
+    expect(TerminalService.OpenDebug).toHaveBeenCalledWith(PROD, request);
+
+    events.handler(chunk('', { done: true }));
+    await expect.element(page.getByText('Ended')).toBeVisible();
+    expect(page.getByRole('button', { name: 'Reconnect' }).query()).toBeNull();
+    expect(page.getByRole('button', { name: 'External' }).query()).toBeNull();
+});
+
+test('a kept debug pod can be deleted, after asking', async () => {
+    const { blankDebugRequest } = await import('../state/debug.svelte');
+    await terminals.primeDebug(DEBUG_TAB.id, DEBUG_TAB, blankDebugRequest('copy', 'default', 'web'));
+    render(TerminalView, { tab: DEBUG_TAB });
+    await expect.element(page.getByText('Connected')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Delete pod' }).click();
+    await expect.element(page.getByText('Delete pod web-debug?')).toBeVisible();
+    expect(TerminalService.DeleteDebugPod).not.toHaveBeenCalled();
+
+    await page.getByRole('button', { name: 'Delete', exact: true }).click();
+    await vi.waitFor(() => expect(TerminalService.DeleteDebugPod).toHaveBeenCalledWith(PROD, 'default', 'web-debug'));
+});
+
+test('a debug tab with nothing to start says so rather than guessing', async () => {
+    render(TerminalView, { tab: DEBUG_TAB });
+    await expect.element(page.getByText(/Nothing to debug on web/)).toBeVisible();
+    expect(TerminalService.OpenDebug).not.toHaveBeenCalled();
+});
+
+test('a local terminal runs a shell on this machine, scoped to the cluster', async () => {
+    render(TerminalView, { tab: LOCAL_TAB });
+
+    await expect.element(page.getByText('Running')).toBeVisible();
+    expect(TerminalService.OpenLocal).toHaveBeenCalledWith(PROD);
+    expect(TerminalService.Containers).not.toHaveBeenCalled();
+    await expect.element(page.getByText('local', { exact: true })).toBeVisible();
+    await expect.element(page.getByText('/bin/zsh')).toBeVisible();
+    // There is no cluster session to hand to another terminal.
+    expect(page.getByRole('button', { name: 'External' }).query()).toBeNull();
+    await vi.waitFor(() => expect(TerminalService.Resize).toHaveBeenCalled());
+});
+
+test('a local shell that exits shows its status and offers Restart', async () => {
+    render(TerminalView, { tab: LOCAL_TAB });
+    await expect.element(page.getByText('Running')).toBeVisible();
+
+    events.handler(chunk('', { done: true, exited: true, exitCode: 2 }));
+    await expect.element(page.getByText('Exited (2)')).toBeVisible();
+    await expect.element(page.getByText(/exited with status 2/)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Restart' }).click();
+    await vi.waitFor(() => expect(TerminalService.OpenLocal).toHaveBeenCalledTimes(2));
+    await expect.element(page.getByText('Running')).toBeVisible();
+});
+
+test('a local shell that cannot be found says what was tried and points at Settings', async () => {
+    vi.mocked(TerminalService.OpenLocal).mockRejectedValueOnce(
+        new Error('The shell "/opt/nope" was not found (tried: /opt/nope). Choose another shell in Settings → Terminal → Local shell.'),
+    );
+    render(TerminalView, { tab: LOCAL_TAB });
+
+    await expect.element(page.getByText(/tried: \/opt\/nope/)).toBeVisible();
+    await expect.element(page.getByRole('button', { name: 'Open Settings' })).toBeVisible();
 });

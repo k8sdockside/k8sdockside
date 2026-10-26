@@ -6,6 +6,11 @@ const OpenNode = vi.fn();
 const Send = vi.fn();
 const Resize = vi.fn();
 const Close = vi.fn();
+const OpenDebug = vi.fn();
+const DeleteDebugPod = vi.fn();
+const OpenLocal = vi.fn();
+const OpenTool = vi.fn();
+const OpenToolInteractive = vi.fn();
 
 const events = vi.hoisted(() => ({ handler: (_e: { data: unknown }) => {} }));
 vi.mock('@wailsio/runtime', () => ({
@@ -30,7 +35,19 @@ vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services'
         Uninstall: vi.fn().mockResolvedValue(''),
         ChartVersions: vi.fn().mockResolvedValue([]),
     },
-    TerminalService: { Containers, Open, OpenNode, Send, Resize, Close },
+    TerminalService: {
+        Containers,
+        Open,
+        OpenNode,
+        Send,
+        Resize,
+        Close,
+        OpenDebug,
+        DeleteDebugPod,
+        OpenLocal,
+        OpenTool,
+        OpenToolInteractive,
+    },
 }));
 
 // xterm draws to a canvas, which jsdom does not have. Nothing here attaches a
@@ -203,5 +220,171 @@ describe('reconnecting and closing', () => {
 
         expect(Close).toHaveBeenCalledWith('term-1');
         expect(terminals.doc(TAB).status).toBe('idle');
+    });
+});
+
+describe('debug sessions', () => {
+    const DEBUG_TAB = 'shell:cfg::prod#debug##worker-01';
+    const DEBUG = { contextId: 'cfg::prod', kind: 'debug', namespace: '', name: 'worker-01' };
+
+    beforeEach(() => {
+        terminals.forget(DEBUG_TAB);
+        Containers.mockReset();
+        OpenDebug.mockReset().mockResolvedValue({
+            id: 'term-9',
+            namespace: 'debugging',
+            pod: 'k8sdockside-debug-worker-01-abcde',
+            container: 'debugger-abcde',
+            node: 'worker-01',
+            created: 'k8sdockside-debug-worker-01-abcde',
+            kept: true,
+        });
+        DeleteDebugPod.mockReset().mockResolvedValue(undefined);
+    });
+
+    test('a primed debug tab opens what it was asked for, with no container list', async () => {
+        const { blankDebugRequest } = await import('./debug.svelte');
+        const request = blankDebugRequest('node', '', 'worker-01');
+        await terminals.primeDebug(DEBUG_TAB, DEBUG, request);
+        await terminals.open(DEBUG_TAB, DEBUG);
+
+        expect(OpenDebug).toHaveBeenCalledWith('cfg::prod', request);
+        expect(Containers).not.toHaveBeenCalled();
+        const doc = terminals.doc(DEBUG_TAB);
+        expect(doc.status).toBe('running');
+        expect(doc.created).toBe('k8sdockside-debug-worker-01-abcde');
+        expect(doc.kept).toBe(true);
+        expect(doc.namespace).toBe('debugging');
+    });
+
+    test('asking again while the tab is open runs the new request', async () => {
+        const { blankDebugRequest } = await import('./debug.svelte');
+        await terminals.primeDebug(DEBUG_TAB, DEBUG, blankDebugRequest('node', '', 'worker-01'));
+        await terminals.open(DEBUG_TAB, DEBUG);
+        const second = { ...blankDebugRequest('node', '', 'worker-01'), image: 'alpine' };
+        await terminals.primeDebug(DEBUG_TAB, DEBUG, second);
+
+        expect(OpenDebug).toHaveBeenCalledTimes(2);
+        expect(OpenDebug).toHaveBeenLastCalledWith('cfg::prod', second);
+    });
+
+    test('a debug tab with no request does not guess', async () => {
+        await terminals.open(DEBUG_TAB, DEBUG);
+
+        expect(OpenDebug).not.toHaveBeenCalled();
+        expect(terminals.doc(DEBUG_TAB).status).toBe('error');
+    });
+
+    test('a kept pod is deleted from the namespace the session reported', async () => {
+        const { blankDebugRequest } = await import('./debug.svelte');
+        await terminals.primeDebug(DEBUG_TAB, DEBUG, blankDebugRequest('node', '', 'worker-01'));
+        await terminals.open(DEBUG_TAB, DEBUG);
+        await terminals.removeDebugPod(DEBUG_TAB, 'cfg::prod');
+
+        expect(DeleteDebugPod).toHaveBeenCalledWith('cfg::prod', 'debugging', 'k8sdockside-debug-worker-01-abcde');
+        expect(terminals.doc(DEBUG_TAB).created).toBe('');
+    });
+});
+
+describe('local terminals', () => {
+    const LOCAL_TAB = 'shell:cfg::prod#local#abc#prod';
+    const LOCAL = { contextId: 'cfg::prod', kind: 'local', namespace: 'abc', name: 'prod' };
+    const PLAIN_TAB = 'shell:#local#def#Terminal';
+    const PLAIN = { contextId: '', kind: 'local', namespace: 'def', name: 'Terminal' };
+
+    beforeEach(() => {
+        terminals.forget(LOCAL_TAB);
+        terminals.forget(PLAIN_TAB);
+        Containers.mockReset();
+        OpenLocal.mockReset().mockResolvedValue({ id: 'term-20', namespace: '', pod: '/bin/zsh', container: '', node: '' });
+    });
+
+    test('a cluster tab opens a local shell scoped to that context, with no container list', async () => {
+        await terminals.open(LOCAL_TAB, LOCAL);
+
+        expect(OpenLocal).toHaveBeenCalledWith('cfg::prod');
+        expect(Containers).not.toHaveBeenCalled();
+        const doc = terminals.doc(LOCAL_TAB);
+        expect(doc.status).toBe('running');
+        expect(doc.pod).toBe('/bin/zsh');
+        expect(doc.exitCode).toBeNull();
+    });
+
+    test('a plain one is tied to no cluster', async () => {
+        await terminals.open(PLAIN_TAB, PLAIN);
+        expect(OpenLocal).toHaveBeenCalledWith('');
+    });
+
+    test('a shell that exits by itself says its status, and is not an error', async () => {
+        await terminals.open(LOCAL_TAB, LOCAL);
+        events.handler({ data: { sessionId: 'term-20', data: '', error: '', done: true, exited: true, exitCode: 130 } });
+
+        const doc = terminals.doc(LOCAL_TAB);
+        expect(doc.status).toBe('ended');
+        expect(doc.exitCode).toBe(130);
+    });
+
+    test('restarting opens a fresh shell and forgets the old status', async () => {
+        await terminals.open(LOCAL_TAB, LOCAL);
+        events.handler({ data: { sessionId: 'term-20', data: '', error: '', done: true, exited: true, exitCode: 0 } });
+        OpenLocal.mockResolvedValueOnce({ id: 'term-21', namespace: '', pod: '/bin/zsh', container: '', node: '' });
+
+        await terminals.restart(LOCAL_TAB, LOCAL);
+
+        expect(OpenLocal).toHaveBeenCalledTimes(2);
+        const doc = terminals.doc(LOCAL_TAB);
+        expect(doc.status).toBe('running');
+        expect(doc.sessionId).toBe('term-21');
+        expect(doc.exitCode).toBeNull();
+    });
+
+    test('a shell that cannot be found is reported in the tab', async () => {
+        OpenLocal.mockRejectedValueOnce(
+            new Error('The shell "/no/shell" was not found (tried: /no/shell). Choose another shell in Settings → Terminal → Local shell.'),
+        );
+        await terminals.open(LOCAL_TAB, LOCAL);
+
+        const doc = terminals.doc(LOCAL_TAB);
+        expect(doc.status).toBe('error');
+        expect(doc.error).toMatch(/not found/);
+        expect(doc.error).toMatch(/Settings/);
+    });
+
+    test('closing the tab closes the session', async () => {
+        await terminals.open(LOCAL_TAB, LOCAL);
+        terminals.forget(LOCAL_TAB);
+        expect(Close).toHaveBeenCalledWith('term-20');
+    });
+});
+
+describe('tool consoles', () => {
+    const TOOL_TAB = 'shell:cfg::prod#tool#talos/talosctl#talosctl';
+    const TOOL = { contextId: 'cfg::prod', kind: 'tool', namespace: 'talos/talosctl', name: 'talosctl' };
+
+    beforeEach(() => {
+        terminals.forget(TOOL_TAB);
+        OpenTool.mockReset().mockResolvedValue({ id: 'term-30', namespace: '', pod: '', container: '', node: '' });
+        OpenToolInteractive.mockReset().mockResolvedValue({ id: 'term-31', namespace: '', pod: '', container: '', node: '' });
+    });
+
+    test('an interactive command runs in the dock through its own allow-list, once', async () => {
+        await terminals.primeTool(TOOL_TAB, TOOL, [], ['dashboard'], true);
+        await terminals.open(TOOL_TAB, TOOL);
+
+        expect(OpenToolInteractive).toHaveBeenCalledWith('cfg::prod', 'talos', 'talosctl', ['dashboard']);
+        expect(OpenTool).not.toHaveBeenCalled();
+
+        // Reconnecting is a plain console: the dashboard is not run twice.
+        await terminals.restart(TOOL_TAB, TOOL);
+        expect(OpenToolInteractive).toHaveBeenCalledTimes(1);
+        expect(OpenTool).toHaveBeenCalledWith('cfg::prod', 'talos', 'talosctl', [], []);
+    });
+
+    test('a run command still goes through OpenTool', async () => {
+        await terminals.primeTool(TOOL_TAB, TOOL, ['--nodes', '10.0.0.1'], ['reboot']);
+        await terminals.open(TOOL_TAB, TOOL);
+
+        expect(OpenTool).toHaveBeenCalledWith('cfg::prod', 'talos', 'talosctl', ['--nodes', '10.0.0.1'], ['reboot']);
+        expect(OpenToolInteractive).not.toHaveBeenCalled();
     });
 });

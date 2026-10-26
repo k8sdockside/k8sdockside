@@ -125,6 +125,8 @@ func New(settings *appconfig.Store, opts Options) Built {
 	// The list of known plugins is fetched from the same place the releases
 	// are asked about, and switched off by the same operator setting.
 	solutions.knownOff = opts.Server && opts.NoUpdateChecks
+	// And so are the release lists plugins' pages ask for.
+	solutions.releasesOff = opts.Server && opts.NoUpdateChecks
 
 	return Built{
 		Services: []application.Service{

@@ -266,6 +266,13 @@ type Terminal struct {
 	// many lines it keeps.
 	FontSize   int `json:"fontSize"`
 	Scrollback int `json:"scrollback"`
+	// LocalShell is the shell the dock's local terminal runs on this
+	// machine: the path of one internal/localshell detected, or one typed in
+	// by hand. Empty means the default -- $SHELL on Unix; PowerShell 7, then
+	// Windows PowerShell, then Command Prompt on Windows -- which, like
+	// External, is deliberately not resolved on save, so a settings file
+	// synced between machines goes on meaning "the usual one here".
+	LocalShell string `json:"localShell"`
 }
 
 // The values Terminal.Mode may take. Strings rather than an enum, for the
@@ -301,6 +308,72 @@ const (
 	MinScrollback   = 200
 	MaxScrollback   = 200000
 )
+
+// Debug is how the app runs `kubectl debug`: an ephemeral container in a
+// running pod, a copy of a pod with a debug container in it, or a pod on a
+// node with the host's namespaces.
+//
+// One record for the reason Terminal is one: the image and the profile are
+// read together, on the way to creating something in a cluster.
+type Debug struct {
+	// Image is the image a debug container runs unless the launch form says
+	// otherwise. One of the presets, one of Images, or anything else typed in.
+	Image string `json:"image"`
+	// Images are the images the user added to the presets, offered beside
+	// them wherever an image is chosen. A preset is never repeated here.
+	Images []string `json:"images"`
+	// Profile is the security profile a debug container is given, by the
+	// name kubectl uses for it: legacy, general, baseline, netadmin,
+	// restricted or sysadmin.
+	Profile string `json:"profile"`
+}
+
+// DebugImage is one of the images offered for a debug container without the
+// user having to add it.
+type DebugImage struct {
+	Image string `json:"image"`
+	// Label is the short name the picker shows.
+	Label string `json:"label"`
+	// Hint says what the image is good for, in a line.
+	Hint string `json:"hint"`
+}
+
+// Debug defaults. busybox for the reason the node shell uses it: tiny,
+// mirrored everywhere, and enough to look around with. general is kubectl's own
+// default profile.
+//
+// Stated here rather than taken from internal/kube, for the reason the terminal
+// defaults are: this package knows nothing about Kubernetes.
+const (
+	DefaultDebugImage   = "busybox"
+	DefaultDebugProfile = "general"
+)
+
+// DebugProfiles are the profiles kubectl debug knows, in the order it lists
+// them.
+var DebugProfiles = []string{"legacy", "general", "baseline", "netadmin", "restricted", "sysadmin"}
+
+// debugPresets are the images offered without being added. Unpinned tags, on
+// purpose: a debug image is a toolbox, and the newest toolbox is the one
+// wanted. A cluster that mirrors its own adds those as custom images.
+var debugPresets = []DebugImage{
+	{Image: "busybox", Label: "BusyBox", Hint: "Tiny; a shell and the core utilities."},
+	{Image: "nicolaka/netshoot", Label: "netshoot", Hint: "Network troubleshooting: tcpdump, dig, curl, iperf, ss and more."},
+	{Image: "alpine", Label: "Alpine", Hint: "Small, with a package manager to add what is missing."},
+	{Image: "ubuntu", Label: "Ubuntu", Hint: "A full userland, with apt."},
+	{Image: "gcr.io/distroless/base-debian12:debug", Label: "Distroless (debug)", Hint: "Distroless base with a busybox shell, close to what distroless apps run on."},
+}
+
+// DebugPresets returns the images offered without being added, as a copy the
+// caller may keep.
+func DebugPresets() []DebugImage {
+	return slices.Clone(debugPresets)
+}
+
+// DefaultDebug is the debug settings a fresh install starts with.
+func DefaultDebug() Debug {
+	return Debug{Image: DefaultDebugImage, Images: []string{}, Profile: DefaultDebugProfile}
+}
 
 // Helm is how the app runs helm, and what it passes when it does.
 //
@@ -459,6 +532,14 @@ type Preferences struct {
 	// nil is how a file that has never said either way is told apart from an
 	// explicit no.
 	CheckForUpdates *bool `json:"checkForUpdates"`
+	// PluginReleases lets the app ask GitHub for the release lists of the
+	// public repositories a plugin's manifest names ("ui": {"releases": ...}),
+	// when one of that plugin's pages asks -- so a page can say how far the
+	// cluster is from the latest release of what it runs. Off, the pages are
+	// told so and fall back on what they ship with.
+	//
+	// Nullable for the same reason CheckForUpdates is: the default is on.
+	PluginReleases *bool `json:"pluginReleases"`
 	// DesktopNotifications posts the cluster alerts -- a node gone NotReady,
 	// pods starting to crash, a certificate about to expire -- as the
 	// system's own notifications, as well as on the bell in the title bar.
@@ -485,6 +566,10 @@ type Preferences struct {
 	// the user already has, which shell to try, and what a node shell is made
 	// of. See Terminal.
 	Terminal Terminal `json:"terminal"`
+	// Debug is what `kubectl debug` from the app is made of: the image a
+	// debug container runs, the images the user has added to the presets, and
+	// the profile it is given. See Debug.
+	Debug Debug `json:"debug"`
 	// Helm is where the helm binary is and how it is run, for the operations
 	// that change a release. See Helm.
 	Helm Helm `json:"helm"`
@@ -724,6 +809,7 @@ func Defaults() Settings {
 			Density:     DensityComfortable,
 			ContextSort: ContextSortName,
 			Terminal:    DefaultTerminal(),
+			Debug:       DefaultDebug(),
 			Helm:        DefaultHelm(),
 			Background:  Background{Source: BackgroundBuiltin, Palette: BackgroundPaletteVaried},
 			DateTime:    normaliseDateTime(DateTime{}),

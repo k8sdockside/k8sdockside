@@ -6,7 +6,8 @@ import { TerminalService } from '../../../../bindings/github.com/k8sdockside/k8s
 import { changes } from '../changes.svelte';
 import { editors } from '../editor.svelte';
 import { logs } from '../logs.svelte';
-import { terminals, TOOL_CONSOLE } from '../terminals.svelte';
+import { DEBUG_SESSION, LOCAL_SHELL, terminals, TOOL_CONSOLE } from '../terminals.svelte';
+import type { DebugRequest } from '../debug.svelte';
 import { fields } from '../fields';
 import { views } from '../views';
 import {
@@ -652,6 +653,114 @@ export abstract class WorkspaceTabs extends WorkspaceContexts {
         const target: DetailTarget = { contextId, kind: TOOL_CONSOLE, namespace: `${pluginId}/${toolId}`, name: label };
         void terminals.primeTool(tabIdFor('shell', target), target, defaults, initial);
         this.openObjectTab('shell', target);
+    }
+
+    /**
+     * Runs one of a plugin tool's interactive commands -- one that draws a full
+     * screen, like `talosctl dashboard` -- in the dock, in a tool console with
+     * a real pseudo-terminal, or in the user's own terminal if that is what
+     * they have chosen: the same choice openShell honours.
+     */
+    openToolCommand(contextId: string, pluginId: string, toolId: string, label: string, args: string[]): void {
+        if (this.terminal.mode === 'external' && !session.server) {
+            void this.openExternalToolCommand(contextId, pluginId, toolId, args);
+            return;
+        }
+        const target: DetailTarget = { contextId, kind: TOOL_CONSOLE, namespace: `${pluginId}/${toolId}`, name: label };
+        void terminals.primeTool(tabIdFor('shell', target), target, [], args, true);
+        this.openObjectTab('shell', target);
+    }
+
+    /** Runs a plugin tool's interactive command in the terminal emulator installed on this machine. */
+    async openExternalToolCommand(contextId: string, pluginId: string, toolId: string, args: string[]): Promise<void> {
+        try {
+            await TerminalService.LaunchTool(contextId, pluginId, toolId, args);
+        } catch (err) {
+            notices.fail(message(err));
+        }
+    }
+
+    /** Whether this build can open a local terminal: the desktop app only. */
+    get localTerminalAvailable(): boolean {
+        return !session.server;
+    }
+
+    /**
+     * Opens a shell on this machine in the dock. Given a context, the shell's
+     * KUBECONFIG holds that context alone, so kubectl and helm there talk to
+     * that cluster; without one it is a plain shell.
+     *
+     * With reuse, a local terminal already open for the same context is
+     * brought forward instead; otherwise every call opens a new one, the way a
+     * terminal's "new tab" does.
+     *
+     * Never in the web version: a local shell there would be a shell on the
+     * server. The backend refuses it as well.
+     */
+    openLocalTerminal(contextId = '', reuse = false): void {
+        if (!this.localTerminalAvailable) return;
+        if (reuse) {
+            const open = PANE_IDS.flatMap((pane) => this.panes[pane].tabs).find(
+                (t) => t.view === 'shell' && t.kind === LOCAL_SHELL && t.contextId === contextId,
+            );
+            if (open) {
+                this.openObjectTab('shell', open);
+                return;
+            }
+        }
+        const context = contextId ? this.contexts.find((c) => c.id === contextId) : undefined;
+        const name = context ? this.displayName(context) : 'Terminal';
+        // The namespace only keeps this tab apart from the next one opened on
+        // the same context.
+        const target: DetailTarget = {
+            contextId,
+            kind: LOCAL_SHELL,
+            namespace: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+            name,
+        };
+        this.openObjectTab('shell', target);
+    }
+
+    /**
+     * Opens a local terminal for whatever cluster the focused tab belongs to,
+     * or a plain one when it belongs to none. What the keyboard shortcut does.
+     */
+    openLocalTerminalHere(): void {
+        const contextId = this.focusedTab?.contextId ?? '';
+        const known = contextId !== '' && this.contexts.some((c) => c.id === contextId);
+        this.openLocalTerminal(known ? contextId : '');
+    }
+
+    /**
+     * Starts a `kubectl debug` session on a pod or a node, in a pane or in the
+     * user's own terminal -- the same choice openShell honours.
+     *
+     * One tab per object debugged: asking again while one is open runs the new
+     * request in it, rather than piling up tabs onto the same pod.
+     */
+    openDebug(target: DetailTarget, request: DebugRequest): void {
+        if (this.terminal.mode === 'external' && !session.server) {
+            void this.openExternalDebug(target, request);
+            return;
+        }
+        const tab: DetailTarget = {
+            contextId: target.contextId,
+            kind: DEBUG_SESSION,
+            namespace: target.namespace,
+            name: target.name,
+        };
+        void terminals.primeDebug(tabIdFor('shell', tab), tab, request);
+        this.openObjectTab('shell', tab);
+    }
+
+    /** Runs kubectl debug in the terminal emulator installed on this machine. */
+    async openExternalDebug(target: DetailTarget, request: DebugRequest): Promise<void> {
+        try {
+            await TerminalService.LaunchDebug(target.contextId, request);
+            notices.inform(`Opened kubectl debug on ${target.name} in your terminal`);
+        } catch (err) {
+            notices.fail(message(err));
+        }
     }
 
     /**

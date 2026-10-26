@@ -445,11 +445,26 @@ const probeTimeout = 6 * time.Second
 // The client is borrowed from the same pool the informers use, so probing a
 // context you then open costs no second connection and no second credential
 // exec -- the ping warms exactly what the tab is about to need.
+//
+// A cluster that answers also has its discovery cache filled in the
+// background, which is the other thing every tab needs before it can ask
+// for anything: a context is pinged when it is selected or unfolded, a
+// moment before something is opened on it, and that moment is enough to
+// take the full discovery download off the path of the first click. Not
+// for a cluster that did not answer -- the fill would only hold the cache's
+// lock for a timeout that the tab then waits through a second time.
 func (w *Watcher) Ping(kc Context) error {
 	return w.withClient(kc, func(c *clusterClient) error {
 		ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 		defer cancel()
 
-		return c.disco.RESTClient().Get().AbsPath("/version").Do(ctx).Error()
+		if err := c.disco.RESTClient().Get().AbsPath("/version").Do(ctx).Error(); err != nil {
+			return err
+		}
+		// No reference is held for it: an idle eviction only takes the
+		// client out of the map, and a fill finishing on a client nobody
+		// holds any more is wasted, not wrong.
+		go c.warmDiscovery()
+		return nil
 	})
 }

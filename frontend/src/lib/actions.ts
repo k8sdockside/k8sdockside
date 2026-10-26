@@ -11,6 +11,7 @@ export type ActionId =
     | 'edit'
     | 'logs'
     | 'shell'
+    | 'debug'
     | 'forward'
     | 'scale'
     | 'restart'
@@ -42,9 +43,10 @@ export type ActionId =
  *
  * `immediate` runs at once, `confirm` replaces the bar with a question naming
  * the object, and `number` asks for a replica count first. `revision` picks one
- * of a Helm release's revisions, and `history` one of a workload's.
+ * of a Helm release's revisions, and `history` one of a workload's. `debug`
+ * asks what a kubectl debug session is to be made of.
  */
-export type ActionForm = 'immediate' | 'confirm' | 'number' | 'ports' | 'revision' | 'history';
+export type ActionForm = 'immediate' | 'confirm' | 'number' | 'ports' | 'revision' | 'history' | 'debug';
 
 export interface Action {
     id: ActionId;
@@ -72,6 +74,15 @@ const LOGS: Action = { id: 'logs', label: 'Logs', icon: 'rows', form: 'immediate
  * -- a shell you have to fill in a form for is not a shell you would use.
  */
 const SHELL: Action = { id: 'shell', label: 'Shell', icon: 'terminal', form: 'immediate' };
+/**
+ * `kubectl debug`: a debug container in a pod, in a copy of it, or in a pod on
+ * a node. Unlike Shell it asks first -- every way of doing it creates
+ * something in the cluster, and the form is where that is said and the image,
+ * profile and target are chosen.
+ */
+const DEBUG: Action = { id: 'debug', label: 'Debug', icon: 'bug', form: 'debug' };
+/** The kinds that can be debugged, the two kubectl debug takes. */
+const DEBUGGABLE = ['pods', 'nodes'];
 /**
  * A local port into the object. It asks first, because there are three answers
  * it cannot guess: which port, on which local port, and whether to open a
@@ -327,6 +338,7 @@ export function actionsFor(kind: string): Action[] {
     const out: Action[] = [EDIT];
     if (LOGGABLE.includes(kind)) out.push(LOGS);
     if (SHELLABLE.includes(kind)) out.push(SHELL);
+    if (DEBUGGABLE.includes(kind)) out.push(DEBUG);
     if (FORWARDABLE.includes(kind)) out.push(FORWARD);
     if (SCALABLE.includes(kind)) out.push(SCALE);
     if (ROLLABLE.includes(kind)) out.push(RESTART);

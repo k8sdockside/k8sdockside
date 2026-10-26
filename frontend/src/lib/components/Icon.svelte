@@ -58,6 +58,18 @@
 
         // A terminal: a prompt and a cursor.
         terminal: ['M4 5h16v14H4z', 'M7.5 9.5l2.5 2.5-2.5 2.5', 'M13 15h4'],
+        // A bug, for kubectl debug: a body, a head, and legs either side.
+        bug: [
+            'M8 9h8v6a4 4 0 0 1-8 0V9z',
+            'M9.5 9a2.5 2.5 0 0 1 5 0',
+            'M12 11v8',
+            'M4 13h4',
+            'M16 13h4',
+            'M5 8l3 2',
+            'M19 8l-3 2',
+            'M5 19l3-2',
+            'M19 19l-3-2',
+        ],
         // A port forward: a local end, a remote end, and traffic crossing.
         forward: ['M4 8h5v8H4z', 'M15 8h5v8h-5z', 'M9 12h6', 'M13 10l2 2-2 2'],
 

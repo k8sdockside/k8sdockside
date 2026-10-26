@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
@@ -112,5 +113,103 @@ func TestASuccessfulListingIsGrouped(t *testing.T) {
 	}
 	if len(groups) != 1 || groups[0].Group != "vitistack.io" {
 		t.Errorf("groups = %+v, want vitistack.io", groups)
+	}
+}
+
+// The sidebar's definitions are read from a printed table of their names and
+// the discovery cache, never from the definitions themselves: those carry
+// their whole schemas, and on a cluster with a few operators that is tens of
+// megabytes, asked for every time a context is opened.
+func TestCustomKindsAreReadWithoutTheDefinitions(t *testing.T) {
+	srv := newFakeServer(t)
+	w := NewWatcher(func(Snapshot) {})
+	t.Cleanup(w.Close)
+
+	groups, err := w.CustomResourceKinds(kubeconfigFor(t, srv.URL))
+	if err != nil {
+		t.Fatalf("CustomResourceKinds: %v", err)
+	}
+	if len(groups) != 1 || groups[0].Group != "example.com" || len(groups[0].Kinds) != 1 {
+		t.Fatalf("groups = %+v, want example.com with one kind", groups)
+	}
+	want := CustomResourceKind{
+		Kind:   CustomKind("widgets", "example.com"),
+		Label:  "Widget",
+		Group:  "example.com",
+		Plural: "widgets",
+		Scoped: true,
+	}
+	if got := groups[0].Kinds[0]; got != want {
+		t.Errorf("kind = %+v, want %+v", got, want)
+	}
+	if n := srv.count("/apis/apiextensions.k8s.io/v1/customresourcedefinitions"); n != 0 {
+		t.Errorf("the definitions were listed in full %d times, want never", n)
+	}
+	if n := srv.count("/apis/apiextensions.k8s.io/v1/customresourcedefinitions?table"); n != 1 {
+		t.Errorf("the table of definitions was asked for %d times, want once", n)
+	}
+}
+
+// A definition discovery has not heard of -- installed since the cache was
+// filled, or served at no version -- is described by the definition itself,
+// so the answer is the same one reading them all would have given.
+func TestCustomKindsUnknownToDiscoveryAreReadInFull(t *testing.T) {
+	srv := newFakeServer(t)
+	srv.defined = append(srv.defined, "gadgets.example.org")
+	w := NewWatcher(func(Snapshot) {})
+	t.Cleanup(w.Close)
+
+	groups, err := w.CustomResourceKinds(kubeconfigFor(t, srv.URL))
+	if err != nil {
+		t.Fatalf("CustomResourceKinds: %v", err)
+	}
+	if len(groups) != 2 || groups[0].Group != "example.com" || groups[1].Group != "example.org" {
+		t.Fatalf("groups = %+v, want example.com and example.org", groups)
+	}
+	if got := groups[1].Kinds[0]; got.Label != "Gadget" || got.Plural != "gadgets" {
+		t.Errorf("kind = %+v, want Gadget read from its definition", got)
+	}
+	if n := srv.count("/apis/apiextensions.k8s.io/v1/customresourcedefinitions"); n != 1 {
+		t.Errorf("the definitions were listed in full %d times, want once", n)
+	}
+}
+
+func TestCustomKindsInNeedsEveryDefinition(t *testing.T) {
+	lists := []*metav1.APIResourceList{{
+		GroupVersion: "example.com/v1",
+		APIResources: []metav1.APIResource{
+			{Name: "widgets", Kind: "Widget", Namespaced: true},
+			{Name: "widgets/status", Kind: "Widget", Namespaced: true},
+			{Name: "clusterwidgets", Kind: "ClusterWidget"},
+		},
+	}}
+
+	kinds, ok := customKindsIn([]string{"widgets.example.com", "clusterwidgets.example.com"}, lists)
+	if !ok || len(kinds) != 2 {
+		t.Fatalf("kinds = %+v, %v; want both answered", kinds, ok)
+	}
+	if !kinds[0].Scoped || kinds[1].Scoped {
+		t.Errorf("scopes = %v, %v; want namespaced then cluster-wide", kinds[0].Scoped, kinds[1].Scoped)
+	}
+
+	if _, ok := customKindsIn([]string{"widgets.example.com", "gadgets.example.com"}, lists); ok {
+		t.Error("answered with a definition missing from discovery, want the caller sent to the definitions")
+	}
+	if _, ok := customKindsIn([]string{"nodot"}, lists); ok {
+		t.Error("answered for a name that is not plural.group")
+	}
+}
+
+func TestTableNamesNeedsANameColumn(t *testing.T) {
+	table := metav1.Table{
+		ColumnDefinitions: []metav1.TableColumnDefinition{{Name: "Created At"}, {Name: "Name", Format: "name"}},
+		Rows:              []metav1.TableRow{{Cells: []any{"x", "widgets.example.com"}}},
+	}
+	names, err := tableNames(table)
+	if err != nil || len(names) != 1 || names[0] != "widgets.example.com" {
+		t.Errorf("names = %v, %v; want the name column read wherever it is", names, err)
+	}
+	if _, err := tableNames(metav1.Table{ColumnDefinitions: []metav1.TableColumnDefinition{{Name: "Age"}}}); err == nil {
+		t.Error("read names from a table without a name column")
 	}
 }

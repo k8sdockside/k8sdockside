@@ -25,6 +25,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	neturl "net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -72,6 +73,12 @@ type TerminalChunk struct {
 	Data      string `json:"data"`
 	Error     string `json:"error"`
 	Done      bool   `json:"done"`
+	// Exited is set on the last chunk of a local terminal whose program
+	// ended by itself, with ExitCode its status -- which the tab shows,
+	// since a shell that exited non-zero is not an error to report but is
+	// worth knowing about.
+	Exited   bool `json:"exited"`
+	ExitCode int  `json:"exitCode"`
 }
 
 // sizeQueue feeds window sizes to client-go, which asks for the next one and
@@ -184,11 +191,23 @@ func (c *clusterClient) exec(
 			TTY:    true,
 		}, scheme.ParameterCodec)
 
-	websocket, err := remotecommand.NewWebSocketExecutor(c.cfg, "GET", req.URL().String())
+	return c.stream(ctx, req.URL(), stdin, stdout, sizes)
+}
+
+// stream upgrades one exec or attach request into a terminal, and blocks until
+// it ends. Websocket first and SPDY second -- see the top of this file.
+func (c *clusterClient) stream(
+	ctx context.Context,
+	url *neturl.URL,
+	stdin io.Reader,
+	stdout io.Writer,
+	sizes <-chan TerminalSize,
+) error {
+	websocket, err := remotecommand.NewWebSocketExecutor(c.cfg, "GET", url.String())
 	if err != nil {
 		return err
 	}
-	spdy, err := remotecommand.NewSPDYExecutor(c.cfg, "POST", req.URL())
+	spdy, err := remotecommand.NewSPDYExecutor(c.cfg, "POST", url)
 	if err != nil {
 		return err
 	}

@@ -113,6 +113,13 @@ vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services'
         Externals: vi.fn().mockResolvedValue({ terminals: [], kubectl: '', reason: '' }),
         Launch: vi.fn().mockResolvedValue(undefined),
         LaunchNode: vi.fn().mockResolvedValue(undefined),
+        LaunchDebug: vi.fn().mockResolvedValue(undefined),
+        OpenDebug: vi.fn(),
+        DebugInfo: vi.fn().mockResolvedValue({ containers: ['app', 'sidecar'], nonRoot: false }),
+        DebugPresets: vi.fn().mockResolvedValue([
+            { image: 'busybox', label: 'BusyBox', hint: '' },
+            { image: 'nicolaka/netshoot', label: 'netshoot', hint: '' },
+        ]),
     },
     PortForwardService: {
         List: vi.fn().mockResolvedValue([]),
@@ -206,6 +213,8 @@ beforeEach(async () => {
     });
     vi.mocked(TerminalService.Launch).mockReset().mockResolvedValue(undefined);
     vi.mocked(TerminalService.LaunchNode).mockReset().mockResolvedValue(undefined);
+    vi.mocked(TerminalService.LaunchDebug).mockReset().mockResolvedValue(undefined);
+    vi.mocked(TerminalService.DebugInfo).mockReset().mockResolvedValue({ containers: ['app', 'sidecar'], nonRoot: false });
     vi.mocked(ActionService.VMOperation).mockReset().mockResolvedValue(undefined);
     vi.mocked(ActionService.VMState)
         .mockReset()
@@ -990,4 +999,65 @@ test('evicting a pod nothing manages says it is not replaced', async () => {
 
     await page.getByRole('button', { name: 'Evict' }).click();
     await expect.element(page.getByText(/deleted for good/)).toBeVisible();
+});
+
+// Every way of debugging creates something in the cluster, so the button asks
+// -- and the question says what will be made before anything is.
+test('debug asks before it makes anything, and cancelling makes nothing', async () => {
+    render(ObjectActions, { object: POD });
+
+    await page.getByRole('button', { name: 'Debug' }).click();
+    await expect.element(page.getByText(/Add an ephemeral debug container to pod web/)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await expect.element(page.getByRole('button', { name: 'Debug' })).toBeVisible();
+    expect(TerminalService.LaunchDebug).not.toHaveBeenCalled();
+    expect(TerminalService.OpenDebug).not.toHaveBeenCalled();
+});
+
+test('debug runs an ephemeral container against the first container by default', async () => {
+    workspace.setTerminal({ mode: 'external' });
+    render(ObjectActions, { object: POD });
+
+    await page.getByRole('button', { name: 'Debug' }).click();
+    await expect.element(page.getByRole('combobox', { name: 'Target container' })).toHaveValue('app');
+    await page.getByRole('button', { name: 'Debug', exact: true }).click();
+
+    await vi.waitFor(() => expect(TerminalService.LaunchDebug).toHaveBeenCalled());
+    const [contextId, request] = vi.mocked(TerminalService.LaunchDebug).mock.calls[0];
+    expect(contextId).toBe(PROD);
+    expect(request).toMatchObject({ mode: 'ephemeral', namespace: 'default', name: 'web', target: 'app', image: 'busybox' });
+    workspace.setTerminal({ mode: 'app' });
+});
+
+test('replacing the original says so, on the question and on the button', async () => {
+    render(ObjectActions, { object: POD });
+
+    await page.getByRole('button', { name: 'Debug' }).click();
+    await page.getByRole('radio', { name: 'Copy of the pod' }).click();
+    await page.getByRole('checkbox', { name: /Replace/ }).click();
+
+    await expect.element(page.getByText(/original pod web is then DELETED/)).toBeVisible();
+    await expect.element(page.getByRole('button', { name: 'Debug and delete original' })).toBeVisible();
+});
+
+test('a pod that runs as non-root warns that the profile may not take', async () => {
+    vi.mocked(TerminalService.DebugInfo).mockResolvedValue({ containers: ['app'], nonRoot: true });
+    render(ObjectActions, { object: POD });
+
+    await page.getByRole('button', { name: 'Debug' }).click();
+    await expect.element(page.getByText(/runs as a non-root user/)).toBeVisible();
+});
+
+test('a node is debugged with a pod on it, in the node shell namespace', async () => {
+    workspace.setTerminal({ mode: 'external' });
+    render(ObjectActions, { object: NODE });
+
+    await page.getByRole('button', { name: 'Debug' }).click();
+    await expect.element(page.getByText(/Create a debug pod on node wrkr01/)).toBeVisible();
+    await page.getByRole('button', { name: 'Debug', exact: true }).click();
+
+    await vi.waitFor(() => expect(TerminalService.LaunchDebug).toHaveBeenCalled());
+    expect(vi.mocked(TerminalService.LaunchDebug).mock.calls[0][1]).toMatchObject({ mode: 'node', name: 'wrkr01' });
+    workspace.setTerminal({ mode: 'app' });
 });
