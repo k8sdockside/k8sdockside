@@ -219,6 +219,10 @@ type Layout struct {
 	// No omitempty: it would drop an empty list on write, turning "I expanded
 	// everything" back into "never chosen" on the next read.
 	CollapsedGroups []string `json:"collapsedGroups"`
+	// FoldedSections are the details panel's sections the user has folded
+	// away -- "describe", or a plugin's section as "plugin:<plugin>/<section>"
+	// -- for every object, on every cluster. The names are the frontend's.
+	FoldedSections []string `json:"foldedSections,omitempty"`
 }
 
 // Window is where the main window was last left and how big, in the screen

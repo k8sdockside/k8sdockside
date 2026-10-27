@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import DetailPanel from './DetailPanel.svelte';
 import { detail } from '../state/detail.svelte';
@@ -158,6 +158,7 @@ const settle = () => new Promise((r) => setTimeout(r, 150));
 
 beforeEach(() => {
     workspace.closeAllDockTabs();
+    workspace.settings.layout.foldedSections = [];
     detail.close();
     vi.mocked(ResourceService.Describe).mockReset().mockResolvedValue('Name: web\nStatus: Running');
     vi.mocked(ResourceService.ObjectLinks)
@@ -347,8 +348,49 @@ test('the report can be searched, and says how many matches there are', async ()
     await page.getByRole('textbox', { name: 'Find in this report' }).fill('name');
 
     // Case-insensitive, so "Name:" is found by typing it in lower case.
-    await expect.element(page.getByText('2 matches')).toBeVisible();
+    await expect.element(page.getByText('1 of 2')).toBeVisible();
     await expect.poll(() => document.querySelectorAll('.body mark').length).toBe(2);
+});
+
+test('Enter and the arrows go from match to match, and the one looked at is marked', async () => {
+    vi.mocked(ResourceService.Describe).mockResolvedValue(HIDDEN);
+    render(DetailPanel);
+    await detail.open(CREDS);
+    await settle();
+    const current = () => document.querySelector('.body mark.current')?.getAttribute('data-hit');
+
+    const box = page.getByRole('textbox', { name: 'Find in this report' });
+    await box.fill('name');
+    await expect.poll(current).toBe('0');
+
+    await box.click();
+    await userEvent.keyboard('{Enter}');
+    await expect.element(page.getByText('2 of 2')).toBeVisible();
+    expect(current()).toBe('1');
+
+    // Past the last is the first again.
+    await page.getByRole('button', { name: 'The next match' }).click();
+    await expect.element(page.getByText('1 of 2')).toBeVisible();
+
+    await page.getByRole('button', { name: 'The match before' }).click();
+    await expect.element(page.getByText('2 of 2')).toBeVisible();
+});
+
+test('the report folds away, and stays folded for the next object', async () => {
+    render(DetailPanel);
+    await detail.open(WEB);
+    await settle();
+
+    await page.getByRole('button', { name: 'Describe' }).click();
+    await expect.element(page.getByRole('textbox', { name: 'Find in this report' })).not.toBeInTheDocument();
+    expect(workspace.settings.layout.foldedSections).toEqual(['describe']);
+
+    await detail.open({ ...WEB, name: 'api' });
+    await settle();
+    await expect.element(page.getByRole('textbox', { name: 'Find in this report' })).not.toBeInTheDocument();
+
+    await page.getByRole('button', { name: 'Describe' }).click();
+    await expect.element(page.getByRole('textbox', { name: 'Find in this report' })).toBeVisible();
 });
 
 test('a search with nothing to find says so rather than emptying the report', async () => {
@@ -371,7 +413,7 @@ test('the query is dropped when the panel moves to another object', async () => 
     await detail.open(CREDS);
     await settle();
     await page.getByRole('textbox', { name: 'Find in this report' }).fill('password');
-    await expect.element(page.getByText('1 match')).toBeVisible();
+    await expect.element(page.getByText('1 of 1')).toBeVisible();
 
     await detail.open({ ...CREDS, name: 'other' });
     await settle();

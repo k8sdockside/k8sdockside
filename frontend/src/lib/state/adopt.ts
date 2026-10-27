@@ -318,6 +318,8 @@ export interface Settings {
         zoom: number;
         /** null means the user has never chosen; an empty list means "fold nothing". */
         collapsedGroups: string[] | null;
+        /** The details panel's sections folded away, for every object: "describe", "plugin:<id>/<section>". */
+        foldedSections: string[];
     };
 }
 
@@ -502,6 +504,7 @@ export function adoptSettings(settings: appconfig.Settings): Settings {
             // Preserved as null rather than defaulted to []: the two mean
             // different things to the sidebar.
             collapsedGroups: settings.layout?.collapsedGroups ?? null,
+            foldedSections: settings.layout?.foldedSections ?? [],
             zoom: settings.layout?.zoom || 1,
         },
     };

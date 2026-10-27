@@ -197,6 +197,20 @@ test('what the shell writes reaches the screen', async () => {
     await expect.element(page.getByText(/k8sdockside-on-screen/)).toBeVisible();
 });
 
+test('looking away and back keeps what was on screen', async () => {
+    const first = await render(TerminalView, { tab: POD_TAB });
+    await expect.element(page.getByText('Connected')).toBeVisible();
+    events.handler(chunk('k8sdockside-kept\r\n'));
+    await expect.element(page.getByText(/k8sdockside-kept/)).toBeVisible();
+
+    // Switching dock tabs destroys the view; the terminal lives on in the store.
+    await first.unmount();
+    render(TerminalView, { tab: POD_TAB });
+
+    await expect.element(page.getByText(/k8sdockside-kept/)).toBeVisible();
+    expect(TerminalService.Open).toHaveBeenCalledTimes(1);
+});
+
 test('the picker offers every container, and choosing one is a new session', async () => {
     render(TerminalView, { tab: POD_TAB });
     await expect.element(page.getByRole('button', { name: 'sidecar' })).toBeVisible();

@@ -602,6 +602,7 @@ func clone(s Settings) Settings {
 	}
 	// slices.Clone keeps nil as nil, which is what preserves "never chosen".
 	out.Layout.CollapsedGroups = slices.Clone(s.Layout.CollapsedGroups)
+	out.Layout.FoldedSections = slices.Clone(s.Layout.FoldedSections)
 	// A copy of the struct shares the pointer; the whole point of clone is that
 	// a caller holding the result cannot reach back into the store.
 	if s.Preferences.RestoreTabs != nil {

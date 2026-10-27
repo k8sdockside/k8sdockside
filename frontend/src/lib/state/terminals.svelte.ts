@@ -316,8 +316,16 @@ class Terminals {
      */
     attach(id: string, host: HTMLElement): Attached {
         const attached = this.terminal(id);
-        if (attached.term.element?.parentElement !== host) {
+        const element = attached.term.element;
+        if (!element) {
             attached.term.open(host);
+        } else if (element.parentElement !== host) {
+            // xterm's open() does nothing once a terminal has been opened, so a
+            // second call would leave it in the element the last view had --
+            // gone from the page -- and this one black. It is moved by hand,
+            // and drawn again, since nothing was drawn while it was away.
+            host.appendChild(element);
+            attached.term.refresh(0, attached.term.rows - 1);
         }
         this.resize(id);
 

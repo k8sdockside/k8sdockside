@@ -247,6 +247,23 @@ export abstract class WorkspaceLayout extends WorkspaceTabs {
         this.persistLayout();
     }
 
+    // ----- folding the details panel's sections ---------------------------
+    //
+    // One answer for every object on every cluster: someone who folds a
+    // plugin's section away because every plugin is installed wants it folded
+    // on the next object too, not only on this one.
+
+    /** Whether a details panel section is folded: "describe", or "plugin:<id>/<section>". */
+    isSectionFolded(key: string): boolean {
+        return (this.settings.layout.foldedSections ?? []).includes(key);
+    }
+
+    /** Folds or unfolds a details panel section, everywhere. */
+    toggleSection(key: string): void {
+        this.settings.layout.foldedSections = toggled(this.settings.layout.foldedSections ?? [], key);
+        this.persistLayout();
+    }
+
     // ----- folding the sidebar's resource groups --------------------------
     //
     // Folding is per context with a shared default behind it: a cluster either

@@ -266,6 +266,11 @@ manifest can declare it:
   fields -- never the output, and never stderr. See below.
 - `run` commands (`tools.run`) are shown to the user as the exact command line,
   files included, and run in a console in the dock only if they say yes.
+  A run that writes or reads a file of the user's -- a backup, a snapshot --
+  gives `path: { mode: 'save' | 'open', title?, name? }` and puts `{path}` in
+  its arguments (0.1.35 and newer): the app asks for the file in a dialog
+  first, puts the path where `{path}` is, then asks to run it as before. The
+  page sees the path only in the command `tools.run` resolves with.
 - `interactive` commands (`tools.external`) are full-screen ones -- a
   dashboard, a TUI. They run in a tool console in the dock, behind a real
   pseudo-terminal, unless the user has set *Settings → Terminal → Open shells*

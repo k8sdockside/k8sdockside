@@ -668,6 +668,21 @@ declare namespace K8sDockside {
         danger?: boolean;
         /** Text the user must type to say yes, e.g. the node's name. */
         confirm?: string;
+        /**
+         * A file the command writes or reads, asked of the user in a dialog
+         * before the confirmation; its path replaces `{path}` in `args`.
+         * K8s Dockside 0.1.35 and newer.
+         */
+        path?: ToolRunPath;
+    }
+
+    interface ToolRunPath {
+        /** `save` for a file the command writes, `open` for one it reads. */
+        mode: 'save' | 'open';
+        /** What the dialog says. */
+        title?: string;
+        /** The file name a save dialog suggests. */
+        name?: string;
     }
 
     interface ToolConsoleRequest {

@@ -48,6 +48,23 @@
 
     /** Matches PROTOCOL in the SDK. Bumped only for a change old pages would misread. */
     const PROTOCOL = 'k8sdockside/plugin@1';
+    /**
+     * Moves the confirmation to the end of the page, so it covers the window
+     * and sits in its middle -- not in the middle of this frame, which may be
+     * a short section off to one side, or inside something that scrolls or is
+     * transformed (and so holds a fixed element to itself).
+     */
+    function toBody(node: HTMLElement) {
+        document.body.appendChild(node);
+        return {
+            destroy() {
+                node.remove();
+            },
+        };
+    }
+
+    /** Where tools.run puts the file the user chose, when it asks for one. */
+    const PATH_TOKEN = '{path}';
 
     let plugin = $derived(
         section ? (workspace.plugins.find((p) => p.id === section.pluginId) ?? null) : workspace.pluginFor(kind),
@@ -519,7 +536,27 @@
                 // user, and run only if they say yes -- in a console in the
                 // dock, where they can watch it.
                 const tool = toolOf(p, params);
-                const args = wordsOf(params.args);
+                let args = wordsOf(params.args);
+                // A file the command writes or reads -- a backup, say -- is
+                // the user's to choose, in a dialog, before the confirmation.
+                // It replaces {path} in the arguments; the page never sees it
+                // but in the command it gets back.
+                const want = params.path && typeof params.path === 'object' ? (params.path as Record<string, unknown>) : null;
+                if (want) {
+                    if (!args.some((a) => a.includes(PATH_TOKEN))) {
+                        throw new Error(`a run that asks for a path must give ${PATH_TOKEN} in its arguments`);
+                    }
+                    const chosen = await PluginService.ToolChoosePath(
+                        contextId,
+                        p.id,
+                        tool.id,
+                        want.mode === 'open' ? 'open' : 'save',
+                        text(want.title),
+                        text(want.name),
+                    );
+                    if (!chosen) throw new Error('the command was declined: no file was chosen');
+                    args = args.map((a) => a.split(PATH_TOKEN).join(chosen));
+                }
                 const plan = await PluginService.ToolPlan(contextId, p.id, tool.id, 'run', args);
                 const confirm = text(params.confirm);
                 const yes = await ask({
@@ -728,7 +765,7 @@
 
         {#if confirming}
             {@const c = confirming}
-            <div class="scrim">
+            <div class="scrim" use:toBody>
                 <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="plugin-confirm-title">
                     <h2 id="plugin-confirm-title">{c.title}</h2>
                     <p>
@@ -810,11 +847,6 @@
         background: var(--bg-raised);
     }
 
-    .host.section .scrim {
-        position: fixed;
-        z-index: 50;
-    }
-
     .gone {
         display: flex;
         align-items: flex-start;
@@ -841,17 +873,28 @@
         line-height: 1.7;
     }
 
+    /* The whole window, whatever frame asked: see toBody. The padding keeps
+       the dialog off the edges and out from under a phone's notch. */
     .scrim {
-        position: absolute;
+        position: fixed;
         inset: 0;
-        z-index: 5;
-        display: grid;
-        place-items: center;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+            max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
         background: color-mix(in srgb, var(--bg) 60%, transparent);
     }
 
+    /* As tall as the window allows and no taller: a long command scrolls
+       inside it, and the buttons stay reachable on a small screen. */
     .dialog {
-        width: min(560px, calc(100% - 48px));
+        box-sizing: border-box;
+        width: min(560px, 100%);
+        max-height: 100%;
+        overflow: auto;
         padding: 18px 20px;
         border-radius: var(--radius);
         background: var(--bg-panel);
@@ -884,6 +927,7 @@
 
     .buttons {
         display: flex;
+        flex-wrap: wrap;
         justify-content: flex-end;
         gap: 8px;
     }

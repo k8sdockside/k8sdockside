@@ -19,6 +19,7 @@
     import { workspace } from '../state/workspace.svelte';
     import ContainerPills from './ContainerPills.svelte';
     import ErrorState from './ErrorState.svelte';
+    import FoldButton from './FoldButton.svelte';
     import HelmRelease from './HelmRelease.svelte';
     import Icon from './Icon.svelte';
     import ObjectActions from './ObjectActions.svelte';
@@ -30,6 +31,11 @@
     import { DETAILS_TAB_ID } from '../state/panes';
     import { notices } from '../state/notices.svelte';
     import { copyText } from '../clipboard';
+
+    /** The key the describe report is folded under. See workspace.toggleSection. */
+    const DESCRIBE_SECTION = 'describe';
+    const RESOURCES_SECTION = 'resources';
+    const METRICS_SECTION = 'metrics';
 
     let target = $derived(detail.target);
     /**
@@ -137,28 +143,95 @@
      */
     interface Part {
         text: string;
-        hit: boolean;
+        /** Which match this is, counting from 0; -1 for the text between them. */
+        hit: number;
     }
 
     let parts = $derived.by((): Part[] => {
         const needle = query.trim().toLowerCase();
-        if (!needle) return [{ text: detail.text, hit: false }];
+        if (!needle) return [{ text: detail.text, hit: -1 }];
 
         const out: Part[] = [];
         const haystack = detail.text.toLowerCase();
         let at = 0;
+        let n = 0;
         for (;;) {
             const found = haystack.indexOf(needle, at);
             if (found === -1) break;
-            if (found > at) out.push({ text: detail.text.slice(at, found), hit: false });
-            out.push({ text: detail.text.slice(found, found + needle.length), hit: true });
+            if (found > at) out.push({ text: detail.text.slice(at, found), hit: -1 });
+            out.push({ text: detail.text.slice(found, found + needle.length), hit: n++ });
             at = found + needle.length;
         }
-        if (at < detail.text.length) out.push({ text: detail.text.slice(at), hit: false });
+        if (at < detail.text.length) out.push({ text: detail.text.slice(at), hit: -1 });
         return out;
     });
 
-    let hits = $derived(parts.filter((p) => p.hit).length);
+    let hits = $derived(parts.reduce((n, p) => (p.hit >= 0 ? n + 1 : n), 0));
+
+    /**
+     * The match being looked at, which is marked apart from the rest and
+     * scrolled to: a report is long, and highlighting alone left the matches
+     * somewhere off screen for the reader to hunt for. Enter and the arrows
+     * beside the box go to the next and the one before.
+     */
+    let current = $state(0);
+    let findInput = $state<HTMLInputElement | null>(null);
+    let reportEl = $state<HTMLElement | null>(null);
+
+    // A new query starts at its first match.
+    $effect(() => {
+        query;
+        current = 0;
+    });
+
+    // The report can change under the query -- it is live -- and have fewer.
+    $effect(() => {
+        if (current >= hits) current = Math.max(0, hits - 1);
+    });
+
+    // The match being looked at is brought into view, clear of the sticky bar.
+    $effect(() => {
+        const at = current;
+        if (!hits || !reportEl) return;
+        const mark = reportEl.querySelector<HTMLElement>(`mark[data-hit="${at}"]`);
+        mark?.scrollIntoView({ block: 'center', inline: 'nearest' });
+    });
+
+    function go(by: number): void {
+        if (!hits) return;
+        current = (current + by + hits) % hits;
+    }
+
+    function findKey(event: KeyboardEvent): void {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            go(event.shiftKey ? -1 : 1);
+        } else if (event.key === 'Escape' && query) {
+            // The first Escape empties the box; only the next closes the panel.
+            event.preventDefault();
+            event.stopPropagation();
+            query = '';
+        }
+    }
+
+    /** ⌘F / Ctrl+F: to the find box, unfolding the report if it was folded. */
+    function findShortcut(event: KeyboardEvent): void {
+        if (!(event.metaKey || event.ctrlKey) || event.altKey || event.key.toLowerCase() !== 'f') return;
+        if (!target || !hasReport) return;
+        const at = event.target;
+        if (at instanceof HTMLElement && at.closest('.cm-editor, .xterm')) return;
+        event.preventDefault();
+        if (workspace.isSectionFolded(DESCRIBE_SECTION)) workspace.toggleSection(DESCRIBE_SECTION);
+        requestAnimationFrame(() => {
+            findInput?.focus();
+            findInput?.select();
+        });
+    }
+
+    /** The key a plugin's section is folded under. */
+    function pluginSectionKey(pluginId: string, sectionId: string): string {
+        return `plugin:${pluginId}/${sectionId}`;
+    }
 
     /**
      * Whether the report was just copied, which the button says for a moment:
@@ -191,7 +264,8 @@
 
 <svelte:window
     onkeydown={(e) => {
-        if (e.key === 'Escape' && detail.target) detail.close();
+        findShortcut(e);
+        if (e.key === 'Escape' && !e.defaultPrevented && detail.target) detail.close();
     }}
 />
 
@@ -240,6 +314,8 @@
                     name={target.name}
                     title="Resources"
                     compact
+                    folded={workspace.isSectionFolded(RESOURCES_SECTION)}
+                    ontoggle={() => workspace.toggleSection(RESOURCES_SECTION)}
                 />
             {/if}
 
@@ -249,6 +325,8 @@
                 namespace={target.namespace}
                 name={target.name}
                 compact
+                folded={workspace.isSectionFolded(METRICS_SECTION)}
+                ontoggle={() => workspace.toggleSection(METRICS_SECTION)}
             />
 
             {#if isMachine && target}
@@ -273,16 +351,25 @@
                  in a sandboxed frame, told which object it is drawn for. After
                  the app's own summary, before the report. -->
             {#each workspace.pluginSectionsFor(target.contextId, target.kind) as entry (entry.plugin.id + '/' + entry.section.id)}
-                <div class="plugin-section">
-                    <h3>{entry.section.label} <span>· {entry.plugin.name}</span></h3>
-                    <!-- Each is a frame of its own that loads a page and polls:
-                         started as it scrolls into view, not all at once. -->
-                    <WhenVisible height={entry.section.height ?? 160}>
-                        <PluginFrame
-                            contextId={target.contextId}
-                            section={{ pluginId: entry.plugin.id, sectionId: entry.section.id, object: target }}
-                        />
-                    </WhenVisible>
+                {@const key = pluginSectionKey(entry.plugin.id, entry.section.id)}
+                {@const folded = workspace.isSectionFolded(key)}
+                <div class="plugin-section" class:folded>
+                    <h3>
+                        <FoldButton {folded} ontoggle={() => workspace.toggleSection(key)}>
+                            {entry.section.label} <span class="by">· {entry.plugin.name}</span>
+                        </FoldButton>
+                    </h3>
+                    {#if !folded}
+                        <!-- Each is a frame of its own that loads a page and polls:
+                             started as it scrolls into view, not all at once. A
+                             folded one is not loaded at all. -->
+                        <WhenVisible height={entry.section.height ?? 160}>
+                            <PluginFrame
+                                contextId={target.contextId}
+                                section={{ pluginId: entry.plugin.id, sectionId: entry.section.id, object: target }}
+                            />
+                        </WhenVisible>
+                    {/if}
                 </div>
             {/each}
 
@@ -300,23 +387,55 @@
             {:else if detail.error}
                 <ErrorState message={detail.error} compact />
             {:else}
+                {@const describeFolded = workspace.isSectionFolded(DESCRIBE_SECTION)}
+                <div class="plugin-section describe-head" class:folded={describeFolded}>
+                    <h3>
+                        <FoldButton
+                            folded={describeFolded}
+                            ontoggle={() => workspace.toggleSection(DESCRIBE_SECTION)}
+                            what="the report">Describe</FoldButton
+                        >
+                    </h3>
+                </div>
+                {#if !describeFolded}
                 <div class="tools">
                     <label class="find">
                         <Icon name="search" size={12} />
                         <input
+                            bind:this={findInput}
                             placeholder="Find in {singularFor(target.kind)}"
                             aria-label="Find in this report"
+                            title="Enter for the next match, Shift+Enter for the one before"
                             bind:value={query}
+                            onkeydown={findKey}
                         />
                     </label>
                     {#if query.trim()}
                         <!-- A count rather than nothing, because a match can be
-                             far enough down the report to be off screen: "3
-                             matches" is what says to keep scrolling, and "no
+                             far enough down the report to be off screen: "3 of
+                             7" is what says there is more to see, and "no
                              matches" is what stops you looking. -->
                         <span class="hits" class:none={hits === 0} aria-live="polite">
-                            {hits === 0 ? 'No matches' : `${hits} match${hits === 1 ? '' : 'es'}`}
+                            {hits === 0 ? 'No matches' : `${current + 1} of ${hits}`}
                         </span>
+                        <button
+                            class="step"
+                            aria-label="The match before"
+                            title="The match before (Shift+Enter)"
+                            disabled={hits === 0}
+                            onclick={() => go(-1)}
+                        >
+                            <Icon name="chevron-up" size={12} />
+                        </button>
+                        <button
+                            class="step"
+                            aria-label="The next match"
+                            title="The next match (Enter)"
+                            disabled={hits === 0}
+                            onclick={() => go(1)}
+                        >
+                            <Icon name="chevron-down" size={12} />
+                        </button>
                     {/if}
 
                     <button
@@ -348,7 +467,8 @@
 
                 <!-- Written on one line so that no whitespace from the template
                      itself lands inside the pre. -->
-                <pre class="selectable">{#each parts as part, i (i)}{#if part.hit}<mark>{part.text}</mark>{:else}{part.text}{/if}{/each}</pre>
+                <pre class="selectable" bind:this={reportEl}>{#each parts as part, i (i)}{#if part.hit >= 0}<mark data-hit={part.hit} class:current={part.hit === current}>{part.text}</mark>{:else}{part.text}{/if}{/each}</pre>
+                {/if}
             {/if}
         </div>
     </section>
@@ -412,7 +532,7 @@
     }
 
     .plugin-section {
-        margin: 12px 12px 16px;
+        margin: 12px 16px 16px;
     }
 
     .plugin-section h3 {
@@ -424,7 +544,7 @@
         color: var(--text-faint);
     }
 
-    .plugin-section h3 span {
+    .plugin-section h3 .by {
         text-transform: none;
         letter-spacing: 0;
     }
@@ -538,5 +658,46 @@
         background: color-mix(in oklab, var(--accent) 45%, transparent);
         color: var(--text);
         border-radius: 2px;
+    }
+
+    /* The match being looked at: louder than the rest, so it is found at a glance. */
+    mark.current {
+        background: var(--warn);
+        color: var(--bg);
+        box-shadow: 0 0 0 2px var(--warn);
+    }
+
+    .step {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--bg-raised);
+        color: var(--text-dim);
+    }
+
+    .step:hover:not(:disabled) {
+        color: var(--text);
+        background: var(--bg-hover);
+    }
+
+    .step:disabled {
+        opacity: 0.5;
+    }
+
+    .plugin-section.folded {
+        margin-bottom: 8px;
+    }
+
+    .plugin-section.folded h3 {
+        margin-bottom: 0;
+    }
+
+    .describe-head {
+        margin-bottom: 4px;
     }
 </style>

@@ -306,3 +306,38 @@ test('a long list draws only what is in view, and scrolling brings the rest', as
     expect(now).not.toContain('pod-0');
     box.remove();
 });
+
+test('↑ and ↓ open the row above or below, in the order on screen', async () => {
+    const opened: string[] = [];
+    const screen = await render(SortableTable, {
+        columns: AGES,
+        rows: byAge,
+        selectedRowId: null as string | null,
+        onselect: (r: Row) => {
+            opened.push(r.id);
+            void screen.rerender({ selectedRowId: r.id });
+        },
+    });
+
+    await page.getByRole('button', { name: 'Last Seen' }).click();
+    await page.getByRole('row').nth(1).click();
+    expect(opened).toEqual(['a']);
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    await expect.poll(() => opened).toEqual(['a', 'b']);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+    await expect.poll(() => opened).toEqual(['a', 'b', 'c']);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
+    await expect.poll(() => opened).toEqual(['a', 'b', 'c', 'b']);
+});
+
+test('the arrows are left alone after a click outside the table', async () => {
+    const opened: string[] = [];
+    await render(SortableTable, { columns: AGES, rows: byAge, selectedRowId: 'a', onselect: (r: Row) => opened.push(r.id) });
+
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+
+    expect(opened).toEqual([]);
+});

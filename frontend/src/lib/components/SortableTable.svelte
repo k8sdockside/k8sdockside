@@ -244,6 +244,56 @@
         };
     });
 
+    // ----- moving the selection with the keyboard ---------------------------
+    //
+    // ↑ and ↓ open the row above or below the one open, in the order on
+    // screen. Only for the table last clicked in -- a click anywhere else, the
+    // detail panel say, gives the arrows back to whatever is there -- and never
+    // while typing.
+
+    /** Whether the last click was in this table. */
+    let holds = false;
+
+    function claim(event: PointerEvent): void {
+        holds = !!tableEl && event.target instanceof Node && tableEl.contains(event.target);
+    }
+
+    function typing(target: EventTarget | null): boolean {
+        return (
+            target instanceof HTMLElement &&
+            !!target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"], .cm-editor, .xterm')
+        );
+    }
+
+    function step(event: KeyboardEvent): void {
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+        if (!holds || !onselect || event.defaultPrevented) return;
+        if (event.altKey || event.metaKey || event.ctrlKey || event.shiftKey || typing(event.target)) return;
+        // A table in a tab that is not in front is still in the page, but not on it.
+        if (!tableEl?.isConnected || tableEl.offsetParent === null || !sorted.length) return;
+        event.preventDefault();
+        const at = sorted.findIndex((r) => r.id === selectedRowId);
+        const next = at === -1 ? 0 : at + (event.key === 'ArrowDown' ? 1 : -1);
+        if (next < 0 || next >= sorted.length) return;
+        onselect(sorted[next]!);
+        reveal(next);
+    }
+
+    /** Scrolls a row, by its place in the sorted rows, into view under the header. */
+    function reveal(index: number): void {
+        if (!tableEl) return;
+        const parent = scroller ?? scrollParentOf(tableEl);
+        const body = tableEl.tBodies[0];
+        if (!parent || !body) return;
+        const height = tableEl.querySelector<HTMLTableRowElement>('tbody tr[data-row]')?.offsetHeight || rowHeight;
+        const head = tableEl.tHead?.offsetHeight ?? 0;
+        // Measured from the top of the body, so the spacer standing in for the
+        // rows above a window counts as they would.
+        const top = body.getBoundingClientRect().top - parent.getBoundingClientRect().top + parent.scrollTop + index * height;
+        if (top - head < parent.scrollTop) parent.scrollTop = top - head;
+        else if (top + height > parent.scrollTop + parent.clientHeight) parent.scrollTop = top + height - parent.clientHeight;
+    }
+
     function sortBy(index: number): void {
         if (sortColumn === index) {
             sortDescending = !sortDescending;
@@ -328,6 +378,8 @@
         }
     }
 </script>
+
+<svelte:window onpointerdowncapture={claim} onkeydown={step} />
 
 <table bind:this={tableEl}>
     <thead>

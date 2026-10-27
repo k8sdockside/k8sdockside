@@ -202,7 +202,7 @@ export function defaultSettings(): Settings {
             background: { source: 'builtin', pinned: '', minutes: 15, palette: 'varied' },
         },
         portForwards: [],
-        layout: { detailPane: 'right', sidebarWidth: 320, collapsedGroups: null, zoom: 1 },
+        layout: { detailPane: 'right', sidebarWidth: 320, collapsedGroups: null, foldedSections: [], zoom: 1 },
     };
 }
 

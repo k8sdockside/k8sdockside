@@ -166,6 +166,55 @@ func (s *PluginService) ToolChooseFile(contextID, pluginID, toolID, fileID strin
 	return s.ToolStatus(contextID, pluginID, toolID)
 }
 
+// Ways ToolChoosePath asks for a path.
+const (
+	ToolPathSave = "save"
+	ToolPathOpen = "open"
+)
+
+// ToolChoosePath asks the user, in a file dialog, for a file a run command
+// should write ("save") or read ("open") -- e.g. a backup. The path goes only
+// into the command the page asked to run, which the user still confirms; an
+// empty path is the user cancelling. name is the file name a save dialog
+// suggests, and must be a name, not a path.
+func (s *PluginService) ToolChoosePath(contextID, pluginID, toolID, mode, title, name string) (string, error) {
+	if _, err := s.prepareTool(contextID, pluginID, toolID, false); err != nil {
+		return "", err
+	}
+	name = filepath.Base(strings.TrimSpace(name))
+	if name == "." || name == string(filepath.Separator) {
+		name = ""
+	}
+	home, _ := os.UserHomeDir()
+	switch mode {
+	case ToolPathSave:
+		dialog := application.Get().Dialog.SaveFile().
+			CanCreateDirectories(true).
+			ShowHiddenFiles(true).
+			SetFilename(name)
+		if title != "" {
+			dialog.SetMessage(title)
+		}
+		if home != "" {
+			dialog.SetDirectory(home)
+		}
+		return dialog.PromptForSingleSelection()
+	case ToolPathOpen:
+		dialog := application.Get().Dialog.OpenFile().
+			CanChooseFiles(true).
+			CanChooseDirectories(false).
+			ShowHiddenFiles(true)
+		if title != "" {
+			dialog.SetTitle(title)
+		}
+		if home != "" {
+			dialog.SetDirectory(home)
+		}
+		return dialog.PromptForSingleSelection()
+	}
+	return "", fmt.Errorf("%q is not a way to choose a path; use %q or %q", mode, ToolPathSave, ToolPathOpen)
+}
+
 // ToolForgetFile goes back to the manifest's default for one of a tool's files.
 func (s *PluginService) ToolForgetFile(contextID, pluginID, toolID, fileID string) (ToolStatus, error) {
 	if _, err := s.prepareTool(contextID, pluginID, toolID, false); err != nil {

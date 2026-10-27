@@ -15,6 +15,7 @@
 -->
 <script lang="ts">
     import { everyWhileVisible } from '../visibility';
+    import FoldButton from '../components/FoldButton.svelte';
     import { ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import { formatValue, type Unit } from '../charts/format';
     import { adoptBudget, adoptDelay, barsFor, ceilingOf, delayTone, type Bar, type Budget, type CPUDelay } from './adopt';
@@ -30,9 +31,24 @@
         title?: string;
         /** Narrow layout for the detail panel. */
         compact?: boolean;
+        /**
+         * Where the section can be folded away -- the details panel -- whether
+         * it is, and how to change that. A folded one reads nothing.
+         */
+        folded?: boolean;
+        ontoggle?: () => void;
     }
 
-    let { contextId, scope, name = '', namespace = '', title = 'Resources', compact = false }: Props = $props();
+    let {
+        contextId,
+        scope,
+        name = '',
+        namespace = '',
+        title = 'Resources',
+        compact = false,
+        folded = false,
+        ontoggle,
+    }: Props = $props();
 
     /** Requests move when anything is scheduled, so this does not sit stale. */
     const REFRESH_MS = 30_000;
@@ -79,6 +95,7 @@
     }
 
     $effect(() => {
+        if (folded) return;
         // Named so the effect re-runs when any of them change.
         contextId;
         scope;
@@ -148,15 +165,23 @@
     }
 </script>
 
-<section class="budget" class:compact>
+<section class="budget" class:compact class:folded>
     <header>
-        <h2>{title}</h2>
-        {#if usage?.source}
+        <h2>
+            {#if ontoggle}
+                <FoldButton {folded} {ontoggle} what="the resources">{title}</FoldButton>
+            {:else}
+                {title}
+            {/if}
+        </h2>
+        {#if usage?.source && !folded}
             <span class="source" title="Live usage is read from {usage.source}">{usage.source}</span>
         {/if}
     </header>
 
-    {#if error}
+    {#if folded}
+        <!-- Nothing: the heading is the whole of a folded section. -->
+    {:else if error}
         <p class="note failed">{error}</p>
     {:else if budget?.error}
         <p class="note failed">{budget.error}</p>
@@ -256,6 +281,20 @@
         align-items: baseline;
         justify-content: space-between;
         gap: 10px;
+    }
+
+    .budget.compact.folded {
+        padding-top: 10px;
+        margin-bottom: 12px;
+    }
+
+    header h2 {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .folded h2 {
+        margin-bottom: 0;
     }
 
     h2 {

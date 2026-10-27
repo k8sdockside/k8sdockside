@@ -14,6 +14,7 @@
     import { everyWhileVisible } from '../visibility';
     import { MetricsService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import Icon from '../components/Icon.svelte';
+    import FoldButton from '../components/FoldButton.svelte';
     import { adoptPanel, type MetricsPanelData } from './adopt';
     import LineChart from './LineChart.svelte';
     import type { Unit } from './format';
@@ -30,9 +31,24 @@
         title?: string;
         /** Narrow layout: one column, shorter charts. The detail panel wants this. */
         compact?: boolean;
+        /**
+         * Where the section can be folded away -- the details panel -- whether
+         * it is, and how to change that. A folded one reads nothing.
+         */
+        folded?: boolean;
+        ontoggle?: () => void;
     }
 
-    let { contextId, attach, namespace = '', name = '', title = 'Metrics', compact = false }: Props = $props();
+    let {
+        contextId,
+        attach,
+        namespace = '',
+        name = '',
+        title = 'Metrics',
+        compact = false,
+        folded = false,
+        ontoggle,
+    }: Props = $props();
 
     /** The windows worth one click. Presets before any custom range. */
     const RANGES = [
@@ -83,7 +99,7 @@
     }
 
     $effect(() => {
-        if (!show) return;
+        if (!show || folded) return;
 
         // Named so the effect re-runs when any of them change.
         contextId;
@@ -125,10 +141,17 @@
 </script>
 
 {#if show}
-    <section class="metrics" class:compact>
+    <section class="metrics" class:compact class:folded>
         <header>
-            <h2>{title}</h2>
+            <h2>
+                {#if ontoggle}
+                    <FoldButton {folded} {ontoggle} what="the charts">{title}</FoldButton>
+                {:else}
+                    {title}
+                {/if}
+            </h2>
 
+            {#if !folded}
             <!-- One row, above the charts, scoping all of them. -->
             <div class="ranges" role="group" aria-label="Time range">
                 {#each RANGES as preset (preset.minutes)}
@@ -151,9 +174,12 @@
             >
                 <Icon name="refresh" size={12} />
             </button>
+            {/if}
         </header>
 
-        {#if error}
+        {#if folded}
+            <!-- Nothing: the heading is the whole of a folded section. -->
+        {:else if error}
             <p class="note failed">{error}</p>
         {:else if firstLoad}
             <p class="note">Looking for metrics…</p>
@@ -242,8 +268,23 @@
         margin-bottom: 10px;
     }
 
+    /* Folded, it is one heading in a column of them, spaced as they are. */
+    .metrics.folded {
+        margin-bottom: 12px;
+    }
+
+    .folded header {
+        margin-bottom: 0;
+    }
+
+    /* In the details panel: the same gutter as the resources above it. */
+    .compact header {
+        padding: 0 16px;
+    }
+
     h2 {
         flex: 1 1 auto;
+        min-width: 0;
         margin: 0;
         font-size: 11px;
         letter-spacing: 0.06em;
