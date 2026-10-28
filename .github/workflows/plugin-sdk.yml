@@ -9,6 +9,11 @@ name: plugin-sdk
 # uses npm's trusted publishing (OIDC): set it up once on npmjs.com, under the
 # package's Settings -> Trusted publishing, for this repository and this
 # workflow file. No token is stored here.
+#
+# The release is *staged*, not published: npm holds it until a maintainer
+# approves it on npmjs.com (or `npm stage approve <id>`) with 2FA, so a pushed
+# tag alone -- or a workflow that has gone wrong -- cannot put a version in
+# front of everyone. The trusted publisher is set to allow stage publish only.
 
 on:
   push:
@@ -68,5 +73,9 @@ jobs:
             echo "tag $GITHUB_REF_NAME, but package.json says $want" >&2
             exit 1
           fi
+      # Staged publishing needs npm 11.15.0 or newer; the npm Node ships with
+      # may be older.
+      - run: npm install -g npm@^11.15.0
       - run: npm ci
-      - run: npm publish --provenance --access public
+      # Provenance comes with trusted publishing by itself.
+      - run: npm stage publish --access public

@@ -83,4 +83,7 @@ npm run check
 ```
 
 To release: bump `version` in `package.json`, commit, and push a tag
-`plugin-sdk-v<version>`. The `plugin-sdk` workflow tests and publishes it.
+`plugin-sdk-v<version>` (`git tag -m "plugin-sdk <version>" plugin-sdk-v<version>`).
+The `plugin-sdk` workflow tests it and *stages* it on npm; it goes live once a
+maintainer approves it under the package's Staged Packages on npmjs.com, or with
+`npm stage approve <id>`, which asks for 2FA.
