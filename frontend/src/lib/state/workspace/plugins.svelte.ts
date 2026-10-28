@@ -656,7 +656,7 @@ export abstract class WorkspacePlugins extends WorkspaceLayout {
         }
     }
 
-    /** Opens the native picker and reads plugins from the folder chosen. */
+    /** Opens the native picker and reads plugins from the folders chosen -- one or several. */
     async addPluginFolder(): Promise<void> {
         try {
             this.pluginCatalogue = adoptPluginCatalogue(await PluginService.BrowseForFolder());
@@ -784,6 +784,17 @@ export abstract class WorkspacePlugins extends WorkspaceLayout {
             this.settings = adoptSettings(await SettingsService.Get());
         } catch (err) {
             notices.fail(`Could not drop the folder: ${message(err)}`);
+        }
+    }
+
+    /** Stops reading plugins from every extra folder at once. Nothing is deleted. */
+    async removeAllPluginFolders(): Promise<void> {
+        try {
+            this.pluginCatalogue = adoptPluginCatalogue(await PluginService.RemoveFolders([...this.pluginFolders]));
+            this.registerViews();
+            this.settings = adoptSettings(await SettingsService.Get());
+        } catch (err) {
+            notices.fail(`Could not drop the folders: ${message(err)}`);
         }
     }
 }

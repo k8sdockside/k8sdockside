@@ -918,20 +918,37 @@ func (s *PluginService) Uninstall(ctx context.Context, id string) (plugins.Catal
 }
 
 // AddFolder starts reading plugins from another directory.
+//
+// A folder's subfolders are read as well, one level down -- see addons.scan --
+// so the folder that holds a checkout of each plugin's repository is one
+// folder to add, not one per plugin.
 func (s *PluginService) AddFolder(ctx context.Context, path string) (plugins.Catalogue, error) {
+	return s.AddFolders(ctx, []string{path})
+}
+
+// AddFolders starts reading plugins from several directories at once, and
+// reads the plugins once at the end rather than after each. Every folder is
+// checked before any is added, so one that is not a folder adds none of them.
+func (s *PluginService) AddFolders(ctx context.Context, paths []string) (plugins.Catalogue, error) {
 	if err := session.RequireAdmin(ctx); err != nil {
 		return s.catalogue(), err
 	}
-	path = filepath.Clean(path)
-	info, err := os.Stat(path)
-	if err != nil {
-		return s.catalogue(), err
+	clean := make([]string, 0, len(paths))
+	for _, path := range paths {
+		path = filepath.Clean(path)
+		info, err := os.Stat(path)
+		if err != nil {
+			return s.catalogue(), err
+		}
+		if !info.IsDir() {
+			return s.catalogue(), errors.New(path + " is a file, not a folder")
+		}
+		clean = append(clean, path)
 	}
-	if !info.IsDir() {
-		return s.catalogue(), errors.New(path + " is a file, not a folder")
-	}
-	if _, err := s.store.AddPluginFolder(path); err != nil {
-		return s.catalogue(), err
+	for _, path := range clean {
+		if _, err := s.store.AddPluginFolder(path); err != nil {
+			return s.catalogue(), err
+		}
 	}
 	s.forget()
 	return s.catalogue(), nil
@@ -941,24 +958,33 @@ func (s *PluginService) AddFolder(ctx context.Context, path string) (plugins.Cat
 // plugins in it stop being offered, and a tab open on one of their views says
 // so rather than emptying.
 func (s *PluginService) RemoveFolder(ctx context.Context, path string) (plugins.Catalogue, error) {
+	return s.RemoveFolders(ctx, []string{path})
+}
+
+// RemoveFolders stops reading plugins from several directories, reading the
+// plugins once at the end. Nothing is deleted.
+func (s *PluginService) RemoveFolders(ctx context.Context, paths []string) (plugins.Catalogue, error) {
 	if err := session.RequireAdmin(ctx); err != nil {
 		return s.catalogue(), err
 	}
-	if _, err := s.store.RemovePluginFolder(path); err != nil {
-		return s.catalogue(), err
+	for _, path := range paths {
+		if _, err := s.store.RemovePluginFolder(path); err != nil {
+			return s.catalogue(), err
+		}
 	}
 	s.forget()
 	return s.catalogue(), nil
 }
 
-// BrowseForFolder opens the native picker in directory mode and adds the folder
-// chosen. Cancelling leaves everything as it was and is not an error.
+// BrowseForFolder opens the native picker in directory mode and adds the
+// folders chosen -- several at once, with Cmd- or Shift-click. Cancelling
+// leaves everything as it was and is not an error.
 func (s *PluginService) BrowseForFolder(ctx context.Context) (plugins.Catalogue, error) {
 	if s.server {
 		return s.catalogue(), errDesktopOnly
 	}
 	dialog := application.Get().Dialog.OpenFile().
-		SetTitle("Add a folder of plugins").
+		SetTitle("Add folders of plugins").
 		CanChooseFiles(false).
 		CanChooseDirectories(true).
 		ShowHiddenFiles(true)
@@ -967,12 +993,14 @@ func (s *PluginService) BrowseForFolder(ctx context.Context) (plugins.Catalogue,
 		dialog.SetDirectory(home)
 	}
 
-	path, err := dialog.PromptForSingleSelection()
+	paths, err := dialog.PromptForMultipleSelection()
 	if err != nil {
 		return s.catalogue(), err
 	}
-	if path == "" {
+	paths = slices.DeleteFunc(paths, func(p string) bool { return p == "" })
+	if len(paths) == 0 {
 		return s.catalogue(), nil // cancelled
 	}
-	return s.AddFolder(ctx, path)
+	slices.Sort(paths)
+	return s.AddFolders(ctx, paths)
 }

@@ -63,6 +63,9 @@ type About struct {
 	Wails    string `json:"wails"`
 	Go       string `json:"go"`
 	Platform string `json:"platform"`
+	// Profile is the settings profile this window runs on, empty for the
+	// default one. See appconfig.OpenProfile.
+	Profile string `json:"profile"`
 }
 
 // version is the release this binary was built from. The release workflow
@@ -100,6 +103,7 @@ func (s *SettingsService) About() About {
 		Version:  DisplayVersion(),
 		Go:       runtime.Version(),
 		Platform: runtime.GOOS + "/" + runtime.GOARCH,
+		Profile:  s.store.Profile(),
 	}
 	if info, ok := debug.ReadBuildInfo(); ok {
 		for _, dep := range info.Deps {

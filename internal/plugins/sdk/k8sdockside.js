@@ -414,10 +414,217 @@
         else later();
     }
 
+
+    /* ---- ui.section: a block of a page that folds, as the app's own do ----
+       The same heading, chevron and spacing as the details panel's sections
+       (frontend/src/lib/components/PanelSection.svelte -- keep the two in
+       step), and the folds kept in the same place: the app's settings, for
+       every object on every cluster. */
+
+    var folds = null; // the ids folded, once the app has said; null before
+    var sections = []; // every section drawn, so the app's answer can reach them
+
+    function applyFolds(list) {
+        folds = {};
+        (list || []).forEach(function (id) {
+            folds[id] = true;
+        });
+        sections.forEach(function (sec) {
+            if (!sec.touched) sec.set(isFolded(sec), false);
+        });
+    }
+
+    /* A section that starts open is remembered when it is folded; one that
+       starts folded (open: false) is remembered when it is opened, as
+       "<id>#open". Either way, one that was never touched has no entry. */
+    function memoryKey(sec) {
+        return sec.startFolded ? sec.id + '#open' : sec.id;
+    }
+
+    function isFolded(sec) {
+        var marked = !!(folds && folds[memoryKey(sec)]);
+        return sec.startFolded ? !marked : marked;
+    }
+
+    var SECTION_CSS =
+        '.k8sd-section{margin:0 0 12px}' +
+        '.k8sd-section.k8sd-boxed{border:1px solid var(--border,#333);border-radius:var(--radius,6px);background:var(--bg-raised,transparent);padding:6px 12px 10px}' +
+        '.k8sd-section.k8sd-boxed.k8sd-folded{padding-bottom:6px}' +
+        '.k8sd-section-head{display:flex;align-items:center;gap:8px}' +
+        '.k8sd-section-head h3{flex:1 1 auto;min-width:0;margin:0 0 6px;font-size:11px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--text-faint,#888);user-select:none}' +
+        '.k8sd-folded .k8sd-section-head h3{margin-bottom:0}' +
+        '.k8sd-fold{display:flex;align-items:center;gap:8px;width:100%;min-height:26px;margin:0 -6px;padding:3px 6px;box-sizing:content-box;border:none;border-radius:var(--radius-sm,4px);background:none;font:inherit;font-weight:600;color:var(--text-dim,#aaa);text-transform:inherit;letter-spacing:inherit;text-align:left;cursor:pointer}' +
+        '.k8sd-fold:hover{background:var(--bg-hover,rgba(127,127,127,.12));color:var(--text,inherit)}' +
+        '.k8sd-fold:focus-visible{outline:2px solid var(--accent,#4c8);outline-offset:1px}' +
+        '.k8sd-chevron{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:20px;height:20px;border:1px solid var(--border,#333);border-radius:var(--radius-sm,4px);background:var(--bg-raised,transparent);color:var(--text-dim,#aaa);transition:transform 120ms ease}' +
+        '.k8sd-fold:hover .k8sd-chevron{border-color:var(--accent,#4c8);color:var(--accent,#4c8)}' +
+        '.k8sd-folded .k8sd-chevron{transform:rotate(-90deg)}' +
+        '.k8sd-label{flex:1 1 auto;min-width:0;display:flex;align-items:baseline;gap:6px}' +
+        '.k8sd-count,.k8sd-by{letter-spacing:0;text-transform:none;font-weight:400;font-variant-numeric:tabular-nums;color:var(--text-dim,#aaa)}' +
+        '.k8sd-hint{flex:0 0 auto;font-size:11px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--text-faint,#888)}' +
+        '.k8sd-section-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto;margin-bottom:6px}' +
+        '.k8sd-folded .k8sd-section-actions,.k8sd-folded .k8sd-section-body{display:none}';
+
+    function sectionStyles() {
+        if (document.getElementById('k8sd-section-css')) return;
+        var style = document.createElement('style');
+        style.id = 'k8sd-section-css';
+        style.textContent = SECTION_CSS;
+        (document.head || document.documentElement).appendChild(style);
+    }
+
+    function svgChevron() {
+        var ns = 'http://www.w3.org/2000/svg';
+        var svg = document.createElementNS(ns, 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('width', '13');
+        svg.setAttribute('height', '13');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-width', '2');
+        svg.setAttribute('stroke-linecap', 'round');
+        svg.setAttribute('stroke-linejoin', 'round');
+        var path = document.createElementNS(ns, 'path');
+        path.setAttribute('d', 'M6 9.5l6 6 6-6');
+        svg.appendChild(path);
+        return svg;
+    }
+
+    function section(opts) {
+        opts = opts || {};
+        var id = String(opts.id || opts.title || '').slice(0, 120);
+        if (!id) throw new Error('ui.section needs an id or a title');
+        sectionStyles();
+
+        var root = document.createElement('section');
+        root.className = 'k8sd-section' + (opts.boxed ? ' k8sd-boxed' : '');
+        root.dataset.section = id;
+
+        var head = document.createElement('div');
+        head.className = 'k8sd-section-head';
+        var h3 = document.createElement('h3');
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'k8sd-fold';
+        var chevron = document.createElement('span');
+        chevron.className = 'k8sd-chevron';
+        chevron.setAttribute('aria-hidden', 'true');
+        chevron.appendChild(svgChevron());
+        var label = document.createElement('span');
+        label.className = 'k8sd-label';
+        var title = document.createElement('span');
+        var count = document.createElement('span');
+        count.className = 'k8sd-count';
+        var by = document.createElement('span');
+        by.className = 'k8sd-by';
+        label.append(title, count, by);
+        var hint = document.createElement('span');
+        hint.className = 'k8sd-hint';
+        hint.textContent = 'Show';
+        button.append(chevron, label, hint);
+        h3.appendChild(button);
+        var actions = document.createElement('div');
+        actions.className = 'k8sd-section-actions';
+        head.append(h3, actions);
+
+        var body = document.createElement('div');
+        body.className = 'k8sd-section-body';
+        root.append(head, body);
+
+        var what = opts.what || 'this section';
+        var listeners = [];
+        var sec = {
+            id: id,
+            root: root,
+            startFolded: opts.open === false,
+            touched: false,
+            folded: false,
+            set: function (folded, remember) {
+                sec.folded = !!folded;
+                root.classList.toggle('k8sd-folded', sec.folded);
+                button.setAttribute('aria-expanded', String(!sec.folded));
+                button.title = (sec.folded ? 'Show ' : 'Fold ') + what + (sec.folded ? ', for every object' : ' away, for every object');
+                hint.hidden = !sec.folded;
+                if (remember) {
+                    sec.touched = true;
+                    var marked = sec.startFolded ? !sec.folded : sec.folded;
+                    if (folds) {
+                        if (marked) folds[memoryKey(sec)] = true;
+                        else delete folds[memoryKey(sec)];
+                    }
+                    call('section.fold', { id: memoryKey(sec), folded: marked }).catch(function () {});
+                }
+                listeners.forEach(function (fn) {
+                    try {
+                        fn(sec.folded);
+                    } catch (err) {
+                        console.error('k8sdockside: a ui.section listener failed', err);
+                    }
+                });
+            },
+        };
+        // A page that redraws on every poll makes new sections each time:
+        // only those still on the page are kept.
+        if (sections.length > 32) {
+            sections = sections.filter(function (other) {
+                return other.root.isConnected;
+            });
+        }
+        sections.push(sec);
+
+        function setText(node, value) {
+            node.textContent = value === undefined || value === null || value === '' ? '' : String(value);
+            node.hidden = node.textContent === '';
+        }
+        setText(title, opts.title || id);
+        setText(count, opts.count);
+        setText(by, opts.by ? '· ' + opts.by : '');
+
+        button.addEventListener('click', function () {
+            sec.set(!sec.folded, true);
+        });
+        sec.set(folds ? isFolded(sec) : sec.startFolded, false);
+
+        if (opts.parent) opts.parent.appendChild(root);
+
+        return {
+            /** The whole section, to put on the page. */
+            root: root,
+            /** Where its contents go. */
+            body: body,
+            /** Buttons on the heading's row, shown while it is open. */
+            actions: actions,
+            setTitle: function (value) {
+                setText(title, value);
+            },
+            setCount: function (value) {
+                setText(count, value);
+            },
+            isFolded: function () {
+                return sec.folded;
+            },
+            setFolded: function (folded) {
+                sec.set(folded, true);
+            },
+            /** Called with true when it folds and false when it opens. Returns an unsubscribe function. */
+            onToggle: function (fn) {
+                listeners.push(fn);
+                return function () {
+                    listeners = listeners.filter(function (f) {
+                        return f !== fn;
+                    });
+                };
+            },
+        };
+    }
+
+    var ui = { section: section };
+
     var ready = call('hello').then(function (context) {
         whenLoaded(function () {
             keepFields(context.fields);
         });
+        applyFolds(context.folded);
         applyTheme(context.theme);
         applyDateTime(context.datetime);
         if (context.sectionId) {
@@ -800,6 +1007,15 @@
          * for 'datetime' to redraw.
          */
         format: format,
+
+        /**
+         * Pieces of the app's own interface, drawn the same way it draws
+         * them. ui.section({ id, title, count?, by?, what?, open?, boxed?,
+         * parent? }) is a block with a heading that folds it away, exactly
+         * as the details panel's own sections do, remembered in the same
+         * place. 0.1.36 and newer: check ui exists.
+         */
+        ui: ui,
 
         /**
          * What was typed into this page's fields when it was last on screen,

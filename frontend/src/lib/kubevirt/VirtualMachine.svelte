@@ -19,7 +19,9 @@
     import { adoptKubeVirtDetail, type Fact, type KubeVirtDetail } from './adopt';
     import { workspace } from '../state/workspace.svelte';
     import Icon from '../components/Icon.svelte';
+    import PanelSection from '../components/PanelSection.svelte';
     import { detail as describe } from '../state/detail.svelte';
+    import { VM_KINDS } from '../actions';
 
     interface Props {
         contextId: string;
@@ -63,6 +65,9 @@
         };
     });
 
+    /** Whether this is a machine, with a screen and a console, rather than a migration. */
+    let isMachine = $derived(VM_KINDS.includes(kind));
+
     /** Opens what a value names: a node, the instance, the launcher pod. */
     function open(fact: Fact): void {
         if (!fact.ref) return;
@@ -76,6 +81,37 @@
 </script>
 
 <section class="kubevirt">
+    {#if isMachine}
+        <!-- Buttons rather than a picture: reading the display costs a call
+             to virt-api, and most people opening a machine did not come for
+             it. Each opens a tab in the dock that stays up to date. -->
+        <PanelSection id="kubevirt:screen" title="Console" what="the console buttons" boxed>
+            <div class="consoles">
+                <button
+                    class="console"
+                    title="Show the machine's display in the dock, kept up to date"
+                    onclick={() => workspace.openVMScreen({ contextId, kind, namespace, name })}
+                >
+                    <Icon name="display" size={14} />
+                    <span>
+                        <strong>Console</strong>
+                        <small>The display, as on a monitor — a Talos dashboard, a bootloader</small>
+                    </span>
+                </button>
+                <button
+                    class="console"
+                    title="Open the serial console in the dock"
+                    onclick={() => workspace.openVMConsole({ contextId, kind, namespace, name })}
+                >
+                    <Icon name="terminal" size={14} />
+                    <span>
+                        <strong>Serial console</strong>
+                        <small>The first serial port, as a terminal you can type into</small>
+                    </span>
+                </button>
+            </div>
+        </PanelSection>
+    {/if}
     {#if loading && !detail}
         <p class="status">Reading {name}…</p>
     {:else if error}
@@ -84,9 +120,12 @@
         <p class="status failed">Could not read this machine — {error}</p>
     {:else if detail}
         {#each detail.sections as section (section.title)}
-            <article class="block">
-                <h3>{section.title}</h3>
-
+            <PanelSection
+                id={`kubevirt:${section.title.toLowerCase()}`}
+                title={section.title}
+                count={section.rows.length > 0 ? section.rows.length : undefined}
+                boxed
+            >
                 {#if section.facts.length > 0}
                     <dl class="facts">
                         {#each section.facts as fact (fact.label)}
@@ -144,7 +183,7 @@
                 {:else if section.empty}
                     <p class="none">{section.empty}</p>
                 {/if}
-            </article>
+            </PanelSection>
         {/each}
     {/if}
 </section>
@@ -153,25 +192,69 @@
     .kubevirt {
         display: flex;
         flex-direction: column;
-        gap: 14px;
-        margin-bottom: 16px;
+        margin-bottom: 4px;
     }
 
-    .block {
+    .consoles {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 8px;
+    }
+
+    .console {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 8px 10px;
+        text-align: left;
         border: 1px solid var(--border);
-        border-radius: var(--radius);
-        background: var(--bg-raised);
-        padding: 10px 12px;
+        border-radius: var(--radius-sm);
+        background: var(--bg-panel);
+        color: var(--text-dim);
     }
 
-    h3 {
-        margin: 0 0 8px;
+    .console:hover {
+        border-color: var(--accent);
+        color: var(--text);
+    }
+
+    .console :global(svg) {
+        flex: 0 0 auto;
+        margin-top: 2px;
+        color: var(--accent);
+    }
+
+    .console span {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+    }
+
+    .console strong {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text);
+    }
+
+    .console small {
         font-size: 11px;
-        font-weight: 500;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
         color: var(--text-faint);
     }
+
+    .status {
+        margin: 10px 16px;
+    }
+
+
+
+
+
+
+
+
+
+
 
     /* Label and value in two columns, so the values line up down the block and
        a reader can scan them without reading the labels again. */

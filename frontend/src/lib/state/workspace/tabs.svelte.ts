@@ -6,7 +6,7 @@ import { TerminalService } from '../../../../bindings/github.com/k8sdockside/k8s
 import { changes } from '../changes.svelte';
 import { editors } from '../editor.svelte';
 import { logs } from '../logs.svelte';
-import { DEBUG_SESSION, LOCAL_SHELL, terminals, TOOL_CONSOLE } from '../terminals.svelte';
+import { DEBUG_SESSION, LOCAL_SHELL, terminals, TOOL_CONSOLE, VM_CONSOLE } from '../terminals.svelte';
 import type { DebugRequest } from '../debug.svelte';
 import { fields } from '../fields';
 import { views } from '../views';
@@ -634,6 +634,23 @@ export abstract class WorkspaceTabs extends WorkspaceContexts {
             return;
         }
         this.openObjectTab('shell', target);
+    }
+
+    /**
+     * Opens a virtual machine's serial console in the dock, or focuses it if
+     * it is open. Always in the dock: there is no kubectl for this to hand to
+     * the user's own terminal, and virtctl may not be installed.
+     */
+    openVMConsole(target: DetailTarget): void {
+        this.openObjectTab('shell', { contextId: target.contextId, kind: VM_CONSOLE, namespace: target.namespace, name: target.name });
+    }
+
+    /**
+     * Opens a virtual machine's display in the dock -- what its graphical
+     * console shows, kept up to date -- or focuses it if it is open.
+     */
+    openVMScreen(target: DetailTarget): void {
+        this.openObjectTab('screen', { contextId: target.contextId, kind: target.kind, namespace: target.namespace, name: target.name });
     }
 
     /**

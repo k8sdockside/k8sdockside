@@ -254,6 +254,15 @@ Settings are stored in `$XDG_CONFIG_HOME/k8sdockside/settings.json` (or
 exact path is shown in the status bar. Your themes and plugins go in `themes/`
 and `plugins/` folders beside it.
 
+To keep a second, separate set — a development build that loads plugins from
+your working folders beside the installed app on your everyday settings, say —
+start the app with `--profile <name>` or `K8SDOCKSIDE_PROFILE=<name>`. A
+profile lives in `profiles/<name>/` under the same folder, with its own
+settings, plugins and themes, and starts from a copy of the default settings
+the first time. `make dev` runs on a profile called `dev`; `make dev PROFILE=`
+runs on the default settings. On macOS, an installed app takes one with
+`open -a "K8s Dockside" --args --profile <name>`.
+
 ## Documentation
 
 Inside the app, **Help** (F1) is the guide to the app itself, and the

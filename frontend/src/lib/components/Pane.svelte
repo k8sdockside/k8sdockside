@@ -55,6 +55,7 @@
     import Sidebar from './Sidebar.svelte';
     import TabStrip, { type StripTab } from './TabStrip.svelte';
     import TerminalView from './TerminalView.svelte';
+    import VMScreen from '../kubevirt/VMScreen.svelte';
     import YamlEditor from './YamlEditor.svelte';
     import SettingsView from './settings/SettingsView.svelte';
     import HelpPage from './HelpPage.svelte';
@@ -422,6 +423,8 @@
                         <LogView tab={active} />
                     {:else if active.view === 'shell'}
                         <TerminalView tab={active} />
+                    {:else if active.view === 'screen'}
+                        <VMScreen tab={active} />
                     {:else}
                         <YamlEditor tab={active} />
                     {/if}

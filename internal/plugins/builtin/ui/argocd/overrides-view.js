@@ -188,8 +188,14 @@
         }
 
         function generatorView(generators) {
-            var details = el('details', 'ov-fold ov-generators');
-            details.appendChild(el('summary', '', 'Generators · what fills the template’s parameters'));
+            var sec = sdk.ui.section({
+                id: 'generators',
+                title: 'Generators',
+                count: generators.length,
+                by: 'what fills the template’s parameters',
+                what: 'the generators',
+                open: false,
+            });
             function draw(into, list, depth) {
                 list.forEach(function (g) {
                     var block = el('div', 'ov-gen' + (depth ? ' nested' : ''));
@@ -223,9 +229,9 @@
                     into.appendChild(block);
                 });
             }
-            draw(details, generators, 0);
-            details.appendChild(el('p', 'faint small', 'Generators are changed in the YAML editor.'));
-            return details;
+            draw(sec.body, generators, 0);
+            sec.body.appendChild(el('p', 'faint small', 'Generators are changed in the YAML editor.'));
+            return sec.root;
         }
 
         function tabs() {

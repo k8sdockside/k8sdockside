@@ -5,6 +5,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/k8sdockside/k8sdockside/internal/appconfig"
 	"github.com/k8sdockside/k8sdockside/internal/services"
@@ -21,9 +22,16 @@ func main() {
 	// The settings store holds the user's kubeconfig paths, context aliases and
 	// colours. A failure here means we could not read an existing settings file,
 	// and carrying on would silently discard the user's customisation.
-	settings, err := appconfig.Open()
+	// --profile <name> or K8SDOCKSIDE_PROFILE: a separate set of settings,
+	// plugins and themes, so a development build can run beside the
+	// installed app without either touching the other's. See profile.go.
+	settings, err := appconfig.OpenProfile(appconfig.ProfileFrom(os.Args[1:], os.Getenv))
 	if err != nil {
 		log.Fatalf("k8sdockside: %v", err)
+	}
+	title := "K8s Dockside"
+	if profile := settings.Profile(); profile != "" {
+		title += " — " + profile
 	}
 
 	built := services.New(settings, services.Options{})
@@ -50,7 +58,7 @@ func main() {
 	})
 
 	windowOptions := application.WebviewWindowOptions{
-		Title:     "K8s Dockside",
+		Title:     title,
 		Width:     defaultWidth,
 		Height:    defaultHeight,
 		MinWidth:  minWidth,

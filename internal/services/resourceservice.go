@@ -331,6 +331,15 @@ func (s *ResourceService) KubeVirtDetail(contextID, kind, namespace, name string
 	return s.watcher.KubeVirtDetail(kc, kind, namespace, name)
 }
 
+// VMScreenshot is a picture of a virtual machine's display, as a PNG data URL.
+func (s *ResourceService) VMScreenshot(contextID, namespace, name string) (string, error) {
+	kc, err := s.resolve(contextID)
+	if err != nil {
+		return "", err
+	}
+	return s.watcher.VMScreenshot(kc, namespace, name)
+}
+
 func (s *ResourceService) ResourceYAML(contextID, kind, namespace, name string) (string, error) {
 	ctx, err := s.resolve(contextID)
 	if err != nil {

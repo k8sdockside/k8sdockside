@@ -13,7 +13,7 @@
 <script lang="ts">
     import { everyWhileVisible } from '../visibility';
     import { singularFor } from '../catalogue';
-    import { ANSWERS, actionsFor, actionsForVM, type Action, type ActionId } from '../actions';
+    import { ANSWERS, actionsFor, actionsForVM, VM_CONSOLE, type Action, type ActionId } from '../actions';
     import { actions, type DrainOptions, type RolloutRevision } from '../state/actions.svelte';
     import { forwards, type PortOption } from '../state/forwards.svelte';
     import { helm } from '../state/helm.svelte';
@@ -69,10 +69,12 @@
      * would be a button that only ever fails.
      */
     let available = $derived(
-        (facts.vm.isMachine && !pluginOwnsKind
-            ? [...actionsForVM(facts.vm), ...actionsFor(object.kind)]
-            : actionsFor(object.kind)
-        ).filter(
+        [
+            ...(facts.vm.isMachine && facts.vm.running ? [VM_CONSOLE] : []),
+            ...(facts.vm.isMachine && !pluginOwnsKind
+                ? [...actionsForVM(facts.vm), ...actionsFor(object.kind)]
+                : actionsFor(object.kind)),
+        ].filter(
             (action) =>
                 !(session.server && action.id === 'forward') && !(ANSWERS.includes(action.id) && !facts.pending),
         ),
@@ -375,6 +377,10 @@
         }
         if (action.id === 'shell') {
             workspace.openShell(object);
+            return;
+        }
+        if (action.id === 'vmconsole') {
+            workspace.openVMScreen(object);
             return;
         }
         if (action.id === 'compare') {

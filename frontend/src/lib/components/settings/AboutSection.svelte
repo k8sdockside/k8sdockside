@@ -22,8 +22,21 @@
     import Icon from '../Icon.svelte';
     import SettingsSection from './SettingsSection.svelte';
     import { notices } from '../../state/notices.svelte';
+    import { PROFILE_NAME, profileLabel, profiles } from '../../state/profiles.svelte';
 
     let about = $state<About | null>(null);
+    let newProfile = $state('');
+    let newProfileValid = $derived(PROFILE_NAME.test(newProfile.trim()) && !profiles.all.includes(newProfile.trim()));
+
+    $effect(() => {
+        void profiles.load();
+    });
+
+    async function createProfile(): Promise<void> {
+        const name = newProfile.trim();
+        await profiles.openAlongside(name);
+        newProfile = '';
+    }
     let copied = $state(false);
 
     $effect(() => {
@@ -114,6 +127,12 @@
         <div><dt>Wails</dt><dd class="selectable">{about?.wails || '—'}</dd></div>
         <div><dt>Go</dt><dd class="selectable">{about?.go ?? '…'}</dd></div>
         <div><dt>Platform</dt><dd class="selectable">{about?.platform ?? '…'}</dd></div>
+        {#if !session.server}
+            <div>
+                <dt>Profile</dt>
+                <dd class="selectable">{about ? about.profile || 'default' : '…'}</dd>
+            </div>
+        {/if}
         {#if updates.status.install}
             <div><dt>Installed as</dt><dd class="selectable">{updates.status.install}</dd></div>
         {/if}
@@ -154,7 +173,10 @@
         layout and these preferences. Your kubeconfig files are never written to. Deleting this file resets the app.
     </p>
     <div class="file">
-        <code class="selectable">{workspace.configPath || '…'}</code>
+        <!-- Right-to-left so a long path loses its start rather than the file
+             name -- with the path itself isolated as left-to-right, or the
+             leading "/" is moved to the far end. -->
+        <code class="selectable"><span dir="ltr">{workspace.configPath || '…'}</span></code>
         <button onclick={copyPath} disabled={!workspace.configPath}>
             <Icon name={copied ? 'check' : 'file'} size={13} />
             {copied ? 'Copied' : 'Copy path'}
@@ -163,6 +185,63 @@
             <Icon name="folder" size={13} /> Show in file manager
         </button>
     </div>
+
+    <h3 class="heading">Profiles</h3>
+    <p class="note">
+        A profile is a separate set of everything above — settings, plugins and themes — say one for a development
+        build that loads plugins from your working folders. This window runs on
+        <strong>{profileLabel(profiles.current)}</strong>. Switching restarts the app on the other profile; Open
+        alongside runs both at once. A new profile starts from a copy of the default settings.
+    </p>
+    <ul class="profiles">
+        {#each profiles.all as name (name)}
+            <li>
+                <Icon name="folder" size={13} />
+                <span class="name">{profileLabel(name)}</span>
+                {#if name === profiles.current}
+                    <span class="here">this window</span>
+                {:else}
+                    <button disabled={profiles.starting !== null} onclick={() => void profiles.switchTo(name)}>
+                        Switch
+                    </button>
+                {/if}
+                <button
+                    disabled={profiles.starting !== null}
+                    onclick={() => void profiles.openAlongside(name)}
+                    title="Start another K8s Dockside on this profile, beside this one"
+                >
+                    Open alongside
+                </button>
+            </li>
+        {/each}
+    </ul>
+    <form
+        class="file new-profile"
+        onsubmit={(e) => {
+            e.preventDefault();
+            void createProfile();
+        }}
+    >
+        <input
+            type="text"
+            placeholder="new-profile"
+            spellcheck="false"
+            autocomplete="off"
+            aria-label="New profile name"
+            bind:value={newProfile}
+        />
+        <button type="submit" disabled={!newProfileValid || profiles.starting !== null}>
+            <Icon name="plus" size={13} /> Create and open alongside
+        </button>
+    </form>
+    {#if newProfile && !newProfileValid}
+        <p class="note problem">Lower-case letters, digits, “-” and “_”, starting with a letter or digit.</p>
+    {/if}
+    <p class="note">
+        From a terminal: <code class="inline">--profile &lt;name&gt;</code> or
+        <code class="inline">K8SDOCKSIDE_PROFILE=&lt;name&gt;</code>; <code class="inline">make dev</code> uses
+        <strong>dev</strong>.
+    </p>
     {/if}
 </SettingsSection>
 
@@ -266,6 +345,62 @@
         white-space: nowrap;
         direction: rtl;
         text-align: left;
+    }
+
+    .profiles {
+        list-style: none;
+        margin: 0 0 10px;
+        padding: 0;
+        display: grid;
+        gap: 4px;
+    }
+
+    .profiles li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 10px;
+        border-radius: var(--radius-sm);
+        background: var(--bg-panel);
+        font-size: 12px;
+    }
+
+    .profiles .name {
+        flex: 1 1 auto;
+        font-family: var(--mono);
+    }
+
+    .profiles .here {
+        font-size: 11px;
+        color: var(--accent);
+    }
+
+    .profiles button {
+        padding: 3px 9px;
+        border-radius: var(--radius-sm);
+        background: var(--bg-raised);
+        box-shadow: inset 0 0 0 1px var(--border);
+        font-size: 11.5px;
+    }
+
+    .new-profile input {
+        flex: 1 1 200px;
+        min-width: 0;
+        padding: 6px 10px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--bg-panel);
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: var(--text);
+    }
+
+    code.inline {
+        font-family: var(--mono);
+        font-size: 11px;
+        padding: 1px 4px;
+        border-radius: var(--radius-sm);
+        background: var(--bg-panel);
     }
 
     .file button {

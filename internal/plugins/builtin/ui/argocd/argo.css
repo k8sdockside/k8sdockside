@@ -1829,31 +1829,19 @@ body.page-section {
     margin-top: 12px;
 }
 
-.panel-tree {
-    margin-top: 10px;
-}
-
-.panel-tree summary {
-    cursor: pointer;
-    font-size: 12px;
-    color: var(--a-dim);
-    padding: 4px 0;
-}
-
 .panel-op,
 .panel-history {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 10px;
     font-size: 12px;
 }
 
-.panel-label {
-    width: 70px;
-    font-size: 11px;
-    color: var(--a-faint);
+/* The panel's folding blocks (k8sdockside.ui.section) under the route and
+   bars, spaced as those are, the last with nothing below it. */
+.section-root > .k8sd-section {
+    margin: 12px 0 0;
 }
 
 .hist {
@@ -1997,14 +1985,6 @@ body.page-section {
     border: 1px solid var(--a-soft);
 }
 
-.ov-section-title {
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--a-faint);
-    font-weight: 650;
-}
-
 .ov-section .ov-input,
 .ov-section .ov-values {
     background: var(--a-bg);
@@ -2101,26 +2081,10 @@ body.page-section {
     color: var(--a-dim);
 }
 
-.ov-fold {
-    border: 1px solid var(--a-soft);
-    border-radius: 10px;
-    padding: 8px 12px;
-}
-
-.ov-fold > summary {
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 12.5px;
-}
-
-.ov-fold[open] > summary {
-    margin-bottom: 10px;
-}
-
-.ov-fold .ov-section {
-    border: 0;
-    padding: 0;
-    background: none;
+/* The overrides' folding sections (k8sdockside.ui.section): the flex gaps
+   of .ov-root, .ov-set and .ov-editor space them. */
+.ov-root .k8sd-section {
+    margin: 0;
 }
 
 .ov-gen {

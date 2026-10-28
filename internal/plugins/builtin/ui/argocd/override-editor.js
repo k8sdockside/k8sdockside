@@ -8,6 +8,7 @@
     'use strict';
 
     var K = window.ArgoKit;
+    var ui = window.k8sdockside.ui;
     var el = K.el;
     var add = K.add;
 
@@ -187,10 +188,20 @@
         return box;
     }
 
-    function helmFields(form, changed, opts) {
+    /**
+     * A tool's settings as a folding section (k8sdockside.ui.section), its
+     * body the boxed form. Returns the section; its body is filled in.
+     */
+    function toolSection(id, title, open) {
+        var sec = ui.section({ id: id, title: title, what: 'the ' + title + ' settings', open: open });
+        sec.body.classList.add('ov-section');
+        return sec;
+    }
+
+    function helmFields(form, changed, opts, open) {
         var helm = form.helm;
-        var section = el('section', 'ov-section');
-        section.appendChild(el('h3', 'ov-section-title', 'Helm'));
+        var sec = toolSection('helm', 'Helm', open);
+        var section = sec.body;
         var grid = el('div', 'ov-grid');
         grid.appendChild(
             field('Release name', 'Leave empty for the Application’s name.', input(helm.releaseName, 'the Application’s name', function (v) {
@@ -229,13 +240,13 @@
             values.appendChild(el('pre', 'ov-pre', JSON.stringify(helm.valuesObject, null, 2)));
         }
         section.appendChild(values);
-        return section;
+        return sec.root;
     }
 
-    function kustomizeFields(form, changed) {
+    function kustomizeFields(form, changed, open) {
         var k = form.kustomize;
-        var section = el('section', 'ov-section');
-        section.appendChild(el('h3', 'ov-section-title', 'Kustomize'));
+        var sec = toolSection('kustomize', 'Kustomize', open);
+        var section = sec.body;
         section.appendChild(
             stringList('Images', k.images, 'nginx=nginx:1.27, or ghcr.io/org/app:v2', changed, 'As kustomize edit set image takes them: name=newName:tag, or name:tag.'),
         );
@@ -257,7 +268,7 @@
             }, 'mono')),
         );
         section.appendChild(grid);
-        return section;
+        return sec.root;
     }
 
     /**
@@ -291,13 +302,7 @@
         } else {
             // Argo CD has not said yet which tool renders this path: both are
             // offered, folded.
-            var helm = el('details', 'ov-fold');
-            helm.appendChild(el('summary', '', 'Helm settings'));
-            helm.appendChild(helmFields(form, changed, opts));
-            var kust = el('details', 'ov-fold');
-            kust.appendChild(el('summary', '', 'Kustomize settings'));
-            kust.appendChild(kustomizeFields(form, changed));
-            add(box, el('p', 'faint small ov-hint', 'Argo CD has not reported which tool renders this source yet.'), helm, kust);
+            add(box, el('p', 'faint small ov-hint', 'Argo CD has not reported which tool renders this source yet.'), helmFields(form, changed, opts, false), kustomizeFields(form, changed, false));
         }
     }
 

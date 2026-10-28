@@ -25,6 +25,7 @@
     import { viewport } from '../state/viewport.svelte';
     import { PANE_LABELS, workspace, type PaneId } from '../state/workspace.svelte';
     import { rememberSection } from './settings/section.svelte';
+    import { profileLabel, profiles } from '../state/profiles.svelte';
     import Icon from './Icon.svelte';
 
     interface Item {
@@ -71,6 +72,10 @@
         workspace.openSettings();
     }
 
+    $effect(() => {
+        void profiles.load();
+    });
+
     let menus = $derived.by((): Menu[] => {
         const connected = workspace.connectedContexts;
         const desktopAdmin = !session.server && session.admin;
@@ -96,6 +101,26 @@
             });
         }
         file.push({ label: 'Settings…', shortcut: `${MOD},`, run: () => openSettings() });
+        // A profile is chosen at launch, so switching relaunches the app on
+        // the other one. The rest -- opening one alongside, making a new one --
+        // is in Settings → About.
+        if (!session.server) {
+            file.push('separator');
+            for (const name of profiles.all) {
+                if (name === profiles.current) continue;
+                file.push({
+                    label: `Switch to the ${profileLabel(name)} profile`,
+                    title: 'Restart K8s Dockside on this profile: its own settings, plugins and themes',
+                    disabled: profiles.starting !== null,
+                    run: () => void profiles.switchTo(name),
+                });
+            }
+            file.push({
+                label: `Profiles… (on ${profileLabel(profiles.current)})`,
+                title: 'Open a profile alongside this window, or make a new one',
+                run: () => openSettings('about'),
+            });
+        }
 
         const clusters: Entry[] = [
             { label: 'Search every cluster…', shortcut: `${MOD}K`, run: () => search.requestFocus() },

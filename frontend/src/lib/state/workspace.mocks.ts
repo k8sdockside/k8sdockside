@@ -69,6 +69,8 @@ export const ThemeService = {
     CreateExample: vi.fn().mockResolvedValue(''),
     AddFolder: vi.fn().mockResolvedValue({}),
     RemoveFolder: vi.fn().mockResolvedValue({}),
+    RemoveFolders: vi.fn().mockResolvedValue({}),
+    AddFolders: vi.fn().mockResolvedValue({}),
     BrowseForFolder: vi.fn().mockResolvedValue({}),
 };
 

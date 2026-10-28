@@ -5,7 +5,7 @@ import { detail } from '../state/detail.svelte';
 
 const KubeVirtDetail = vi.hoisted(() => vi.fn());
 vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services', () => ({
-    ResourceService: { KubeVirtDetail },
+    ResourceService: { KubeVirtDetail, VMScreenshot: vi.fn().mockRejectedValue(new Error('not running')) },
     KubeconfigService: { Sync: vi.fn().mockResolvedValue([]), Files: vi.fn().mockResolvedValue([]) },
     SettingsService: {
         Get: vi.fn().mockResolvedValue({}),
@@ -164,4 +164,35 @@ test('a refused read says so and leaves the rest of the panel alone', async () =
     render(VirtualMachine, TARGET);
 
     await expect.element(page.getByText(/forbidden/)).toBeVisible();
+});
+
+// The display costs a call to virt-api, so the panel offers it rather than
+// reading it: two buttons, each opening a tab in the dock.
+test('the console section offers the display and the serial console, and reads neither', async () => {
+    KubeVirtDetail.mockResolvedValue({ kind: TARGET.kind, error: '', sections: [] });
+    render(VirtualMachine, TARGET);
+
+    await page.getByRole('button', { name: /^Console The display/ }).click();
+    expect(workspace.dockTabs.map((t) => [t.view, t.name])).toContainEqual(['screen', 'win11']);
+
+    await page.getByRole('button', { name: /^Serial console The first/ }).click();
+    expect(workspace.dockTabs.map((t) => [t.view, t.kind, t.name])).toContainEqual(['shell', 'vmconsole', 'win11']);
+});
+
+// Every block folds the way the rest of the details panel does, and stays
+// folded for the next machine.
+test('a section folds away and is remembered', async () => {
+    KubeVirtDetail.mockResolvedValue({
+        kind: TARGET.kind,
+        error: '',
+        sections: [{ title: 'Virtual machine', facts: [fact('CPU', '4 cores')], columns: [], rows: [], empty: '' }],
+    });
+    render(VirtualMachine, TARGET);
+    await expect.element(page.getByText('4 cores')).toBeVisible();
+
+    await page.getByRole('button', { name: /Virtual machine/ }).click();
+
+    expect(page.getByText('4 cores').elements()).toHaveLength(0);
+    expect(workspace.isSectionFolded('kubevirt:virtual machine')).toBe(true);
+    workspace.toggleSection('kubevirt:virtual machine');
 });

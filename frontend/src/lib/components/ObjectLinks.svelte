@@ -16,7 +16,7 @@
     import { PODS, singularFor } from '../catalogue';
     import { detail, type DetailTarget } from '../state/detail.svelte';
     import ContainerPills from './ContainerPills.svelte';
-    import FoldButton from './FoldButton.svelte';
+    import PanelSection from './PanelSection.svelte';
     import { workspace } from '../state/workspace.svelte';
 
     interface Props {
@@ -75,26 +75,13 @@
     }
 
     /** What a reference is, in a word: its API kind, or the app's name for it. */
-    /**
-     * Folded the way the details panel's other sections are: for every object,
-     * on every cluster. See workspace.toggleSection.
-     */
-    const folded = (key: string) => workspace.isSectionFolded(key);
-    const toggle = (key: string) => () => workspace.toggleSection(key);
-
     function kindWord(ref: kube.Reference): string {
         return ref.apiKind || (ref.kind ? singularFor(ref.kind) : '');
     }
 </script>
 
 {#if shownConditions.length > 0}
-    <div class="section" class:folded={folded('conditions')}>
-        <h3>
-            <FoldButton folded={folded('conditions')} ontoggle={toggle('conditions')} what="the conditions"
-                >Conditions <span class="count">{shownConditions.length}</span></FoldButton
-            >
-        </h3>
-        {#if !folded('conditions')}
+    <PanelSection id="conditions" title="Conditions" count={shownConditions.length}>
         <table>
             <tbody>
                 {#each shownConditions as condition, i (i)}
@@ -115,18 +102,11 @@
                 {/each}
             </tbody>
         </table>
-        {/if}
-    </div>
+    </PanelSection>
 {/if}
 
 {#if references.length > 0}
-    <div class="section" class:folded={folded('related')}>
-        <h3>
-            <FoldButton folded={folded('related')} ontoggle={toggle('related')} what="the related objects"
-                >Related <span class="count">{references.length}</span></FoldButton
-            >
-        </h3>
-        {#if !folded('related')}
+    <PanelSection id="related" title="Related" count={references.length} what="the related objects">
         <ul class="refs">
             {#each references as ref, i (i)}
                 <li>
@@ -149,28 +129,21 @@
                 </li>
             {/each}
         </ul>
-        {/if}
-    </div>
+    </PanelSection>
 {/if}
 
 {#if pods}
-    <div class="section" class:folded={folded('pods')}>
-        <h3>
-            <FoldButton folded={folded('pods')} ontoggle={toggle('pods')} what="the pods">
-                <span class="heading">
-                    Pods
-                    <span class="count">
-                        {links && links.podsTotal > pods.length ? `${pods.length} of ${links.podsTotal}` : pods.length}
-                    </span>
-                    {#if links?.selector}
-                        <code class="selector" title="The label selector the pods were found by">{links.selector}</code>
-                    {/if}
-                </span>
-            </FoldButton>
-        </h3>
-        {#if folded('pods')}
-            <!-- Nothing: the heading is the whole of a folded section. -->
-        {:else if pods.length === 0}
+    <PanelSection
+        id="pods"
+        title="Pods"
+        count={links && links.podsTotal > pods.length ? `${pods.length} of ${links.podsTotal}` : pods.length}
+    >
+        {#snippet heading()}
+            {#if links?.selector}
+                <code class="selector" title="The label selector the pods were found by">{links.selector}</code>
+            {/if}
+        {/snippet}
+        {#if pods.length === 0}
             <p class="none">
                 {links?.selector ? 'No pods match this selector.' : 'There are no pods in this namespace.'}
             </p>
@@ -203,41 +176,14 @@
                 </tbody>
             </table>
         {/if}
-    </div>
+    </PanelSection>
 {/if}
 
 <style>
-    .section {
-        margin: 10px 16px 12px;
-    }
 
-    /* As the details panel's other section headings are. */
-    h3 {
-        margin: 0 0 6px;
-        font-size: 11px;
-        font-weight: 500;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--text-faint);
-        user-select: none;
-    }
 
-    .folded h3 {
-        margin-bottom: 0;
-    }
 
-    .heading {
-        display: flex;
-        align-items: baseline;
-        gap: 6px;
-        min-width: 0;
-    }
 
-    .count {
-        letter-spacing: 0;
-        font-variant-numeric: tabular-nums;
-        color: var(--text-dim);
-    }
 
     .selector {
         min-width: 0;

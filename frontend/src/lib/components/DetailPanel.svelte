@@ -20,6 +20,7 @@
     import ContainerPills from './ContainerPills.svelte';
     import ErrorState from './ErrorState.svelte';
     import FoldButton from './FoldButton.svelte';
+    import PanelSection from './PanelSection.svelte';
     import HelmRelease from './HelmRelease.svelte';
     import Icon from './Icon.svelte';
     import ObjectActions from './ObjectActions.svelte';
@@ -351,26 +352,22 @@
                  in a sandboxed frame, told which object it is drawn for. After
                  the app's own summary, before the report. -->
             {#each workspace.pluginSectionsFor(target.contextId, target.kind) as entry (entry.plugin.id + '/' + entry.section.id)}
-                {@const key = pluginSectionKey(entry.plugin.id, entry.section.id)}
-                {@const folded = workspace.isSectionFolded(key)}
-                <div class="plugin-section" class:folded>
-                    <h3>
-                        <FoldButton {folded} ontoggle={() => workspace.toggleSection(key)}>
-                            {entry.section.label} <span class="by">· {entry.plugin.name}</span>
-                        </FoldButton>
-                    </h3>
-                    {#if !folded}
-                        <!-- Each is a frame of its own that loads a page and polls:
-                             started as it scrolls into view, not all at once. A
-                             folded one is not loaded at all. -->
-                        <WhenVisible height={entry.section.height ?? 160}>
-                            <PluginFrame
-                                contextId={target.contextId}
-                                section={{ pluginId: entry.plugin.id, sectionId: entry.section.id, object: target }}
-                            />
-                        </WhenVisible>
-                    {/if}
-                </div>
+                <PanelSection
+                    id={pluginSectionKey(entry.plugin.id, entry.section.id)}
+                    title={entry.section.label}
+                    by={entry.plugin.name}
+                    what="this section"
+                >
+                    <!-- Each is a frame of its own that loads a page and polls:
+                         started as it scrolls into view, not all at once. A
+                         folded one is not loaded at all. -->
+                    <WhenVisible height={entry.section.height ?? 160}>
+                        <PluginFrame
+                            contextId={target.contextId}
+                            section={{ pluginId: entry.plugin.id, sectionId: entry.section.id, object: target }}
+                        />
+                    </WhenVisible>
+                </PanelSection>
             {/each}
 
             {#if isRelease}
@@ -544,10 +541,6 @@
         color: var(--text-faint);
     }
 
-    .plugin-section h3 .by {
-        text-transform: none;
-        letter-spacing: 0;
-    }
 
     pre {
         margin: 0;

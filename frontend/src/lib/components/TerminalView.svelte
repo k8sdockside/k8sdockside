@@ -16,7 +16,7 @@
     import { singularFor } from '../catalogue';
     import { alpha } from '../colors';
     import { session } from '../state/session.svelte';
-    import { DEBUG_SESSION, LOCAL_SHELL, terminals, TOOL_CONSOLE } from '../state/terminals.svelte';
+    import { DEBUG_SESSION, LOCAL_SHELL, terminals, TOOL_CONSOLE, VM_CONSOLE } from '../state/terminals.svelte';
     import { notices } from '../state/notices.svelte';
     import { workspace, type DockTab } from '../state/workspace.svelte';
     import ErrorState from './ErrorState.svelte';
@@ -42,6 +42,8 @@
     let onDebug = $derived(tab.kind === DEBUG_SESSION);
     /** A shell on this machine, rather than in a cluster. */
     let onLocal = $derived(tab.kind === LOCAL_SHELL);
+    /** A virtual machine's serial console: no container, and nothing to hand to kubectl. */
+    let onConsole = $derived(tab.kind === VM_CONSOLE);
     /** Whether the kept debug pod's delete is waiting on its confirmation. */
     let confirmingDelete = $state(false);
     let deleting = $state(false);
@@ -97,6 +99,8 @@
                   : 'local terminal'
               : onDebug
               ? `debugging ${tab.name}`
+              : onConsole
+              ? `serial console of ${tab.name}`
               : onNode
                 ? `node ${tab.name}`
                 : `${singularFor(tab.kind)} ${tab.name}`,
@@ -131,6 +135,9 @@
     <div class="bar">
         {#if onDebug}
             <span class="tag" title="A kubectl debug session">debug</span>
+        {/if}
+        {#if onConsole}
+            <span class="tag" title="The virtual machine's serial console, by way of virt-api">console</span>
         {/if}
         {#if onLocal}
             <span
@@ -202,7 +209,7 @@
 
         <!-- Not in the web version: "your own terminal" would be one on the
              server, where nobody is looking. -->
-        {#if !session.server && !onTool && !onDebug && !onLocal}
+        {#if !session.server && !onTool && !onDebug && !onLocal && !onConsole}
             <button
                 class="toggle"
                 title="Open this shell in your own terminal instead"

@@ -819,7 +819,10 @@ The page gets these on top of the calls above:
 | `actions(ref?)` | Which of this plugin's actions are offered on the object right now — for drawing a button group of its own. |
 | `run(actionId, ref?)` | Runs one of the plugin's declared actions on the object. The app asks the user first, **every time**, since the click came from inside the page. |
 | `resize(height)` | Sets the height by hand. |
+| `ui.section({ id?, title, count?, by?, what?, open?, boxed?, parent? })` | A block with a heading that folds it away: `{ root, body, actions, setTitle, setCount, isFolded, setFolded, onToggle }`. Put the block's contents in `body` and any buttons in `actions`. It is drawn exactly as the app's own sections are, and its fold is remembered with theirs, for every object on every cluster. Use it for every titled block a panel has, so a panel reads like the rest of the details view. `open: false` starts it folded. K8s Dockside 0.1.36 and newer: check `k8sdockside.ui` exists. |
 
+The panel as a whole sits under a heading of the app's own, with the section's
+`label`, and folds like any other; `ui.section` is for the blocks inside it.
 The panel's page is reloaded when the detail view moves to another object.
 
 [k8sdockside/kubevirt](https://github.com/k8sdockside/kubevirt)

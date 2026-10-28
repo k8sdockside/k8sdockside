@@ -371,6 +371,9 @@
                     // What was typed into the page when it was last on screen,
                     // for the SDK to put back. See fieldScope.
                     fields: fields.recall(fieldScope, 'page', {}),
+                    // Which of the page's ui.section blocks are folded, so it
+                    // draws them that way from the start.
+                    folded: workspace.pluginFolds(p.id),
                 };
             case 'actions': {
                 // What this plugin offers on an object right now -- the section's
@@ -652,6 +655,14 @@
             case 'storage.get': {
                 const value = pluginState(p.id, contextId)[text(params.key)];
                 return value === undefined ? null : value;
+            }
+            // A ui.section folded or opened: remembered with the app's own
+            // sections, for every object and cluster.
+            case 'section.fold': {
+                const id = text(params.id).slice(0, 120);
+                if (!id) throw new Error('name the section');
+                workspace.setSectionFolded(`part:${p.id}:${id}`, params.folded === true);
+                return null;
             }
             case 'fields.set':
                 fields.keep(fieldScope, 'page', pageFields(params.fields));

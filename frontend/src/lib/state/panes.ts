@@ -57,7 +57,8 @@ export type TabView =
     | 'edit'
     | 'helmvalues'
     | 'logs'
-    | 'shell';
+    | 'shell'
+    | 'screen';
 
 /** Every view, used to reject a type a hand-edited settings file made up. */
 export const TAB_VIEWS: TabView[] = [
@@ -68,6 +69,7 @@ export const TAB_VIEWS: TabView[] = [
     'helmvalues',
     'logs',
     'shell',
+    'screen',
 ];
 
 export function isTabView(value: string): value is TabView {
@@ -184,6 +186,8 @@ export function iconForView(view: TabView): string {
             return 'rows';
         case 'shell':
             return 'terminal';
+        case 'screen':
+            return 'display';
         case 'helmvalues':
             return 'helm';
         default:

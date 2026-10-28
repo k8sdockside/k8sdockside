@@ -73,9 +73,15 @@ help: ## Display this help.
 
 ##@ Build
 .PHONY: dev
-dev: ## Run the app in development mode with hot reload (wails3 dev).
-	@printf "$(CYAN)Starting wails3 dev...$(RESET)\n"
-	@wails3 dev
+# The settings profile a development build runs on: its own settings file,
+# plugins and themes under ~/.config/k8sdockside/profiles/$(PROFILE)/, started
+# from a copy of the default settings the first time. The installed app keeps
+# the default ones. `make dev PROFILE=` runs on the default settings instead.
+PROFILE ?= dev
+
+dev: ## Run the app in development mode with hot reload (wails3 dev), on the PROFILE settings profile (default: dev).
+	@printf "$(CYAN)Starting wails3 dev on profile '$(PROFILE)'...$(RESET)\n"
+	@K8SDOCKSIDE_PROFILE=$(PROFILE) wails3 dev
 
 .PHONY: build
 build: ## Build the production desktop app into bin/ (wails3 build).
@@ -450,9 +456,13 @@ govulncheck: install-govulncheck frontend-dist-stub ## Run govulncheck vulnerabi
 	@printf "$(GREEN)✓ govulncheck complete$(RESET)\n"
 
 .PHONY: npm-audit
-npm-audit: ## Run npm audit against the frontend dependencies.
+# The whole report, every severity, as the security workflow prints it -- and,
+# as it does, only high and critical fail. A low advisory with no fixed release
+# (deepmerge under vite-plugin-svelte, build-time only, was the first) would
+# otherwise block every push until upstream ships one.
+npm-audit: ## Run npm audit against the frontend dependencies (fails on high and critical, as CI does).
 	@printf "$(CYAN)Running npm audit...$(RESET)\n"
-	@cd $(FRONTEND_DIR) && npm audit
+	@cd $(FRONTEND_DIR) && npm audit --audit-level=high
 	@printf "$(GREEN)✓ npm audit complete$(RESET)\n"
 
 ##@ Before you push

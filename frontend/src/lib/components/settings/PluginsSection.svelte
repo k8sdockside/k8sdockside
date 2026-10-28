@@ -410,13 +410,21 @@
         {/if}
         {#if !session.server}
             <button onclick={() => workspace.addPluginFolder()}>
-                <Icon name="folder-plus" size={14} /> Watch another folder
+                <Icon name="folder-plus" size={14} /> Watch folders…
             </button>
         {/if}
         <button onclick={() => workspace.reloadPlugins()}>
             <Icon name="refresh" size={14} /> Reload
         </button>
     </div>
+
+    {#if !session.server}
+        <p class="note">
+            A watched folder is read one level down as well, so the folder that holds a checkout of each plugin's
+            repository is one folder to add, not one per plugin. The picker takes several at once, with ⌘- or
+            Shift-click.
+        </p>
+    {/if}
 
     {#if session.admin}
         <h3>From a repository</h3>
@@ -451,7 +459,18 @@
     {/if}
 
     {#if workspace.pluginFolders.length > 0}
-        <h3>Extra folders</h3>
+        <div class="folders-head">
+            <h3>Extra folders <span class="count">{workspace.pluginFolders.length}</span></h3>
+            {#if session.admin && workspace.pluginFolders.length > 1}
+                <button
+                    class="plain"
+                    onclick={() => void workspace.removeAllPluginFolders()}
+                    title="Stop reading plugins from every folder below. Nothing on disk is deleted."
+                >
+                    Stop watching all
+                </button>
+            {/if}
+        </div>
         <ul class="paths">
             {#each workspace.pluginFolders as folder (folder)}
                 <li>
@@ -1066,6 +1085,31 @@
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--text-faint);
+    }
+
+    .folders-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .folders-head .count {
+        letter-spacing: 0;
+        color: var(--text-dim);
+    }
+
+    .folders-head .plain {
+        font-size: 11.5px;
+        color: var(--text-dim);
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+    }
+
+    .folders-head .plain:hover {
+        color: var(--error);
     }
 
     .note {

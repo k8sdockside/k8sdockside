@@ -104,6 +104,10 @@ type TerminalService struct {
 	mu       sync.Mutex
 	sessions map[string]*live
 	nextID   atomic.Uint64
+
+	// keyboards are the connections typing into virtual machines'
+	// displays. See vmkeyboard.go.
+	keyboards vmKeyboards
 }
 
 // NewTerminalService wires the service to the kubeconfig cache it resolves
@@ -130,6 +134,7 @@ func (s *TerminalService) ServiceShutdown() error {
 	s.sessions = map[string]*live{}
 	s.mu.Unlock()
 
+	s.closeKeyboards()
 	// Stopping a local terminal ends its process tree and removes its
 	// temporary kubeconfig there and then; see OpenLocal.
 	for _, sess := range open {
@@ -224,6 +229,29 @@ func (s *TerminalService) OpenNode(ctx context.Context, contextID, node string) 
 	}()
 
 	return TerminalSession{ID: id, Node: node, Namespace: spec.Namespace}, nil
+}
+
+// OpenVMConsole attaches to a virtual machine's serial console, by way of
+// virt-api rather than the guest's network, so it works on a machine that never
+// got an address. The name is the VirtualMachine's, which its instance shares.
+func (s *TerminalService) OpenVMConsole(ctx context.Context, contextID, namespace, name string) (TerminalSession, error) {
+	kc, err := s.resolve(contextID)
+	if err != nil {
+		return TerminalSession{}, err
+	}
+
+	id, sess := s.register(ctx)
+	s.say(id, fmt.Sprintf("Serial console of %s/%s. Nothing shows until the guest writes to its serial port: "+
+		"press Enter for a login prompt. Talos has none -- it prints kernel messages only; its dashboard is on the display (Console).",
+		namespace, name))
+
+	go func() {
+		defer s.finished(id)
+		err := s.watcher.VMConsole(sess.ctx, kc, namespace, name, sess.in, sess.batch)
+		s.ended(id, sess, err)
+	}()
+
+	return TerminalSession{ID: id, Namespace: namespace, Pod: name, Container: "serial0"}, nil
 }
 
 // OpenDebug starts a `kubectl debug` session in the dock: an ephemeral

@@ -117,6 +117,12 @@ export const DEBUG_SESSION = 'debug';
  */
 export const LOCAL_SHELL = 'local';
 
+/**
+ * The kind a virtual machine's serial console is opened with. Its namespace and
+ * name are the VirtualMachine's; it has no containers and no window size.
+ */
+export const VM_CONSOLE = 'vmconsole';
+
 /** What a tool console is given: defaults for every command, and one to run first. */
 interface ToolStart {
     defaults: string[];
@@ -141,6 +147,14 @@ class Terminals {
     private terms = new Map<string, Attached>();
     /** Which tab each session belongs to, so output is routed by its own id. */
     private routes = new Map<string, string>();
+    /**
+     * Output for a session not routed yet. The backend can speak before the
+     * call that opened the session has returned -- the line a console or a
+     * node shell says first, or a failure that comes at once -- and without
+     * this those chunks were dropped, leaving a black terminal that said it
+     * was connected. Held for a few seconds, then let go.
+     */
+    private early = new Map<string, kube.TerminalChunk[]>();
     /** What each tool console is started with; the initial command is used once. */
     private toolStarts = new Map<string, ToolStart>();
     /** What each debug session was asked for, kept so the tab can start it. */
@@ -152,35 +166,63 @@ class Terminals {
         Events.On('terminal:data', (event: { data: kube.TerminalChunk }) => {
             const chunk = event.data;
             const tab = chunk?.sessionId ? this.routes.get(chunk.sessionId) : undefined;
-            if (!tab) return;
-
-            const attached = this.terms.get(tab);
-            if (chunk.data && attached) {
-                attached.term.write(decode(chunk.data));
+            if (!tab) {
+                if (chunk?.sessionId) this.holdEarly(chunk);
+                return;
             }
-
-            if (!chunk.done) return;
-
-            this.routes.delete(chunk.sessionId);
-            const doc = this.docs[tab];
-            if (!doc) return;
-            if (chunk.error) {
-                doc.status = 'error';
-                doc.error = chunk.error;
-                attached?.term.write(`\r\n\x1b[31m${chunk.error}\x1b[0m\r\n`);
-            } else if (chunk.exited) {
-                // A local shell that ended by itself: `exit`, or Ctrl-D. Its
-                // status is worth saying, and is not an error either way.
-                doc.status = 'ended';
-                doc.exitCode = chunk.exitCode ?? 0;
-                attached?.term.write(
-                    `\r\n\x1b[2mThe shell exited with status ${doc.exitCode}. Press Restart to start it again.\x1b[0m\r\n`,
-                );
-            } else {
-                doc.status = 'ended';
-                attached?.term.write('\r\n\x1b[2mThe session has ended.\x1b[0m\r\n');
-            }
+            this.deliver(tab, chunk);
         });
+    }
+
+    private holdEarly(chunk: kube.TerminalChunk): void {
+        const held = this.early.get(chunk.sessionId);
+        if (held) {
+            if (held.length < 256) held.push(chunk);
+            return;
+        }
+        this.early.set(chunk.sessionId, [chunk]);
+        setTimeout(() => this.early.delete(chunk.sessionId), 10_000);
+    }
+
+    /** Routes a session to a tab, and hands it whatever it said before it was. */
+    private route(sessionId: string, tab: string): void {
+        this.routes.set(sessionId, tab);
+        const held = this.early.get(sessionId);
+        this.early.delete(sessionId);
+        for (const chunk of held ?? []) {
+            if (this.routes.get(sessionId) !== tab) return;
+            this.deliver(tab, chunk);
+        }
+    }
+
+    /** Writes one chunk to its tab's terminal, and closes the session's books on the last. */
+    private deliver(tab: string, chunk: kube.TerminalChunk): void {
+        const attached = this.terms.get(tab);
+        if (chunk.data && attached) {
+            attached.term.write(decode(chunk.data));
+        }
+
+        if (!chunk.done) return;
+
+        this.routes.delete(chunk.sessionId);
+        const doc = this.docs[tab];
+        if (!doc) return;
+        if (chunk.error) {
+            doc.status = 'error';
+            doc.error = chunk.error;
+            attached?.term.write(`\r\n\x1b[31m${chunk.error}\x1b[0m\r\n`);
+        } else if (chunk.exited) {
+            // A local shell that ended by itself: `exit`, or Ctrl-D. Its
+            // status is worth saying, and is not an error either way.
+            doc.status = 'ended';
+            doc.exitCode = chunk.exitCode ?? 0;
+            attached?.term.write(
+                `\r\n\x1b[2mThe shell exited with status ${doc.exitCode}. Press Restart to start it again.\x1b[0m\r\n`,
+            );
+        } else {
+            doc.status = 'ended';
+            attached?.term.write('\r\n\x1b[2mThe session has ended.\x1b[0m\r\n');
+        }
     }
 
     /** The view for a tab. Never null: an unopened tab reads as empty. */
@@ -376,7 +418,8 @@ class Terminals {
             target.kind !== 'nodes' &&
             target.kind !== TOOL_CONSOLE &&
             target.kind !== DEBUG_SESSION &&
-            target.kind !== LOCAL_SHELL
+            target.kind !== LOCAL_SHELL &&
+            target.kind !== VM_CONSOLE
         ) {
             try {
                 const containers = await TerminalService.Containers(
@@ -492,6 +535,8 @@ class Terminals {
                     ? await this.openDebug(id, target)
                     : target.kind === LOCAL_SHELL
                     ? await TerminalService.OpenLocal(target.contextId)
+                    : target.kind === VM_CONSOLE
+                    ? await TerminalService.OpenVMConsole(target.contextId, target.namespace, target.name)
                     : target.kind === 'nodes'
                     ? await TerminalService.OpenNode(target.contextId, target.name)
                     : await TerminalService.Open(
@@ -516,7 +561,7 @@ class Terminals {
             current.created = session.created ?? '';
             current.kept = session.kept ?? false;
             current.status = 'running';
-            this.routes.set(session.id, id);
+            this.route(session.id, id);
 
             // The shell has no idea how big the window is until it is told, and
             // the size it assumes -- 80x24 -- is almost never right.

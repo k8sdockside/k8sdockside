@@ -25,6 +25,9 @@ type Store struct {
 	mu   sync.Mutex
 	path string
 	data Settings
+	// profile names the profile this is, empty for the default settings.
+	// See profile.go.
+	profile string
 }
 
 // Open loads the settings file, creating nothing on disk. A missing file is not

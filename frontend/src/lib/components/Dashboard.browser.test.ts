@@ -276,7 +276,7 @@ test('evicted pods are called out and lead to the pods tab searched for them', a
     render(Dashboard, { contextId: PROD });
 
     await expect.element(page.getByText('Pods need attention')).toBeVisible();
-    await expect.element(page.getByRole('group', { name: 'Restart history period' })).toBeVisible();
+    await expect.element(page.getByRole('heading', { name: 'Not running' })).toBeVisible();
 
     await page.getByRole('button', { name: /^42 evicted/ }).click();
     expect(workspace.tabs.map((t) => [t.contextId, t.kind])).toContainEqual([PROD, 'pods']);
@@ -339,7 +339,8 @@ test('a restarting pod says why it last stopped, and an evicted one why it was e
     vi.mocked(ResourceService.Overview).mockResolvedValue(TROUBLED as never);
     render(Dashboard, { contextId: PROD });
 
-    await expect.element(page.getByText('OOMKilled (exit 137) · 12m ago')).toBeVisible();
+    await expect.element(page.getByText('OOMKilled (exit 137)')).toBeVisible();
+    await expect.element(page.getByText('12m ago')).toBeVisible();
     await expect.element(page.getByText('The node was low on resource: memory.')).toBeVisible();
     await expect.element(page.getByText('restarted in the last hour')).toBeVisible();
 });
@@ -440,9 +441,9 @@ test('old restarts are history, not trouble, and can be hidden and shown again',
     await expect.element(page.getByRole('heading', { name: 'Restart history' })).toBeVisible();
     expect(page.getByText('Pods need attention').elements()).toHaveLength(0);
 
-    await page.getByRole('button', { name: 'Hide restart history' }).click();
+    await page.getByRole('button', { name: 'Mark restarts as seen' }).click();
 
-    await expect.element(page.getByText(/Restart history hidden/)).toBeVisible();
+    await expect.element(page.getByText(/Restarts marked as seen/)).toBeVisible();
     expect(page.getByRole('heading', { name: 'Restart history' }).elements()).toHaveLength(0);
     expect(page.getByText('kube-scheduler-ht1').elements()).toHaveLength(0);
 
@@ -487,4 +488,33 @@ test('a restart after the history was hidden brings it back', async () => {
     await expect.element(page.getByText('Pods need attention')).toBeVisible();
     await expect.element(page.getByText('restarted in the last hour')).toBeVisible();
     delete workspace.settings.contexts[PROD];
+});
+
+// Pods that restart together were taken down by something under them. All of
+// the last hour's restarts are listed -- not only the few the capped attention
+// list carries -- and the panel says they happened at once.
+test('restarts in the last hour are listed in full, and a burst of them is called out', async () => {
+    delete workspace.settings.contexts[PROD];
+    const at = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+    const restarted = Array.from({ length: 11 }, (_, i) => ({
+        namespace: 'kube-system', name: `pod-${i}`, restarts: 1, lastTermination: 'Error (exit 1)', lastRestartAt: at(9 + (i % 2)),
+    }));
+    restarted.push({ namespace: 'longhorn-system', name: 'old-pod', restarts: 1, lastTermination: 'Error (exit 1)', lastRestartAt: at(25 * 60) });
+    vi.mocked(ResourceService.Overview).mockResolvedValue({
+        ...OVERVIEW,
+        pods: {
+            evicted: 0, failed: 0, crashLooping: 0, restarting: 12, restarts: 12, restartedRecently: 11,
+            lastRestartAt: at(9), restarted, worst: [],
+        },
+    } as never);
+    render(Dashboard, { contextId: PROD });
+
+    await expect.element(page.getByRole('heading', { name: /Recent restarts/ })).toBeVisible();
+    await expect.element(page.getByText('pod-10')).toBeVisible();
+    await expect.element(page.getByText(/All 11 restarted within/)).toBeVisible();
+
+    // The day-old restart is folded away under the recent ones until asked for.
+    expect(page.getByText('old-pod').elements()).toHaveLength(0);
+    await page.getByRole('button', { name: /Earlier restarts/ }).click();
+    await expect.element(page.getByText('old-pod')).toBeVisible();
 });

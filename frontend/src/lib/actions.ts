@@ -24,6 +24,7 @@ export type ActionId =
     | 'deny'
     | 'nodepods'
     | 'vmstart'
+    | 'vmconsole'
     | 'vmstop'
     | 'vmrestart'
     | 'vmpause'
@@ -165,6 +166,14 @@ const VM_SOFT_REBOOT: Action = { id: 'vmsoftreboot', label: 'Reboot', icon: 'ref
  * later.
  */
 const VM_MIGRATE: Action = { id: 'vmmigrate', label: 'Migrate', icon: 'forward', form: 'confirm' };
+
+/**
+ * The guest's graphical console -- its display -- in the dock. Kept apart from
+ * the lifecycle buttons: a plugin that brings its own Start and Stop has no
+ * console of its own to bring, so this one is offered either way. The serial
+ * console is a button inside it, and in the machine's Screen section.
+ */
+export const VM_CONSOLE: Action = { id: 'vmconsole', label: 'Console', icon: 'display', form: 'immediate' };
 
 /** The KubeVirt kinds the lifecycle actions are offered on. */
 export const VM_KINDS = ['crd:virtualmachines.kubevirt.io', 'crd:virtualmachineinstances.kubevirt.io'];

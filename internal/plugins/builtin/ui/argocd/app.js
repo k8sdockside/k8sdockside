@@ -12,7 +12,7 @@
     var add = K.add;
     var POLL = 4000;
 
-    var state = { ctx: null, sig: '', busy: false, last: null, treeOpen: null };
+    var state = { ctx: null, sig: '', busy: false, last: null };
 
     var $ = function (id) {
         return document.getElementById(id);
@@ -92,37 +92,39 @@
             );
             root.appendChild(bars);
 
-            var details = el('details', 'panel-tree');
             // Open for a small application, folded for a big one, and then
             // however the reader last left it.
-            details.open = state.treeOpen === null ? total <= 16 : state.treeOpen;
-            details.addEventListener('toggle', function () {
-                state.treeOpen = details.open;
+            var tree = sdk.ui.section({
+                id: 'resources',
+                title: 'Resources',
+                count: total,
+                by: app.outOfSync ? app.outOfSync + ' out of sync' : '',
+                what: 'the resource tree',
+                open: total <= 16,
+                parent: root,
             });
-            var summary = el('summary', '', K.plural(total, 'resource') + (app.outOfSync ? ' · ' + app.outOfSync + ' out of sync' : ''));
-            details.appendChild(summary);
             var box = el('div', 'tree-box');
             box.appendChild(K.resourceTree(app, { width: Math.max(320, document.body.clientWidth - 30), readable: state.ctx.readable, onOpen: open }));
-            details.appendChild(box);
-            root.appendChild(details);
+            tree.body.appendChild(box);
         }
 
         if (app.op) {
+            var last = sdk.ui.section({ id: 'last-sync', title: 'Last sync', what: 'the last sync', parent: root });
             var op = el('div', 'panel-op');
-            add(op, el('span', 'panel-label', 'Last sync'), K.chip(app.op.phase || 'Unknown', A.opFailed(app) ? 'error' : A.opRunning(app) ? 'info' : 'ok'), el('span', 'faint', K.age(app.op.finishedAt || app.op.startedAt)));
-            root.appendChild(op);
-            if (app.op.message && (A.opFailed(app) || A.opRunning(app))) root.appendChild(el('div', 'op-message', app.op.message));
+            add(op, K.chip(app.op.phase || 'Unknown', A.opFailed(app) ? 'error' : A.opRunning(app) ? 'info' : 'ok'), el('span', 'faint', K.age(app.op.finishedAt || app.op.startedAt)));
+            last.body.appendChild(op);
+            if (app.op.message && (A.opFailed(app) || A.opRunning(app))) last.body.appendChild(el('div', 'op-message', app.op.message));
         }
 
         if (app.history.length) {
+            var deployed = sdk.ui.section({ id: 'deployed', title: 'Deployed', count: app.history.length, what: 'what has been deployed', parent: root });
             var hist = el('div', 'panel-history');
-            hist.appendChild(el('span', 'panel-label', 'Deployed'));
             app.history.slice(0, 4).forEach(function (h, i) {
                 var item = el('span', 'hist' + (i === 0 ? ' current' : ''));
                 add(item, el('code', 'rev', A.short(h.revision) || '—'), el('span', 'faint', K.age(h.deployedAt)));
                 hist.appendChild(item);
             });
-            root.appendChild(hist);
+            deployed.body.appendChild(hist);
         }
 
         if (app.urls.length) {

@@ -264,6 +264,21 @@ export abstract class WorkspaceLayout extends WorkspaceTabs {
         this.persistLayout();
     }
 
+    /** Folds a section, or unfolds it, whatever it was: for a page that says which it wants. */
+    setSectionFolded(key: string, folded: boolean): void {
+        if (this.isSectionFolded(key) === folded) return;
+        this.toggleSection(key);
+    }
+
+    /**
+     * The sections a plugin's pages have folded, by the ids the pages gave
+     * them. Kept in the same list as the app's own, under "part:<plugin>:".
+     */
+    pluginFolds(pluginId: string): string[] {
+        const prefix = `part:${pluginId}:`;
+        return (this.settings.layout.foldedSections ?? []).filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
+    }
+
     // ----- folding the sidebar's resource groups --------------------------
     //
     // Folding is per context with a shared default behind it: a cluster either

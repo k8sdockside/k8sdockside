@@ -11,6 +11,7 @@ const DeleteDebugPod = vi.fn();
 const OpenLocal = vi.fn();
 const OpenTool = vi.fn();
 const OpenToolInteractive = vi.fn();
+const OpenVMConsole = vi.fn();
 
 const events = vi.hoisted(() => ({ handler: (_e: { data: unknown }) => {} }));
 vi.mock('@wailsio/runtime', () => ({
@@ -47,6 +48,7 @@ vi.mock('../../../bindings/github.com/k8sdockside/k8sdockside/internal/services'
         OpenLocal,
         OpenTool,
         OpenToolInteractive,
+        OpenVMConsole,
     },
 }));
 
@@ -72,7 +74,7 @@ vi.mock('@xterm/xterm', () => ({
 }));
 vi.mock('@xterm/addon-fit', () => ({ FitAddon: class { fit() {} } }));
 
-const { terminals } = await import('./terminals.svelte');
+const { terminals, VM_CONSOLE } = await import('./terminals.svelte');
 
 const TAB = 'shell:cfg::prod#pods#default#web';
 const TARGET = { contextId: 'cfg::prod', kind: 'pods', namespace: 'default', name: 'web' };
@@ -172,6 +174,21 @@ describe('what the backend sends', () => {
         const doc = terminals.doc(TAB);
         expect(doc.status).toBe('error');
         expect(doc.error).toBe('container is not running');
+    });
+
+    // The backend can speak before the call that opened the session has
+    // returned. A failure said then used to be lost, and the tab sat on
+    // "Connected" over a black screen.
+    test('what a session says before it is routed still reaches its tab', async () => {
+        Open.mockImplementationOnce(async () => {
+            events.handler({ data: { sessionId: 'term-1', data: '', error: 'console is in use', done: true } });
+            return SESSION;
+        });
+        await terminals.open(TAB, TARGET);
+
+        const doc = terminals.doc(TAB);
+        expect(doc.status).toBe('error');
+        expect(doc.error).toBe('console is in use');
     });
 
     test('output for a session nobody is holding is dropped', async () => {
@@ -386,5 +403,20 @@ describe('tool consoles', () => {
 
         expect(OpenTool).toHaveBeenCalledWith('cfg::prod', 'talos', 'talosctl', ['--nodes', '10.0.0.1'], ['reboot']);
         expect(OpenToolInteractive).not.toHaveBeenCalled();
+    });
+});
+
+describe('virtual machine consoles', () => {
+    const VM_TAB = 'shell:cfg::prod#vmconsole#vms#web-vm';
+    const VM = { contextId: 'cfg::prod', kind: VM_CONSOLE, namespace: 'vms', name: 'web-vm' };
+
+    test('a serial console opens on the machine and asks for no container list', async () => {
+        OpenVMConsole.mockReset().mockResolvedValue({ ...SESSION, id: 'term-7', pod: 'web-vm', container: 'serial0' });
+        await terminals.open(VM_TAB, VM);
+
+        expect(Containers).not.toHaveBeenCalled();
+        expect(OpenVMConsole).toHaveBeenCalledWith('cfg::prod', 'vms', 'web-vm');
+        expect(terminals.doc(VM_TAB).status).toBe('running');
+        terminals.forget(VM_TAB);
     });
 });

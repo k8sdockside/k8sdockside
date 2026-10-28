@@ -267,55 +267,112 @@
         return Number.isNaN(last) || last <= seen;
     });
 
+    /** A restart as the panel lists it: the pod, how often, why it last stopped and when. */
+    interface Restart {
+        namespace: string;
+        name: string;
+        restarts: number;
+        lastTermination: string;
+        lastRestartAt: string;
+        /** How long ago, as the backend already said it, for an entry with no time on record. */
+        lastRestart?: string;
+    }
+
+    const HOUR = 3_600_000;
+    const key = (pod: { namespace: string; name: string }): string => pod.namespace + '/' + pod.name;
+
+    /**
+     * What is wrong now: pods that failed, were evicted or will not start.
+     * Restarts are not here -- a pod that restarted and came back is running,
+     * and says so in the lists below.
+     */
+    let problems = $derived(
+        (overview?.pods.worst ?? []).filter((pod) => pod.trouble !== 'restarting' && pod.trouble !== 'restarted'),
+    );
+
+    /**
+     * Every pod that restarted in the last hour, most recent first. Read from
+     * the full restart list rather than the attention list, which is capped:
+     * eleven pods restarting together must read as eleven, not as eight here
+     * and three among last week's.
+     */
+    let recent = $derived.by((): Restart[] => {
+        const pods = overview?.pods;
+        if (!pods || restartsDismissed) return [];
+        const now = Date.now();
+        const skip = new Set(problems.map(key));
+        const out = new Map<string, Restart>();
+        for (const pod of pods.restarted ?? []) {
+            const at = Date.parse(pod.lastRestartAt);
+            if (!Number.isNaN(at) && now - at <= HOUR && !skip.has(key(pod))) out.set(key(pod), pod);
+        }
+        for (const pod of pods.worst ?? []) {
+            if (pod.trouble === 'restarting' && !skip.has(key(pod)) && !out.has(key(pod))) out.set(key(pod), pod);
+        }
+        return [...out.values()].sort((a, b) => (Date.parse(b.lastRestartAt) || 0) - (Date.parse(a.lastRestartAt) || 0));
+    });
+
+    /**
+     * Whether the recent restarts all happened at once. Pods that fall over
+     * together, minutes apart, were almost always taken down by something
+     * under them -- a node rebooting, the API server going away -- and saying
+     * so saves somebody reading eleven pods' logs for a cause none of them has.
+     */
+    let burst = $derived.by(() => {
+        const times = recent.map((p) => Date.parse(p.lastRestartAt)).filter((t) => !Number.isNaN(t));
+        if (times.length < 3 || times.length !== recent.length) return null;
+        const spread = Math.max(...times) - Math.min(...times);
+        if (spread > 5 * 60_000) return null;
+        return { minutes: Math.max(1, Math.ceil(spread / 60_000)), at: new Date(Math.max(...times)).toISOString() };
+    });
+
     /**
      * How loudly the pods panel speaks: pods that are gone or will not start
      * are an error, a restart in the last hour a warning, and restarts older
      * than that only history -- shown, but not as trouble, and hidden once the
-     * user has dismissed them. Nothing at all hides the panel.
+     * user has marked them seen. Nothing at all hides the panel.
      */
     let podTone = $derived.by(() => {
         const pods = overview?.pods;
         if (!pods) return null;
         if (pods.evicted + pods.failed + pods.crashLooping > 0) return 'error';
         if (restartsDismissed) return null;
-        if (pods.restartedRecently > 0) return 'warn';
+        if (recent.length > 0 || pods.restartedRecently > 0) return 'warn';
         if (pods.restarting > 0) return 'history';
         return null;
     });
 
-    /**
-     * The attention list: what is wrong now. Restarts older than an hour are
-     * left to the history below it, which can be narrowed to a period.
-     */
-    let worstShown = $derived(
-        (overview?.pods.worst ?? []).filter(
-            (pod) => pod.trouble !== 'restarted' && !(restartsDismissed && pod.trouble === 'restarting'),
-        ),
-    );
-
-    /** The periods the restart history can be narrowed to, in days; 0 is all of it. */
+    /** The periods the earlier restarts can be narrowed to, in days; 0 is all of them. */
     const PERIODS = [0, 14, 7, 3, 2, 1];
     /** Which of them is chosen: kept per cluster in the settings, so it outlasts the tab and the app. */
     let period = $derived(workspace.restartsPeriodOf(contextId));
-    /** How many history entries are listed before "and N more". */
+    /** How many earlier restarts are listed before "and N more". */
     const HISTORY_SHOWN = 8;
 
-    /**
-     * The pods that restarted within the chosen period, most recent first --
-     * less any already on the attention list above, which says them louder. A
-     * pod the kubelet kept no time for belongs to "all" only.
-     */
-    let history = $derived.by(() => {
+    /** Restarts from before the last hour, less any pod listed above. */
+    let earlierAll = $derived.by((): Restart[] => {
         const pods = overview?.pods;
         if (!pods || restartsDismissed) return [];
-        const above = new Set(worstShown.map((p) => p.namespace + '/' + p.name));
+        const above = new Set([...problems.map(key), ...recent.map(key)]);
+        return (pods.restarted ?? []).filter((p) => !above.has(key(p)));
+    });
+
+    /** The earlier restarts within the chosen period. A pod the kubelet kept no time for belongs to "all" only. */
+    let history = $derived.by(() => {
         const since = period === 0 ? -Infinity : Date.now() - period * 86_400_000;
-        return pods.restarted.filter((p) => {
-            if (above.has(p.namespace + '/' + p.name)) return false;
+        return earlierAll.filter((p) => {
             const at = Date.parse(p.lastRestartAt);
             return Number.isNaN(at) ? period === 0 : at >= since;
         });
     });
+
+    /**
+     * Whether the earlier restarts are listed or folded away. Folded when
+     * there is something more pressing above them, open when they are all
+     * there is; the user's own click wins either way.
+     */
+    let earlierChosen = $state<boolean | null>(null);
+    let earlierOpen = $derived(earlierChosen ?? (problems.length === 0 && recent.length === 0));
 
     /** How long ago an RFC3339 moment was, as "20m", "5h" or "13d". */
     function ago(at: string): string {
@@ -425,10 +482,22 @@
         {#if podTone}
             {@const pods = overview.pods}
             <section class="attention {podTone}" aria-label="Pods needing attention">
-                <h2>
-                    <Icon name={podTone === 'history' ? 'history' : 'alert'} size={13} />
-                    {podTone === 'history' ? 'Restart history' : 'Pods need attention'}
-                </h2>
+                <div class="att-head">
+                    <h2>
+                        <Icon name={podTone === 'history' ? 'history' : 'alert'} size={13} />
+                        {podTone === 'history' ? 'Restart history' : 'Pods need attention'}
+                    </h2>
+                    {#if pods.restarting > 0 && !restartsDismissed}
+                        <button
+                            class="plain"
+                            onclick={() => workspace.dismissRestarts(contextId)}
+                            title="Hide the restarts listed here. They come back as soon as any pod restarts again."
+                        >
+                            <Icon name="check" size={12} />
+                            Mark restarts as seen
+                        </button>
+                    {/if}
+                </div>
                 <div class="chips">
                     {#if pods.evicted > 0}
                         <button
@@ -457,14 +526,13 @@
                             <span class="n">{pods.crashLooping}</span> not starting
                         </button>
                     {/if}
-                    {#if pods.restartedRecently > 0 && !restartsDismissed}
-                        <button
-                            class="chip warn"
-                            onclick={() => workspace.showPodsMatching(contextId, '')}
-                            title="Pods that restarted a container in the last hour — failing now, rather than once some time ago"
+                    {#if (recent.length > 0 || pods.restartedRecently > 0) && !restartsDismissed}
+                        <span
+                            class="chip warn static"
+                            title="Pods that restarted a container in the last hour. They are running again; the list below says why they stopped."
                         >
-                            <span class="n">{pods.restartedRecently}</span> restarted in the last hour
-                        </button>
+                            <span class="n">{Math.max(recent.length, pods.restartedRecently)}</span> restarted in the last hour
+                        </span>
                     {/if}
                 </div>
                 <!-- Evicted pods are records of pods that are already gone:
@@ -490,91 +558,71 @@
                         {/if}
                     </div>
                 {/if}
-                {#if worstShown.length > 0}
-                    <ul class="worst">
-                        {#each worstShown as pod (pod.namespace + '/' + pod.name)}
+
+                {#if problems.length > 0}
+                    <h3 class="group">Not running</h3>
+                    <ul class="worst problems">
+                        {#each problems as pod (key(pod))}
                             <li>
                                 <button
                                     onclick={() =>
-                                        void detail.open({
-                                            contextId,
-                                            kind: 'pods',
-                                            namespace: pod.namespace,
-                                            name: pod.name,
-                                        })}
+                                        void detail.open({ contextId, kind: 'pods', namespace: pod.namespace, name: pod.name })}
                                     title="Open {pod.name}"
                                 >
-                                    <span
-                                        class="reason {pod.trouble === 'restarting' || pod.trouble === 'restarted' ? 'warn' : 'error'}"
-                                        class:faded={pod.trouble === 'restarted'}>{pod.reason}</span
-                                    >
-                                    <span class="name">{pod.name}</span>
-                                    <span class="ns">{pod.namespace}</span>
-                                    {#if pod.restarts > 0}
-                                        <span class="restarts">{plural(pod.restarts, 'restart')}</span>
-                                    {:else}
-                                        <span class="restarts"></span>
-                                    {/if}
-                                    {#if lastStop(pod) || pod.message}
-                                        <span class="why" title={pod.message || lastStop(pod)}>
-                                            {lastStop(pod) || pod.message}
-                                        </span>
-                                    {/if}
+                                    <span class="reason error">{pod.reason}</span>
+                                    <span class="pod"><span class="ns">{pod.namespace}/</span><span class="name">{pod.name}</span></span>
+                                    <span class="why" title={pod.message || lastStop(pod)}>{pod.message || lastStop(pod)}</span>
+                                    <span class="restarts">{pod.restarts > 0 ? plural(pod.restarts, 'restart') : ''}</span>
                                 </button>
                             </li>
                         {/each}
                     </ul>
                 {/if}
-                <!-- Restarts are counted since each pod was made, so they pile
-                     up on a healthy cluster. The Pods list counts them as k9s
-                     does; this says which and when, narrowed to a period. -->
-                {#if pods.restarting > 0 && !restartsDismissed}
+
+                <!-- A restart count is a total since the pod was made; what
+                     matters is which restarted lately, and whether together. -->
+                {#if recent.length > 0}
+                    <h3 class="group">Recent restarts <span class="aside">— last hour, running again now</span></h3>
+                    {#if burst}
+                        <p class="hint">
+                            <Icon name="info" size={12} />
+                            All {recent.length} restarted within {plural(burst.minutes, 'minute')} of each other, {ago(burst.at)} ago.
+                            That usually means a node or the control plane restarted, not that the pods themselves are broken.
+                        </p>
+                    {/if}
+                    {@render restartRows(recent)}
+                {/if}
+
+                {#if earlierAll.length > 0}
                     <div class="history-bar">
-                        <div class="periods" role="group" aria-label="Restart history period">
-                            {#each PERIODS as days (days)}
-                                <button aria-pressed={period === days} onclick={() => workspace.setRestartsPeriod(contextId, days)}>
-                                    {days === 0 ? 'All' : `${days}d`}
-                                </button>
-                            {/each}
-                        </div>
-                        <span class="summary">
-                            {#if history.length === 0}
-                                No other restarts {period === 0 ? 'on record' : `in the last ${plural(period, 'day')}`}
-                            {:else}
-                                {plural(history.length, 'pod')} restarted {period === 0 ? 'at some point' : `in the last ${plural(period, 'day')}`}
-                            {/if}
-                        </span>
                         <button
-                            class="plain"
-                            onclick={() => workspace.dismissRestarts(contextId)}
-                            title="Hide these restarts. They come back if a pod restarts again."
+                            class="disclosure"
+                            aria-expanded={earlierOpen}
+                            onclick={() => (earlierChosen = !earlierOpen)}
                         >
-                            <Icon name="close" size={12} />
-                            Hide restart history
+                            <Icon name={earlierOpen ? 'chevron-down' : 'chevron-right'} size={12} />
+                            Earlier restarts
+                            <span class="aside">· {plural(earlierAll.length, 'pod')}</span>
                         </button>
-                    </div>
-                    {#if history.length > 0}
-                        <ul class="worst">
-                            {#each history.slice(0, HISTORY_SHOWN) as pod (pod.namespace + '/' + pod.name)}
-                                <li>
-                                    <button
-                                        onclick={() =>
-                                            void detail.open({ contextId, kind: 'pods', namespace: pod.namespace, name: pod.name })}
-                                        title="Open {pod.name}"
-                                    >
-                                        <span class="reason warn faded">Restarted</span>
-                                        <span class="name">{pod.name}</span>
-                                        <span class="ns">{pod.namespace}</span>
-                                        <span class="restarts">{plural(pod.restarts, 'restart')}</span>
-                                        <span class="why">
-                                            {[pod.lastTermination, pod.lastRestartAt ? `${ago(pod.lastRestartAt)} ago` : '']
-                                                .filter(Boolean)
-                                                .join(' · ')}
-                                        </span>
+                        {#if earlierOpen}
+                            <div class="periods" role="group" aria-label="Restart history period">
+                                {#each PERIODS as days (days)}
+                                    <button aria-pressed={period === days} onclick={() => workspace.setRestartsPeriod(contextId, days)}>
+                                        {days === 0 ? 'All' : `${days}d`}
                                     </button>
-                                </li>
-                            {/each}
-                        </ul>
+                                {/each}
+                            </div>
+                            <span class="summary">
+                                {#if history.length === 0}
+                                    None {period === 0 ? 'on record' : `in the last ${plural(period, 'day')}`}
+                                {:else}
+                                    {plural(history.length, 'pod')} restarted {period === 0 ? 'at some point' : `in the last ${plural(period, 'day')}`}
+                                {/if}
+                            </span>
+                        {/if}
+                    </div>
+                    {#if earlierOpen && history.length > 0}
+                        {@render restartRows(history.slice(0, HISTORY_SHOWN))}
                         {#if history.length > HISTORY_SHOWN}
                             <p class="more">and {history.length - HISTORY_SHOWN} more</p>
                         {/if}
@@ -582,11 +630,31 @@
                 {/if}
             </section>
         {/if}
+        {#snippet restartRows(rows: Restart[])}
+            <ul class="worst restarted">
+                <li class="cols" aria-hidden="true">
+                    <span>Pod</span><span>Last stopped with</span><span>Restarts</span><span>When</span>
+                </li>
+                {#each rows as pod (key(pod))}
+                    <li>
+                        <button
+                            onclick={() => void detail.open({ contextId, kind: 'pods', namespace: pod.namespace, name: pod.name })}
+                            title="Open {pod.name}"
+                        >
+                            <span class="pod"><span class="ns">{pod.namespace}/</span><span class="name">{pod.name}</span></span>
+                            <span class="why" title={pod.lastTermination}>{pod.lastTermination || '—'}</span>
+                            <span class="restarts">{pod.restarts}×</span>
+                            <span class="when">{pod.lastRestartAt ? `${ago(pod.lastRestartAt)} ago` : pod.lastRestart ? `${pod.lastRestart} ago` : '—'}</span>
+                        </button>
+                    </li>
+                {/each}
+            </ul>
+        {/snippet}
         <!-- Said, so a dismissed history is never mistaken for none, and can
              be brought back without waiting for the next restart. -->
         {#if restartsDismissed && overview.pods.restarting > 0}
             <p class="restarts-hidden">
-                Restart history hidden — {plural(overview.pods.restarting, 'pod')}, none restarted since.
+                Restarts marked as seen — {plural(overview.pods.restarting, 'pod')}, none restarted since.
                 <button onclick={() => workspace.dismissRestarts(contextId, false)}>Show</button>
             </p>
         {/if}
@@ -839,7 +907,7 @@
         align-items: center;
         flex-wrap: wrap;
         gap: 10px;
-        margin-top: 10px;
+        margin-top: 14px;
         font-size: 12px;
         color: var(--text-dim);
     }
@@ -876,24 +944,6 @@
         background: var(--bg-raised);
     }
 
-    .history-bar .plain {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        height: 24px;
-        padding: 0 10px;
-        font: inherit;
-        font-size: 11.5px;
-        color: var(--text-dim);
-        background: var(--bg-panel);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-sm);
-        cursor: pointer;
-    }
-
-    .history-bar .plain:hover {
-        color: var(--text);
-    }
 
     .more {
         margin: 6px 0 0;
@@ -916,12 +966,88 @@
         cursor: pointer;
     }
 
+    .att-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+
     .attention h2 {
         display: flex;
         align-items: center;
         gap: 6px;
         color: var(--tone);
-        margin-bottom: 10px;
+        margin: 0;
+    }
+
+    .att-head .plain,
+    .history-bar .disclosure {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 24px;
+        padding: 0 10px;
+        font: inherit;
+        font-size: 11.5px;
+        color: var(--text-dim);
+        background: var(--bg-panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+    }
+
+    .att-head .plain:hover,
+    .history-bar .disclosure:hover {
+        color: var(--text);
+    }
+
+    .history-bar .disclosure {
+        padding: 0 8px 0 4px;
+        border-color: transparent;
+        background: none;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text);
+    }
+
+    .group {
+        margin: 14px 0 4px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text);
+    }
+
+    .aside {
+        font-weight: 400;
+        color: var(--text-faint);
+    }
+
+    .hint {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        margin: 2px 0 6px;
+        padding: 6px 8px;
+        font-size: 12px;
+        color: var(--text-dim);
+        background: var(--bg-panel);
+        border-radius: var(--radius-sm);
+    }
+
+    .hint :global(svg) {
+        flex: 0 0 auto;
+        margin-top: 2px;
+    }
+
+    .chip.static {
+        cursor: default;
+    }
+
+    .chip.static:hover {
+        border-color: var(--border);
+        color: var(--text-dim);
     }
 
     .chips {
@@ -965,16 +1091,18 @@
 
     .worst {
         list-style: none;
-        margin: 10px 0 0;
+        margin: 4px 0 0;
         padding: 0;
         display: grid;
         gap: 1px;
     }
 
-    .worst button {
+    /* One line per pod, in columns that line up down the list: the pod, why it
+       stopped, how often, and when. */
+    .worst button,
+    .worst .cols {
         display: grid;
-        grid-template-columns: 130px minmax(0, 1fr) auto auto;
-        grid-auto-rows: auto;
+        grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) 64px 72px;
         gap: 12px;
         align-items: baseline;
         width: 100%;
@@ -989,8 +1117,38 @@
         cursor: pointer;
     }
 
+    .worst.problems button {
+        grid-template-columns: 130px minmax(0, 1.6fr) minmax(0, 1.4fr) 72px;
+    }
+
     .worst button:hover {
         background: var(--bg-hover);
+    }
+
+    .worst .cols {
+        padding: 0 6px 2px;
+        font-size: 10.5px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+    }
+
+    .worst .cols span:nth-child(n + 3),
+    .worst .restarts,
+    .worst .when {
+        text-align: right;
+    }
+
+    .worst .pod {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .worst .when {
+        color: var(--text-dim);
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
     }
 
     .worst .reason {
@@ -1004,9 +1162,6 @@
         color: var(--error);
     }
 
-    .worst .reason.warn {
-        color: var(--warn);
-    }
 
     .worst .name {
         font-family: var(--mono);
@@ -1014,6 +1169,11 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+    }
+
+    .worst .ns {
+        font-family: var(--mono);
+        font-size: 11.5px;
     }
 
     .worst .ns,
@@ -1026,22 +1186,16 @@
         font-variant-numeric: tabular-nums;
     }
 
-    /* Why it last stopped, under the name: the restart count says how often,
-       this says what to fix. */
+    /* Why it last stopped: the restart count says how often, this says what
+       to fix. */
     .worst .why {
-        grid-column: 2 / -1;
-        margin-top: -2px;
-        font-size: 11px;
+        font-size: 11.5px;
         color: var(--text-dim);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
     }
 
-    .worst .reason.faded {
-        opacity: 0.7;
-        font-weight: 500;
-    }
 
     .chip.quiet .n {
         color: var(--text-dim);
