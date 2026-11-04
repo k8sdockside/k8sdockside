@@ -54,6 +54,10 @@ export interface PluginUI {
     tools: PluginToolAccess[];
     /** The in-cluster Services the views may make GET requests to. */
     services: PluginServiceAccess[];
+    /** The in-cluster gRPC services the views may call, and which methods. */
+    grpc: PluginGRPCAccess[];
+    /** The Services the views may ask to port-forward to and open in the browser. */
+    forwards: PluginForwardAccess[];
 }
 
 /** One command line tool a plugin's views may run, as the settings card shows it. */
@@ -85,6 +89,26 @@ export interface PluginServiceAccess {
     /** Where it is, as `namespace/name:port` or by its selector. */
     where: string;
     paths: string[];
+}
+
+/**
+ * One gRPC service a plugin's views may call, as the settings card and the
+ * frame need it. Where calls go and which methods are allowed are checked in Go.
+ */
+export interface PluginGRPCAccess {
+    id: string;
+    label: string;
+    /** Where it is, as `namespace/name:port` or by its selector. */
+    where: string;
+    /** `package.Service/Method`. */
+    methods: string[];
+}
+
+/** One Service a plugin's views may ask to port-forward to. Each is confirmed by the user. */
+export interface PluginForwardAccess {
+    id: string;
+    label: string;
+    where: string;
 }
 
 /**

@@ -185,11 +185,13 @@ func (s *PluginService) ServiceStartup(ctx context.Context, _ application.Servic
 	return nil
 }
 
-// ServiceShutdown stops fetching the list.
+// ServiceShutdown stops fetching the list, and closes the tunnels plugins'
+// gRPC calls keep open.
 func (s *PluginService) ServiceShutdown() error {
 	if s.known != nil {
 		s.known.shutdown()
 	}
+	s.tunnels.closeAll()
 	return nil
 }
 

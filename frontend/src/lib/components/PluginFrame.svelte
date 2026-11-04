@@ -28,6 +28,7 @@
     import { pluginState, setPluginState } from '../plugins/storage';
     import { detail, type DetailTarget } from '../state/detail.svelte';
     import { fields } from '../state/fields';
+    import { forwards } from '../state/forwards.svelte';
     import { DETAILS_TAB_ID } from '../state/panes';
     import { resourceTabId, workspace } from '../state/workspace.svelte';
     import { pluginFocus } from '../plugins/focus.svelte';
@@ -350,6 +351,8 @@
                     releases: [...(p.ui?.releases ?? [])],
                     tools: (p.ui?.tools ?? []).map((t) => ({ id: t.id, label: t.label, command: t.command })),
                     services: (p.ui?.services ?? []).map((svc) => ({ id: svc.id, label: svc.label, paths: [...svc.paths] })),
+                    grpc: (p.ui?.grpc ?? []).map((g) => ({ id: g.id, label: g.label, methods: [...g.methods] })),
+                    forwards: (p.ui?.forwards ?? []).map((f) => ({ id: f.id, label: f.label })),
                     actions: (p.actions ?? []).map((a) => ({ id: a.id, label: a.label, kind: a.kind })),
                     // What the plugin says about itself, so a page that is its
                     // own overview can link to what it is about the way the
@@ -515,6 +518,59 @@
                 const svc = (p.ui?.services ?? []).find((s) => s.id === id);
                 if (!svc) throw new Error(`${p.name} does not declare a service "${id}" in "ui": { "services": [...] }`);
                 return PluginService.ServiceGet(contextId, p.id, svc.id, text(params.path), queryOf(params.query));
+            }
+            case 'grpc.call': {
+                // A call to one of the plugin's declared gRPC services, made
+                // by the app through a port-forward to one of its pods. Go
+                // checks the declaration again, that the method is one of
+                // its declared ones, and the request against the descriptors.
+                const id = text(params.service);
+                const g = (p.ui?.grpc ?? []).find((s) => s.id === id);
+                if (!g) throw new Error(`${p.name} does not declare a gRPC service "${id}" in "ui": { "grpc": [...] }`);
+                const method = text(params.method).replace(/^\//, '');
+                if (!g.methods.includes(method)) {
+                    throw new Error(`${p.name} does not declare the method "${method}" on ${g.label}`);
+                }
+                const seconds = typeof params.timeout === 'number' ? Math.max(0, Math.floor(params.timeout)) : 0;
+                const most = typeof params.messages === 'number' ? Math.max(0, Math.floor(params.messages)) : 0;
+                return PluginService.GRPCCall(contextId, p.id, g.id, method, text(params.request), seconds, most);
+            }
+            case 'forwards.open': {
+                // A port-forward to one of the plugin's declared Services,
+                // opened in the browser. Go finds the Service; the user says
+                // yes; the app's own forwards open it, so it is listed, and
+                // stopped, with the others. One already up is reused.
+                const id = text(params.forward);
+                const f = (p.ui?.forwards ?? []).find((x) => x.id === id);
+                if (!f) throw new Error(`${p.name} does not declare a forward "${id}" in "ui": { "forwards": [...] }`);
+                const target = await PluginService.PluginForwardTarget(contextId, p.id, f.id);
+                const live = forwards.list.find(
+                    (r) =>
+                        r.contextId === contextId &&
+                        r.kind === 'services' &&
+                        r.namespace === target.namespace &&
+                        r.name === target.name &&
+                        r.remotePort === target.port &&
+                        r.state === 'active',
+                );
+                if (live) {
+                    await forwards.open(live.id);
+                    return { url: forwards.url(live) };
+                }
+                const yes = await ask({
+                    title: `${p.name} wants to open ${target.label}`,
+                    target: { contextId, kind: 'services', namespace: target.namespace, name: target.name },
+                    detail: `Port-forward a free port on this computer to\nservice ${target.namespace}/${target.name} port ${target.port},\nand open it in your browser.\n\nIt is listed with your other port-forwards, where you can stop it.`,
+                    apply: 'Open',
+                });
+                if (!yes) throw new Error('the port-forward was declined');
+                const opened = await forwards.start(
+                    { contextId, kind: 'services', namespace: target.namespace, name: target.name },
+                    target.port,
+                    0,
+                    true,
+                );
+                return { url: forwards.url(opened) };
             }
             // The command line tools the plugin declares. Go matches every
             // command against the manifest's patterns again, and passes the

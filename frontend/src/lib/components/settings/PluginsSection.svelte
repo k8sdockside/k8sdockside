@@ -607,6 +607,19 @@
                     Calls {plugin.ui.services.map((s) => s.label).join(', ')} in the cluster · GET only
                 </p>
             {/if}
+            {#if plugin.ui.grpc.length}
+                <p
+                    class="counts"
+                    title={plugin.ui.grpc.map((g) => `${g.label}: ${g.where}\n  ${g.methods.join('\n  ')}`).join('\n')}
+                >
+                    Calls {plugin.ui.grpc.map((g) => g.label).join(', ')} over gRPC, through a port-forward · {plugin.ui.grpc.reduce((n, g) => n + g.methods.length, 0)} method{plugin.ui.grpc.reduce((n, g) => n + g.methods.length, 0) === 1 ? '' : 's'}, none that stream from the page
+                </p>
+            {/if}
+            {#if plugin.ui.forwards.length}
+                <p class="counts" title={plugin.ui.forwards.map((f) => `${f.label}: ${f.where}`).join('\n')}>
+                    May ask to open {plugin.ui.forwards.map((f) => f.label).join(', ')} in your browser, through a port-forward you confirm
+                </p>
+            {/if}
             {#each plugin.ui.tools as tool (tool.id)}
                 <!-- Everything it may run is in the title, word for word: the
                      card is where the user decides whether to trust it. -->

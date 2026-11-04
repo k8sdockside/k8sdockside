@@ -482,6 +482,18 @@ func validateUI(p *Plugin) error {
 	}
 	ui.Tools = tools
 
+	grpcs, err := validateGRPC(p.ID, slices.Clone(ui.GRPC))
+	if err != nil {
+		return err
+	}
+	ui.GRPC = grpcs
+
+	forwards, err := validateForwards(p.ID, slices.Clone(ui.Forwards))
+	if err != nil {
+		return err
+	}
+	ui.Forwards = forwards
+
 	releases, err := validateReleases(p.ID, slices.Clone(ui.Releases))
 	if err != nil {
 		return err

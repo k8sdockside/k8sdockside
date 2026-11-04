@@ -353,6 +353,9 @@ func checkEntries(p Plugin, files fs.FS, dir string) error {
 	if p.Overview != nil {
 		check("its overview", p.Overview.Entry)
 	}
+	if err := checkGRPCDescriptors(p, files); err != nil {
+		errs = append(errs, err)
+	}
 	if p.Logo != "" {
 		info, err := fs.Stat(files, p.Logo)
 		switch {
