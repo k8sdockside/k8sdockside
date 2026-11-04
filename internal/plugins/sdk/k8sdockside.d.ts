@@ -264,6 +264,16 @@ declare namespace K8sDockside {
          * `services.get`. Absent on an app older than 0.0.27.
          */
         services?: DeclaredService[];
+        /**
+         * The in-cluster gRPC services the manifest lets the page call with
+         * `grpc.call`. Absent on an app older than 0.1.38.
+         */
+        grpc?: DeclaredGRPC[];
+        /**
+         * The Services the manifest lets the page open a port-forward to with
+         * `forwards.open`. Absent on an app older than 0.1.38.
+         */
+        forwards?: DeclaredForward[];
         /** The command line tools the manifest declares. Absent on an app older than 0.1.23. */
         tools?: DeclaredTool[];
         /** Every action the plugin declares, whether or not it is offered on anything right now. */
@@ -652,6 +662,87 @@ declare namespace K8sDockside {
         json<T = unknown>(request: ServiceRequest): Promise<T>;
     }
 
+    // ----- gRPC services in the cluster ----------------------------------------
+
+    /** One of the gRPC services the manifest declares in `"ui": { "grpc": [...] }`. */
+    interface DeclaredGRPC {
+        id: string;
+        label: string;
+        /** The methods the page may call, as `package.Service/Method`. */
+        methods: string[];
+    }
+
+    /** What `grpc.call` is asked. */
+    interface GRPCRequest {
+        /** The id of a gRPC service the manifest declares. */
+        service: string;
+        /** One of its declared methods, `package.Service/Method`. */
+        method: string;
+        /**
+         * The request message: an object, or JSON text, in protobuf's
+         * canonical JSON mapping (lowerCamelCase field names, RFC 3339
+         * timestamps). Omitted, the empty message.
+         */
+        request?: object | string;
+        /** Seconds to read for, at most 30. Defaults to 10. */
+        timeout?: number;
+        /** The most messages to read from a stream, at most 10000. Defaults to 1000. */
+        messages?: number;
+    }
+
+    /** What a gRPC call came to. */
+    interface GRPCAnswer<T = unknown> {
+        /** The Service that answered, as `namespace/name:port`. */
+        service: string;
+        /** The pod the port-forward reached, as `namespace/name`. */
+        pod: string;
+        /** Every message read, in protobuf's canonical JSON mapping. */
+        messages: T[];
+        count: number;
+        /** The gRPC status code, 0 for OK. Meaningful when `end` is `complete`. */
+        status: number;
+        /** What the service said with a status that is not OK. */
+        message: string;
+        /**
+         * Why reading stopped: `complete` (the service ended the call),
+         * `messages` (as many as asked for), `time` (the timeout ran out on a
+         * stream that went on -- what a stream that follows always ends
+         * with) or `size` (8 MiB of answer).
+         */
+        end: 'complete' | 'messages' | 'time' | 'size';
+    }
+
+    interface GRPC {
+        /**
+         * Calls one of the plugin's declared methods and resolves with the
+         * messages it answered. A status that is not OK resolves: it is the
+         * service's answer. Rejects when the service or method is not
+         * declared, the request is not the method's message, or the Service
+         * cannot be found or reached (it needs `pods/portforward`).
+         */
+        call<T = unknown>(request: GRPCRequest): Promise<GRPCAnswer<T>>;
+        /** `call`, then the messages alone. Rejects on a status that is not OK, with the service's words. */
+        messages<T = unknown>(request: GRPCRequest): Promise<T[]>;
+    }
+
+    // ----- port-forwards ----------------------------------------------------------
+
+    /** One of the forwards the manifest declares in `"ui": { "forwards": [...] }`. */
+    interface DeclaredForward {
+        id: string;
+        label: string;
+    }
+
+    interface Forwards {
+        /**
+         * Asks the user to open a port-forward to a declared Service, opens
+         * it and sends their browser there; one already open is reused
+         * without asking. Rejects if they decline, and in the web version,
+         * which has no browser of the user's to send anywhere.
+         */
+        open(forward: string): Promise<{ url: string }>;
+    }
+
     // ----- command line tools ----------------------------------------------------
 
     /** One of the tools the manifest declares in `"ui": { "tools": [...] }`. */
@@ -1010,6 +1101,20 @@ declare namespace K8sDockside {
          * the page's behalf. Absent on an app older than 0.0.27: check for it.
          */
         services?: Services;
+
+        /**
+         * The in-cluster gRPC services the manifest declares, called by the
+         * app through a port-forward. Absent on an app older than 0.1.38:
+         * check for it.
+         */
+        grpc?: GRPC;
+
+        /**
+         * Port-forwards to the Services the manifest declares, opened in the
+         * user's browser once they confirm. Absent on an app older than
+         * 0.1.38: check for it.
+         */
+        forwards?: Forwards;
 
         /**
          * Command line tools on the user's machine, run by the app. Absent

@@ -138,6 +138,12 @@ func details(p plugins.Plugin) []string {
 		for _, svc := range p.UI.Services {
 			out = append(out, fmt.Sprintf("its pages call %s (%s) at %s", svc.Label, svc.Describe(), strings.Join(svc.Paths, ", ")))
 		}
+		for _, g := range p.UI.GRPC {
+			out = append(out, fmt.Sprintf("its pages call %s (%s) over gRPC, through a port-forward: %s", g.Label, g.AsService().Describe(), strings.Join(g.Methods, ", ")))
+		}
+		for _, f := range p.UI.Forwards {
+			out = append(out, fmt.Sprintf("its pages may ask to open %s (%s) in the browser, through a port-forward the user confirms", f.Label, f.AsService().Describe()))
+		}
 	}
 	if p.MinAppVersion != "" {
 		out = append(out, "needs K8s Dockside "+strings.TrimPrefix(p.MinAppVersion, "v")+" or newer")

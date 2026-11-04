@@ -67,6 +67,9 @@ type PluginService struct {
 	// found is where the services plugins find by selector were last found,
 	// per context and plugin. See serviceTarget.
 	found map[string]foundService
+	// tunnels are the port-forwards plugins' gRPC calls go through. See
+	// GRPCCall.
+	tunnels grpcTunnels
 }
 
 // NewPluginService wires the service to the settings store, and to the cluster

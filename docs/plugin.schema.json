@@ -646,6 +646,22 @@
                         "$ref": "#/definitions/uiService"
                     },
                     "description": "In-cluster Services the pages may make GET requests to (k8sdockside.services.get), through the API server's service proxy. The pages pick one of these and a path under its prefixes; nothing else. Needs K8s Dockside 0.0.27 or newer."
+                },
+                "grpc": {
+                    "type": "array",
+                    "maxItems": 8,
+                    "items": {
+                        "$ref": "#/definitions/uiGrpc"
+                    },
+                    "description": "In-cluster gRPC services the pages may call (k8sdockside.grpc.call), reached through a port-forward to one of the Service's pods. The pages pick one of these and one of its methods; the messages are described by a descriptor set in the ui folder and cross to the page as JSON. Unary calls and streams from the server only. Needs K8s Dockside 0.1.38 or newer."
+                },
+                "forwards": {
+                    "type": "array",
+                    "maxItems": 4,
+                    "items": {
+                        "$ref": "#/definitions/uiForward"
+                    },
+                    "description": "Services the pages may ask the app to port-forward to and open in the browser (k8sdockside.forwards.open) -- a product's own web UI. The user confirms each, and the forward is listed with the app's others. Desktop app only. Needs K8s Dockside 0.1.38 or newer."
                 }
             }
         },
@@ -733,6 +749,40 @@
             "type": "array",
             "maxItems": 128,
             "items": { "type": "string", "minLength": 1 }
+        },
+        "uiGrpc": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "port", "descriptors", "methods"],
+            "properties": {
+                "id": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", "description": "What the pages name the service by." },
+                "label": { "type": "string", "maxLength": 60, "description": "How the app names it on the plugin's card. Defaults to the service name." },
+                "namespace": { "type": "string", "description": "Where the Service is. Required with name; with selector it narrows the search." },
+                "name": { "type": "string", "description": "The Service's name. Give name or selector, not both." },
+                "selector": { "type": "string", "description": "A label selector that finds the Service wherever it is installed. The first match with the port is used." },
+                "port": { "type": ["string", "integer"], "description": "The Service port that speaks gRPC, by name or number." },
+                "descriptors": { "type": "string", "description": "A binary FileDescriptorSet in the ui folder, with every import included -- what `protoc --include_imports --descriptor_set_out=api.binpb` or `buf build -o api.binpb` writes." },
+                "methods": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 32,
+                    "items": { "type": "string", "pattern": "^/?[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*/[A-Za-z_][A-Za-z0-9_]*$" },
+                    "description": "The methods the pages may call, as package.Service/Method. Each must be in the descriptors, and unary or streamed from the server."
+                }
+            }
+        },
+        "uiForward": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "port"],
+            "properties": {
+                "id": { "type": "string", "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", "description": "What the pages name the forward by." },
+                "label": { "type": "string", "maxLength": 60, "description": "How the app names it in the confirmation and on the plugin's card. Defaults to the service name." },
+                "namespace": { "type": "string", "description": "Where the Service is. Required with name; with selector it narrows the search." },
+                "name": { "type": "string", "description": "The Service's name. Give name or selector, not both." },
+                "selector": { "type": "string", "description": "A label selector that finds the Service wherever it is installed. The first match with the port is used." },
+                "port": { "type": ["string", "integer"], "description": "The Service port to forward, by name or number." }
+            }
         },
         "uiService": {
             "type": "object",

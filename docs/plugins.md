@@ -532,6 +532,8 @@ my-plugin/
 | `ui.releases` | optional | Public GitHub repositories whose release lists the views may ask for, with `releases(repo)`: `[{ "github": "siderolabs/talos" }]`, at most 10. Only these; the app asks, not the page, and the user can switch it off. K8s Dockside 0.1.33 and newer. |
 | `ui.tools` | optional | Command line tools on the user's machine the views may run — the program, the files it reads, and the `read`, `run` and `interactive` patterns of what may be run. A `read` entry may be an extraction, `{ "command": "get machineconfig **", "extract": { "format": "yaml-documents", "output": ["-o", "yaml"], "fields": ["machine.install.image"] } }`: the app parses the output itself and the views receive only the named scalar fields, with `tools.extract` (0.1.33 and newer). See [writing-plugins.md](writing-plugins.md#command-line-tools). Desktop app only; K8s Dockside 0.1.23 and newer. |
 | `ui.services` | optional | In-cluster Services the views may make GET requests to, with `services.get`. See [Calling a service in the cluster](#calling-a-service-in-the-cluster). K8s Dockside 0.0.27 and newer. |
+| `ui.grpc` | optional | In-cluster gRPC services the views may call, with `grpc.call`, and exactly which methods. See [Calling a gRPC service](#calling-a-grpc-service). K8s Dockside 0.1.38 and newer. |
+| `ui.forwards` | optional | Services the views may ask to port-forward to and open in the browser, with `forwards.open` -- a product's own web UI. See [Opening a service in the browser](#opening-a-service-in-the-browser). Desktop app only; K8s Dockside 0.1.38 and newer. |
 
 A plugin with a custom view and no `ui` block gets the defaults: a `ui/` folder,
 read-only. A built-in's pages are embedded in the app from
@@ -572,6 +574,8 @@ The page includes the bridge, which the app serves, and uses it:
 | `tools.run({ tool, args, path? })` | With `path: { mode: 'save' \| 'open', title?, name? }`, the app first asks the user for a file to write (`save`, `name` being the file name it suggests) or read (`open`) in a dialog, and puts its path where `{path}` is in `args`; then the confirmation, as for any run. Cancelling the dialog rejects as declining does. K8s Dockside 0.1.35 and newer. |
 | `tools.extract(tool, args)` | Runs a command the manifest declares as an extraction and resolves with only the fields it names: `[{ node, fields: { 'machine.install.image': '…' }, error? }]`, one per resource the command printed. The app parses the output; the page never sees it, nor stderr — a command that fails with nothing to read rejects with its exit code alone. A command an extraction matches cannot be run with `tools.exec`, `tools.run` or `tools.external`. K8s Dockside 0.1.33 and newer: check `k8sdockside.tools.extract` exists. |
 | `services.get({ service, path, query? })` | A GET request to one of the Services the manifest declares, made by the app through the API server's service proxy: `{ service, status, contentType, body }`, the status and body being the Service's own. `services.json(...)` does the same and parses the body, rejecting on a status outside 200–299. Rejects when the service or path is not declared, the Service cannot be found or reached, or the proxy is not allowed. K8s Dockside 0.0.27 and newer: check `k8sdockside.services` exists. |
+| `grpc.call({ service, method, request?, timeout?, messages? })` | A call to one of the gRPC methods the manifest declares, made by the app through a port-forward to one of the Service's pods: `{ service, pod, messages, count, status, message, end }`. `request` and every message are JSON in protobuf's canonical mapping. `end` says why reading stopped: `complete` (the service ended the call, with `status`), `messages`, `time` or `size`. `grpc.messages(...)` does the same and resolves with the messages alone, rejecting on a status that is not OK. See [Calling a gRPC service](#calling-a-grpc-service). K8s Dockside 0.1.38 and newer: check `k8sdockside.grpc` exists. |
+| `forwards.open(id)` | Asks the user to open a port-forward to one of the Services the manifest declares in `ui.forwards`, opens it and sends their browser there: `{ url }`. One already open is reused without asking. Rejects if they decline, and in the web version. K8s Dockside 0.1.38 and newer: check `k8sdockside.forwards` exists. |
 | `on('theme', fn)` | Called when the user changes theme. |
 | `on('datetime', fn)` | Called when the user changes how dates and times are written, with `{ clock, dates, zone, ages }`. `format` already follows the change; redraw. |
 | `format.date(when)`, `format.time(when, { seconds? })`, `format.dateTime(when, { seconds? })`, `format.day(when)` | A date, a time, both, or a day without its year, written the way the user chose in **Settings → Dates and times** — 12- or 24-hour, ISO or day-first dates, local time or UTC — exactly as the app writes them. `when` is a `Date`, an RFC3339 string or milliseconds. Use these rather than `toLocaleString`, so a plugin's times read like the app's. 0.1.10 and newer: check `format` exists. |
@@ -642,6 +646,96 @@ permission, a missing Service, one with no ready pod — rejects with that said.
 A plugin can declare at most eight services, and its card in **Settings →
 Plugins** names them before any of its views is opened.
 
+### Calling a gRPC service
+
+Some products answer only over gRPC: Hubble Relay's flows, a database
+operator's admin API, a control plane's status. A plugin can name those
+Services, the methods its views may call on them, and a descriptor set that
+says what the messages are:
+
+```json
+"ui": {
+    "grpc": [
+        {
+            "id": "relay",
+            "label": "Hubble Relay",
+            "selector": "k8s-app=hubble-relay",
+            "port": 80,
+            "descriptors": "hubble.binpb",
+            "methods": ["observer.Observer/GetFlows", "observer.Observer/ServerStatus"]
+        }
+    ]
+}
+```
+
+```js
+const answer = await k8sdockside.grpc.call({
+    service: 'relay',
+    method: 'observer.Observer/GetFlows',
+    request: { number: 500, whitelist: [{ sourcePod: ['shop/'] }] },
+    timeout: 10,
+});
+for (const m of answer.messages) if (m.flow) draw(m.flow);
+```
+
+| Field | | |
+| --- | --- | --- |
+| `id` | required | What the views name the service by. |
+| `label` | optional | How the plugin's card names it. Defaults to the service name. |
+| `name`, `namespace` / `selector` | | Where the Service is, exactly as for [a service](#calling-a-service-in-the-cluster). |
+| `port` | required | The Service port that speaks gRPC, by name or number. |
+| `descriptors` | required | A binary `FileDescriptorSet` in the ui folder, with every import in it: what `protoc --include_imports --descriptor_set_out=api.binpb api.proto` or `buf build -o api.binpb` writes. |
+| `methods` | required | The methods the views may call, `package.Service/Method`, at most 32. Each must be in the descriptors, and be unary or stream from the server. |
+
+The descriptors are read when the plugin is: a method they do not have, or
+one the client streams into, is refused then rather than when a page first
+calls it. A call that streams from the page could carry anything, and the app
+could not show what it was, so only calls that answer are made.
+
+The API server's service proxy speaks HTTP/1.1, and gRPC needs HTTP/2, so a
+call goes the way `kubectl port-forward svc/...` does: a tunnel to one of the
+Service's running pods, on a loopback port of the app, opened on the first
+call and kept while the page keeps calling -- closed after two minutes
+unused, and opened again on the next call if the pod it reached went away.
+It needs the `pods/portforward` permission, and the port must speak gRPC in
+plain text: a server that wants TLS, or a client certificate, cannot be
+reached this way yet.
+
+A call reads for `timeout` seconds (default 10, at most 30) and at most
+`messages` messages (default 1000, at most 10000) and 8 MiB of answer, and
+resolves with what it read -- so a method that follows a stream of events can
+be called with a short timeout, and comes back with `end: "time"` and what
+arrived meanwhile. A status the service sends that is not OK resolves too,
+with `status` and `message`: it is the service's answer, as an HTTP status is
+for `services.get`. What rejects is the app's: an undeclared service or
+method, a request that is not the method's message, a Service that cannot be
+found or reached.
+
+A plugin can declare at most eight gRPC services, and its card in **Settings
+→ Plugins** names them, with every method, before any of its views is opened.
+
+### Opening a service in the browser
+
+A product with a web UI of its own -- Hubble UI, a dashboard, an admin
+console -- is often only reachable inside the cluster. A plugin can name its
+Service, and a page can ask the app to open it:
+
+```json
+"ui": {
+    "forwards": [{ "id": "hubble-ui", "label": "Hubble UI", "selector": "k8s-app=hubble-ui", "port": 80 }]
+}
+```
+
+```js
+await k8sdockside.forwards.open('hubble-ui');
+```
+
+The user is shown which Service and port, and asked first. The forward is one
+of the app's own: it is listed with its other port-forwards, where it can be
+stopped, and a second `open` while it is up reuses it without asking. Desktop
+app only -- the web version has no browser of the user's to send anywhere.
+At most four, named on the plugin's card.
+
 ### Writing the pages in TypeScript, or with a framework
 
 [k8sdockside/image-inventory](https://github.com/k8sdockside/image-inventory)
@@ -691,6 +785,8 @@ sandboxed frame. What the page learns about the cluster, it asks the app for.
 - It sees only the cluster of the tab it is in.
 - It reaches **only the services the plugin declares**, with GET requests the
   app makes, and only under the paths declared.
+- It calls **only the gRPC methods the plugin declares**, unary or streamed
+  from the server, and opens a port-forward only when the user says yes.
 - **Settings → Plugins** lists, on the plugin's card, how many kinds its views
   read (hover for which), whether they may ask to change them, and which
   services they call.

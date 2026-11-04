@@ -289,6 +289,12 @@ type UI struct {
 	// Tools are the command line tools on the user's machine the views may
 	// run, and exactly which commands. See UITool.
 	Tools []UITool `json:"tools,omitzero"`
+	// GRPC are the in-cluster gRPC services the views may call, reached
+	// through a port-forward the app keeps. See UIGRPC.
+	GRPC []UIGRPC `json:"grpc,omitzero"`
+	// Forwards are the Services the views may ask to port-forward to and open
+	// in the browser, each confirmed by the user first. See UIForward.
+	Forwards []UIForward `json:"forwards,omitzero"`
 	// Readable is every kind the views may read, worked out by the loader --
 	// Kinds plus everything else the plugin names -- and ignored on the way
 	// in. Both sides check against this one list.

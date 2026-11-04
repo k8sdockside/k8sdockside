@@ -937,6 +937,75 @@
         },
 
         /**
+         * gRPC services in the cluster, called by the app through a
+         * port-forward to one of their pods. Needs "ui": { "grpc": [...] }
+         * declaring each one, the methods the page may call and the
+         * descriptors that say what their messages are. Unary calls and
+         * streams from the server; messages are JSON, in protobuf's
+         * canonical mapping. K8s Dockside 0.1.38 and newer.
+         */
+        grpc: {
+            /**
+             * { service, method, request?, timeout?, messages? } ->
+             * { service, pod, messages, count, status, message, end }.
+             * `messages` is every message read, as objects; `end` is why
+             * reading stopped -- complete (the server ended the call, with
+             * `status`), messages (as many as asked for), time (the timeout,
+             * in seconds, ran out on a stream that went on) or size. A status
+             * that is not OK resolves: it is the service's answer.
+             */
+            call: function (request) {
+                var r = request || {};
+                return call('grpc.call', {
+                    service: r.service,
+                    method: r.method,
+                    request: r.request === undefined || r.request === null ? '' : typeof r.request === 'string' ? r.request : JSON.stringify(r.request),
+                    timeout: r.timeout,
+                    messages: r.messages,
+                }).then(function (answer) {
+                    var messages = [];
+                    try {
+                        messages = JSON.parse(answer.messages || '[]');
+                    } catch (err) {
+                        messages = [];
+                    }
+                    return {
+                        service: answer.service,
+                        pod: answer.pod,
+                        messages: messages,
+                        count: answer.count,
+                        status: answer.status,
+                        message: answer.message || '',
+                        end: answer.end,
+                    };
+                });
+            },
+            /** call, then the messages alone; rejects on a status that is not OK, with the service's words. */
+            messages: function (request) {
+                return window.k8sdockside.grpc.call(request).then(function (answer) {
+                    if (answer.status !== 0) {
+                        throw new Error((answer.service || 'the service') + ' answered gRPC status ' + answer.status + (answer.message ? ': ' + answer.message : ''));
+                    }
+                    return answer.messages;
+                });
+            },
+        },
+
+        /**
+         * Port-forwards to Services in the cluster, opened by the app in the
+         * user's browser -- a product's own web UI. Needs
+         * "ui": { "forwards": [...] }. The user confirms each, and it is
+         * listed with the app's other forwards, where it can be stopped.
+         * Desktop app only. K8s Dockside 0.1.38 and newer.
+         */
+        forwards: {
+            /** forward id -> { url } once it is open and the browser has been sent there. Reuses one already open. */
+            open: function (id) {
+                return call('forwards.open', { forward: id });
+            },
+        },
+
+        /**
          * Command line tools on the user's machine, run by the app: the page
          * itself cannot start a process. Needs "ui": { "tools": [...] }
          * declaring the tool and exactly which commands. Desktop app only.
