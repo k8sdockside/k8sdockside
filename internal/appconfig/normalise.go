@@ -113,6 +113,11 @@ func normalise(s Settings) Settings {
 	if s.Layout.SidebarWidth < 180 {
 		s.Layout.SidebarWidth = d.SidebarWidth
 	}
+	switch s.Layout.NewSections {
+	case "", "bottom", "default":
+	default:
+		s.Layout.NewSections = ""
+	}
 	// A file written before zoom existed unmarshals to 0, which would render
 	// the window at nothing.
 	if s.Layout.Zoom < MinZoom || s.Layout.Zoom > MaxZoom {
@@ -603,6 +608,7 @@ func clone(s Settings) Settings {
 	// slices.Clone keeps nil as nil, which is what preserves "never chosen".
 	out.Layout.CollapsedGroups = slices.Clone(s.Layout.CollapsedGroups)
 	out.Layout.FoldedSections = slices.Clone(s.Layout.FoldedSections)
+	out.Layout.SectionOrder = slices.Clone(s.Layout.SectionOrder)
 	// A copy of the struct shares the pointer; the whole point of clone is that
 	// a caller holding the result cannot reach back into the store.
 	if s.Preferences.RestoreTabs != nil {

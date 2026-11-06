@@ -159,6 +159,7 @@ const settle = () => new Promise((r) => setTimeout(r, 150));
 beforeEach(() => {
     workspace.closeAllDockTabs();
     workspace.settings.layout.foldedSections = [];
+    workspace.settings.layout.sectionOrder = [];
     detail.close();
     vi.mocked(ResourceService.Describe).mockReset().mockResolvedValue('Name: web\nStatus: Running');
     vi.mocked(ResourceService.ObjectLinks)
@@ -535,4 +536,55 @@ test('the summary is read again when the object changes', async () => {
     changes.changed(WEB);
 
     await vi.waitFor(() => expect(ResourceService.ObjectLinks).toHaveBeenCalledTimes(2));
+});
+
+const WITH_CONDITIONS = {
+    conditions: [{ type: 'Ready', status: 'True', reason: 'PodReady', message: '', age: '5m', tone: 'ok' }],
+    references: [],
+    pods: null,
+    podsTotal: 0,
+    selector: '',
+};
+
+test('Collapse all folds every section, and Expand all opens them again', async () => {
+    vi.mocked(ResourceService.ObjectLinks).mockResolvedValue(WITH_CONDITIONS as never);
+    render(DetailPanel);
+    await detail.open(WEB);
+    await settle();
+    await expect.element(page.getByRole('button', { name: 'Conditions' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Collapse all' }).click();
+    expect(workspace.settings.layout.foldedSections).toEqual(expect.arrayContaining(['describe', 'conditions', 'resources', 'metrics']));
+    await expect.element(page.getByRole('textbox', { name: 'Find in this report' })).not.toBeInTheDocument();
+
+    await page.getByRole('button', { name: 'Expand all' }).click();
+    expect(workspace.settings.layout.foldedSections).toEqual([]);
+    await expect.element(page.getByRole('textbox', { name: 'Find in this report' })).toBeVisible();
+});
+
+test('the sections can be arranged, and the order is kept for every object', async () => {
+    vi.mocked(ResourceService.ObjectLinks).mockResolvedValue(WITH_CONDITIONS as never);
+    render(DetailPanel);
+    await detail.open(WEB);
+    await settle();
+
+    const order = () => [...document.querySelectorAll('.body > .panel-section h3, .body > .plugin-section h3')].map((h) => h.textContent?.trim() ?? '');
+    expect(order().indexOf('Describe')).toBeGreaterThan(order().findIndex((t) => t.startsWith('Conditions')));
+
+    await page.getByRole('button', { name: 'Arrange' }).click();
+    // Describe is last by default: move it up past Pods, Related and Conditions.
+    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Move Describe up' }).click();
+    await page.getByRole('button', { name: 'Done' }).click();
+
+    expect(workspace.settings.layout.sectionOrder.indexOf('describe')).toBeLessThan(workspace.settings.layout.sectionOrder.indexOf('conditions'));
+    await expect.poll(() => order().indexOf('Describe') < order().findIndex((t) => t.startsWith('Conditions'))).toBe(true);
+
+    // The next object follows the same order.
+    await detail.open({ ...WEB, name: 'api' });
+    await settle();
+    await expect.poll(() => order().indexOf('Describe') < order().findIndex((t) => t.startsWith('Conditions'))).toBe(true);
+
+    await page.getByRole('button', { name: 'Arrange' }).click();
+    await page.getByRole('button', { name: 'Back to the default order' }).click();
+    expect(workspace.settings.layout.sectionOrder).toEqual([]);
 });

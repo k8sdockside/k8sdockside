@@ -65,3 +65,4 @@ build/android/gen/
 # Wails regenerates these on every `wails3 generate bindings`, which `make dev`
 # and `make build` both run, so they are build output rather than source.
 frontend/bindings/
+.DS_Store

@@ -921,6 +921,15 @@ The panel as a whole sits under a heading of the app's own, with the section's
 `label`, and folds like any other; `ui.section` is for the blocks inside it.
 The panel's page is reloaded when the detail view moves to another object.
 
+Where the panel sits is the user's to choose. By default a plugin's panels come
+after the app's own summary (conditions, related objects, pods) and before the
+report; the **Arrange** button at the top of the details view lets the user
+reorder every section, for every object on every cluster, and **Collapse all**
+and **Expand all** fold or open them together. A panel from a plugin installed
+after the user arranged the sections goes at the bottom, unless they chose
+*where the plugin puts it* under **Settings → Behaviour**. So do not count on a
+panel's place: draw it so it reads on its own.
+
 [k8sdockside/kubevirt](https://github.com/k8sdockside/kubevirt)
 has both: the seven lifecycle actions on the action bar, and a *Machine* panel
 with the state, the node, the addresses, the conditions and recent migrations,

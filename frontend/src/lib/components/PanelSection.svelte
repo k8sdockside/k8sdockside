@@ -37,7 +37,7 @@
     let folded = $derived(workspace.isSectionFolded(id));
 </script>
 
-<section class="panel-section" class:folded class:boxed>
+<section class="panel-section" class:folded class:boxed data-section={id}>
     <div class="head">
         <h3>
             <FoldButton {folded} ontoggle={() => workspace.toggleSection(id)} what={what ?? `the ${title.toLowerCase()}`}>

@@ -32,11 +32,14 @@
     import { DETAILS_TAB_ID } from '../state/panes';
     import { notices } from '../state/notices.svelte';
     import { copyText } from '../clipboard';
+    import { isPluginSection } from '../state/workspace/sections';
 
     /** The key the describe report is folded under. See workspace.toggleSection. */
     const DESCRIBE_SECTION = 'describe';
     const RESOURCES_SECTION = 'resources';
     const METRICS_SECTION = 'metrics';
+    /** A virtual machine's own panel: one place in the order, its blocks fold on their own. */
+    const MACHINE_SECTION = 'kubevirt';
 
     let target = $derived(detail.target);
     /**
@@ -234,6 +237,125 @@
         return `plugin:${pluginId}/${sectionId}`;
     }
 
+    // ----- the order of the sections, and folding them all -----------------
+
+    /** The sections plugins bring for this kind, by the key they fold and sort under. */
+    let pluginEntries = $derived.by(() => {
+        const out = new Map<string, ReturnType<typeof workspace.pluginSectionsFor>[number]>();
+        if (!target) return out;
+        for (const entry of workspace.pluginSectionsFor(target.contextId, target.kind)) {
+            out.set(pluginSectionKey(entry.plugin.id, entry.section.id), entry);
+        }
+        return out;
+    });
+
+    /**
+     * The sections this object can have, in the default order: what a pod is
+     * doing and how full a node is first, then a machine's own panel, the
+     * summary, the panels plugins bring, and the report.
+     */
+    let available = $derived.by((): string[] => {
+        if (!target) return [];
+        const out: string[] = [];
+        if (budgetScope) out.push(RESOURCES_SECTION);
+        out.push(METRICS_SECTION);
+        if (isMachine) out.push(MACHINE_SECTION);
+        if (!isRelease) out.push('conditions', 'related', 'pods');
+        out.push(...pluginEntries.keys(), DESCRIBE_SECTION);
+        return out;
+    });
+
+    /** The same sections, in the order the user arranged them in. */
+    let ordered = $derived(workspace.orderSections(available));
+
+    const APP_LABELS: Record<string, string> = {
+        [RESOURCES_SECTION]: 'Resources',
+        [METRICS_SECTION]: 'Metrics',
+        [MACHINE_SECTION]: 'Virtual machine',
+        conditions: 'Conditions',
+        related: 'Related',
+        pods: 'Pods',
+    };
+
+    function sectionLabel(key: string): string {
+        if (key === DESCRIBE_SECTION) return isRelease ? 'Helm release' : 'Describe';
+        const entry = pluginEntries.get(key);
+        if (entry) return `${entry.section.label} · ${entry.plugin.name}`;
+        return APP_LABELS[key] ?? key;
+    }
+
+    let bodyEl = $state<HTMLElement | null>(null);
+
+    /**
+     * Folds or opens every section: the ones this object has, whether or not
+     * they drew anything this time, and the blocks inside a section that fold
+     * on their own (a machine's console, say), found by the key each block
+     * carries.
+     */
+    function foldAll(folded: boolean): void {
+        const keys = new Set(available.filter((k) => k !== MACHINE_SECTION));
+        for (const node of bodyEl?.querySelectorAll<HTMLElement>('[data-section]') ?? []) {
+            if (node.dataset.section) keys.add(node.dataset.section);
+        }
+        workspace.setSectionsFolded([...keys], folded);
+    }
+
+    /** Whether the list of sections to arrange is open. */
+    let arranging = $state(false);
+    let dragKey = $state<string | null>(null);
+    let dropAt = $state<number | null>(null);
+
+    function move(from: number, to: number): void {
+        if (to < 0 || to >= ordered.length || from === to) return;
+        const next = [...ordered];
+        const [key] = next.splice(from, 1);
+        next.splice(to, 0, key!);
+        workspace.arrangeSections(ordered, next);
+    }
+
+    /** Alt+↑ and Alt+↓ on a row's buttons move the row, and keep the focus on it. */
+    function arrowKey(event: KeyboardEvent, i: number): void {
+        if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
+        event.preventDefault();
+        const to = event.key === 'ArrowUp' ? i - 1 : i + 1;
+        const key = ordered[i];
+        move(i, to);
+        requestAnimationFrame(() => {
+            const rows = bodyEl?.querySelectorAll<HTMLElement>('.arrange-item') ?? [];
+            const row = [...rows].find((r) => r.querySelector('.arrange-label')?.textContent === (key ? sectionLabel(key) : ''));
+            row?.querySelector<HTMLButtonElement>(event.key === 'ArrowUp' ? '.step:not(:disabled)' : '.step:last-of-type:not(:disabled)')?.focus();
+        });
+    }
+
+    function startDrag(event: DragEvent, key: string): void {
+        dragKey = key;
+        event.dataTransfer?.setData('text/plain', key);
+        if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+    }
+
+    function overDrag(event: DragEvent, i: number): void {
+        if (!dragKey) return;
+        event.preventDefault();
+        const row = event.currentTarget as HTMLElement;
+        const below = event.clientY > row.getBoundingClientRect().top + row.offsetHeight / 2;
+        dropAt = below ? i + 1 : i;
+    }
+
+    function dropDrag(event: DragEvent, i: number): void {
+        event.preventDefault();
+        if (!dragKey) return;
+        const from = ordered.indexOf(dragKey);
+        let to = dropAt ?? i;
+        if (to > from) to -= 1;
+        move(from, to);
+        endDrag();
+    }
+
+    function endDrag(): void {
+        dragKey = null;
+        dropAt = null;
+    }
+
     /**
      * Whether the report was just copied, which the button says for a moment:
      * a copy leaves nothing else on screen to show it happened.
@@ -298,7 +420,7 @@
              is. Editing lives here too: it is an action like the rest. -->
         <ObjectActions object={target} />
 
-        <div class="body">
+        <div class="body" bind:this={bodyEl}>
             <!-- Above the describe report, not below it: what a pod is *doing*
                  is what someone opening this panel mid-incident came for, and
                  the report is long enough that anything under it is out of
@@ -307,166 +429,235 @@
             <!-- Above the charts for a node or a namespace: how full it is
                  right now is what someone opening this came to find out, and
                  unlike the charts it needs nothing installed to answer. -->
-            {#if budgetScope}
-                <ResourceBudget
-                    contextId={target.contextId}
-                    scope={budgetScope}
-                    namespace={target.namespace}
-                    name={target.name}
-                    title="Resources"
-                    compact
-                    folded={workspace.isSectionFolded(RESOURCES_SECTION)}
-                    ontoggle={() => workspace.toggleSection(RESOURCES_SECTION)}
-                />
-            {/if}
-
-            <MetricsPanel
-                contextId={target.contextId}
-                attach={target.kind}
-                namespace={target.namespace}
-                name={target.name}
-                compact
-                folded={workspace.isSectionFolded(METRICS_SECTION)}
-                ontoggle={() => workspace.toggleSection(METRICS_SECTION)}
-            />
-
-            {#if isMachine && target}
-                <!-- Above the report rather than instead of it: the summary is
-                     what somebody opened the panel for, and the whole object is
-                     what they scroll to when it does not answer them. -->
-                <VirtualMachine
-                    contextId={target.contextId}
-                    kind={target.kind}
-                    namespace={target.namespace}
-                    name={target.name}
-                />
-            {/if}
-
-            {#if !isRelease}
-                <!-- What the object's status says, what it names, and the
-                     pods it selects: each a link to open in this panel. -->
-                <ObjectLinks object={target} revision={detail.revision} conditions={!isMachine} />
-            {/if}
-
-            <!-- Panels plugins bring for this kind: a page of the plugin's own
-                 in a sandboxed frame, told which object it is drawn for. After
-                 the app's own summary, before the report. -->
-            {#each workspace.pluginSectionsFor(target.contextId, target.kind) as entry (entry.plugin.id + '/' + entry.section.id)}
-                <PanelSection
-                    id={pluginSectionKey(entry.plugin.id, entry.section.id)}
-                    title={entry.section.label}
-                    by={entry.plugin.name}
-                    what="this section"
+            <!-- Above the sections: fold them all, open them all, or put
+                 them in the order you read them in. -->
+            <div class="section-tools" role="toolbar" aria-label="Sections">
+                <button class="tool" title="Fold every section" onclick={() => foldAll(true)}>
+                    <Icon name="collapse-all" size={13} /> Collapse all
+                </button>
+                <button class="tool" title="Open every section" onclick={() => foldAll(false)}>
+                    <Icon name="expand-all" size={13} /> Expand all
+                </button>
+                <span class="spacer"></span>
+                <button
+                    class="tool"
+                    class:on={arranging}
+                    aria-pressed={arranging}
+                    aria-expanded={arranging}
+                    title="Change the order of the sections, for every object"
+                    onclick={() => (arranging = !arranging)}
                 >
-                    <!-- Each is a frame of its own that loads a page and polls:
-                         started as it scrolls into view, not all at once. A
-                         folded one is not loaded at all. -->
-                    <WhenVisible height={entry.section.height ?? 160}>
-                        <PluginFrame
-                            contextId={target.contextId}
-                            section={{ pluginId: entry.plugin.id, sectionId: entry.section.id, object: target }}
-                        />
-                    </WhenVisible>
-                </PanelSection>
-            {/each}
+                    <Icon name="rows" size={13} /> {arranging ? 'Done' : 'Arrange'}
+                </button>
+            </div>
 
-            {#if isRelease}
-                <HelmRelease
-                    release={{
-                        contextId: target.contextId,
-                        namespace: target.namespace,
-                        name: target.name,
-                    }}
-                    numbers={workspace.showLineNumbers}
-                />
-            {:else if detail.loading}
-                <p class="status">Describing {target.name}…</p>
-            {:else if detail.error}
-                <ErrorState message={detail.error} compact />
-            {:else}
-                {@const describeFolded = workspace.isSectionFolded(DESCRIBE_SECTION)}
-                <div class="plugin-section describe-head" class:folded={describeFolded}>
-                    <h3>
-                        <FoldButton
-                            folded={describeFolded}
-                            ontoggle={() => workspace.toggleSection(DESCRIBE_SECTION)}
-                            what="the report">Describe</FoldButton
-                        >
-                    </h3>
+            {#if arranging}
+                <div class="arrange" role="region" aria-label="Arrange the sections">
+                    <p class="arrange-note">
+                        Drag a section, or use the arrows (or Alt+↑ and Alt+↓), to change where it is drawn — for
+                        every object, on every cluster. A plugin's section new to this order goes
+                        {workspace.newSectionPlace === 'bottom' ? 'at the bottom' : 'where the plugin puts it'}; Settings →
+                        Behaviour changes that.
+                    </p>
+                    <ol class="arrange-list">
+                        {#each ordered as key, i (key)}
+                            <li
+                                class="arrange-item"
+                                class:dragging={dragKey === key}
+                                class:drop-before={dropAt === i && dragKey !== key}
+                                class:drop-after={dropAt === ordered.length && i === ordered.length - 1 && dragKey !== key}
+                                draggable="true"
+                                ondragstart={(e) => startDrag(e, key)}
+                                ondragover={(e) => overDrag(e, i)}
+                                ondrop={(e) => dropDrag(e, i)}
+                                ondragend={endDrag}
+                            >
+                                <span class="grip" aria-hidden="true">⋮⋮</span>
+                                <span class="arrange-label">{sectionLabel(key)}</span>
+                                {#if isPluginSection(key)}<span class="arrange-by">plugin</span>{/if}
+                                <button
+                                    class="step"
+                                    aria-label="Move {sectionLabel(key)} up"
+                                    disabled={i === 0}
+                                    onclick={() => move(i, i - 1)}
+                                    onkeydown={(e) => arrowKey(e, i)}
+                                >
+                                    <Icon name="chevron-up" size={12} />
+                                </button>
+                                <button
+                                    class="step"
+                                    aria-label="Move {sectionLabel(key)} down"
+                                    disabled={i === ordered.length - 1}
+                                    onclick={() => move(i, i + 1)}
+                                    onkeydown={(e) => arrowKey(e, i)}
+                                >
+                                    <Icon name="chevron-down" size={12} />
+                                </button>
+                            </li>
+                        {/each}
+                    </ol>
+                    <div class="arrange-foot">
+                        <button class="tool" disabled={!workspace.sectionsArranged} onclick={() => workspace.resetSectionOrder()}>
+                            Back to the default order
+                        </button>
+                    </div>
                 </div>
-                {#if !describeFolded}
-                <div class="tools">
-                    <label class="find">
-                        <Icon name="search" size={12} />
-                        <input
-                            bind:this={findInput}
-                            placeholder="Find in {singularFor(target.kind)}"
-                            aria-label="Find in this report"
-                            title="Enter for the next match, Shift+Enter for the one before"
-                            bind:value={query}
-                            onkeydown={findKey}
-                        />
-                    </label>
-                    {#if query.trim()}
-                        <!-- A count rather than nothing, because a match can be
-                             far enough down the report to be off screen: "3 of
-                             7" is what says there is more to see, and "no
-                             matches" is what stops you looking. -->
-                        <span class="hits" class:none={hits === 0} aria-live="polite">
-                            {hits === 0 ? 'No matches' : `${current + 1} of ${hits}`}
-                        </span>
-                        <button
-                            class="step"
-                            aria-label="The match before"
-                            title="The match before (Shift+Enter)"
-                            disabled={hits === 0}
-                            onclick={() => go(-1)}
-                        >
-                            <Icon name="chevron-up" size={12} />
-                        </button>
-                        <button
-                            class="step"
-                            aria-label="The next match"
-                            title="The next match (Enter)"
-                            disabled={hits === 0}
-                            onclick={() => go(1)}
-                        >
-                            <Icon name="chevron-down" size={12} />
-                        </button>
+            {/if}
+
+            <!-- The sections, in the order the user arranged them in (the
+                 default order otherwise -- see sections.ts): what a pod is
+                 doing and how full a node is first, then the summary, the
+                 panels plugins bring, and the report. -->
+            {#each ordered as key (key)}
+                {#if key === RESOURCES_SECTION && budgetScope}
+                    <ResourceBudget
+                        contextId={target.contextId}
+                        scope={budgetScope}
+                        namespace={target.namespace}
+                        name={target.name}
+                        title="Resources"
+                        compact
+                        folded={workspace.isSectionFolded(RESOURCES_SECTION)}
+                        ontoggle={() => workspace.toggleSection(RESOURCES_SECTION)}
+                    />
+                {:else if key === METRICS_SECTION}
+                    <!-- Draws nothing at all unless an installed plugin has
+                         charts for this kind and the cluster has a Prometheus. -->
+                    <MetricsPanel
+                        contextId={target.contextId}
+                        attach={target.kind}
+                        namespace={target.namespace}
+                        name={target.name}
+                        compact
+                        folded={workspace.isSectionFolded(METRICS_SECTION)}
+                        ontoggle={() => workspace.toggleSection(METRICS_SECTION)}
+                    />
+                {:else if key === MACHINE_SECTION && isMachine}
+                    <VirtualMachine
+                        contextId={target.contextId}
+                        kind={target.kind}
+                        namespace={target.namespace}
+                        name={target.name}
+                    />
+                {:else if key === 'conditions' || key === 'related' || key === 'pods'}
+                    <!-- What the object's status says, what it names, and the
+                         pods it selects: each a link to open in this panel. -->
+                    <ObjectLinks object={target} revision={detail.revision} conditions={!isMachine} part={key} />
+                {:else if isPluginSection(key)}
+                    {@const entry = pluginEntries.get(key)}
+                    {#if entry}
+                        <PanelSection id={key} title={entry.section.label} by={entry.plugin.name} what="this section">
+                            <!-- Each is a frame of its own that loads a page and
+                                 polls: started as it scrolls into view, not all
+                                 at once. A folded one is not loaded at all. -->
+                            <WhenVisible height={entry.section.height ?? 160}>
+                                <PluginFrame
+                                    contextId={target.contextId}
+                                    section={{ pluginId: entry.plugin.id, sectionId: entry.section.id, object: target }}
+                                />
+                            </WhenVisible>
+                        </PanelSection>
                     {/if}
+                {:else if key === DESCRIBE_SECTION}
+                {#if isRelease}
+                    <HelmRelease
+                        release={{
+                            contextId: target.contextId,
+                            namespace: target.namespace,
+                            name: target.name,
+                        }}
+                        numbers={workspace.showLineNumbers}
+                    />
+                {:else if detail.loading}
+                    <p class="status">Describing {target.name}…</p>
+                {:else if detail.error}
+                    <ErrorState message={detail.error} compact />
+                {:else}
+                    {@const describeFolded = workspace.isSectionFolded(DESCRIBE_SECTION)}
+                    <div class="plugin-section describe-head" class:folded={describeFolded}>
+                        <h3>
+                            <FoldButton
+                                folded={describeFolded}
+                                ontoggle={() => workspace.toggleSection(DESCRIBE_SECTION)}
+                                what="the report">Describe</FoldButton
+                            >
+                        </h3>
+                    </div>
+                    {#if !describeFolded}
+                    <div class="tools">
+                        <label class="find">
+                            <Icon name="search" size={12} />
+                            <input
+                                bind:this={findInput}
+                                placeholder="Find in {singularFor(target.kind)}"
+                                aria-label="Find in this report"
+                                title="Enter for the next match, Shift+Enter for the one before"
+                                bind:value={query}
+                                onkeydown={findKey}
+                            />
+                        </label>
+                        {#if query.trim()}
+                            <!-- A count rather than nothing, because a match can be
+                                 far enough down the report to be off screen: "3 of
+                                 7" is what says there is more to see, and "no
+                                 matches" is what stops you looking. -->
+                            <span class="hits" class:none={hits === 0} aria-live="polite">
+                                {hits === 0 ? 'No matches' : `${current + 1} of ${hits}`}
+                            </span>
+                            <button
+                                class="step"
+                                aria-label="The match before"
+                                title="The match before (Shift+Enter)"
+                                disabled={hits === 0}
+                                onclick={() => go(-1)}
+                            >
+                                <Icon name="chevron-up" size={12} />
+                            </button>
+                            <button
+                                class="step"
+                                aria-label="The next match"
+                                title="The next match (Enter)"
+                                disabled={hits === 0}
+                                onclick={() => go(1)}
+                            >
+                                <Icon name="chevron-down" size={12} />
+                            </button>
+                        {/if}
 
-                    <button
-                        class="toggle"
-                        class:done={copied}
-                        title="Copy the whole report{isSecret && !detail.revealed ? ', values still encoded' : ''}"
-                        aria-label="Copy the report"
-                        onclick={() => void copyReport()}
-                    >
-                        <Icon name={copied ? 'tick' : 'copy'} size={13} />
-                        <span aria-live="polite">{copied ? 'Copied' : 'Copy'}</span>
-                    </button>
-
-                    {#if isSecret}
                         <button
                             class="toggle"
-                            class:on={detail.revealed}
-                            aria-pressed={detail.revealed}
-                            title={detail.revealed
-                                ? 'Show the values base64-encoded again'
-                                : 'Decode the values and show them in plain text'}
-                            onclick={() => void detail.reveal(!detail.revealed)}
+                            class:done={copied}
+                            title="Copy the whole report{isSecret && !detail.revealed ? ', values still encoded' : ''}"
+                            aria-label="Copy the report"
+                            onclick={() => void copyReport()}
                         >
-                            <Icon name={detail.revealed ? 'lock' : 'unlock'} size={13} />
-                            {detail.revealed ? 'Hide values' : 'Show values'}
+                            <Icon name={copied ? 'tick' : 'copy'} size={13} />
+                            <span aria-live="polite">{copied ? 'Copied' : 'Copy'}</span>
                         </button>
-                    {/if}
-                </div>
 
-                <!-- Written on one line so that no whitespace from the template
-                     itself lands inside the pre. -->
-                <pre class="selectable" bind:this={reportEl}>{#each parts as part, i (i)}{#if part.hit >= 0}<mark data-hit={part.hit} class:current={part.hit === current}>{part.text}</mark>{:else}{part.text}{/if}{/each}</pre>
+                        {#if isSecret}
+                            <button
+                                class="toggle"
+                                class:on={detail.revealed}
+                                aria-pressed={detail.revealed}
+                                title={detail.revealed
+                                    ? 'Show the values base64-encoded again'
+                                    : 'Decode the values and show them in plain text'}
+                                onclick={() => void detail.reveal(!detail.revealed)}
+                            >
+                                <Icon name={detail.revealed ? 'lock' : 'unlock'} size={13} />
+                                {detail.revealed ? 'Hide values' : 'Show values'}
+                            </button>
+                        {/if}
+                    </div>
+
+                    <!-- Written on one line so that no whitespace from the template
+                         itself lands inside the pre. -->
+                    <pre class="selectable" bind:this={reportEl}>{#each parts as part, i (i)}{#if part.hit >= 0}<mark data-hit={part.hit} class:current={part.hit === current}>{part.text}</mark>{:else}{part.text}{/if}{/each}</pre>
+                    {/if}
                 {/if}
-            {/if}
+                {/if}
+            {/each}
         </div>
     </section>
 {/if}
@@ -692,5 +883,131 @@
 
     .describe-head {
         margin-bottom: 4px;
+    }
+    /* ----- the section toolbar and the arrange list ----------------------- */
+
+    .section-tools {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 6px 12px 2px 12px;
+    }
+
+    .section-tools .spacer {
+        flex: 1 1 auto;
+    }
+
+    .tool {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 7px;
+        border: 1px solid transparent;
+        border-radius: var(--radius-sm);
+        background: none;
+        color: var(--text-dim);
+        font-size: 11.5px;
+        white-space: nowrap;
+    }
+
+    .tool:hover:not(:disabled) {
+        background: var(--bg-hover);
+        color: var(--text);
+    }
+
+    .tool.on {
+        border-color: var(--border);
+        background: var(--bg-raised);
+        color: var(--text);
+    }
+
+    .tool:disabled {
+        opacity: 0.5;
+    }
+
+    .arrange {
+        margin: 6px 16px 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--bg-raised);
+    }
+
+    .arrange-note {
+        margin: 0 0 8px;
+        font-size: 11.5px;
+        color: var(--text-dim);
+    }
+
+    .arrange-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .arrange-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 6px 4px 8px;
+        border: 1px solid var(--border-soft);
+        border-radius: var(--radius-sm);
+        background: var(--bg-panel);
+        cursor: grab;
+        position: relative;
+    }
+
+    .arrange-item.dragging {
+        opacity: 0.45;
+    }
+
+    .arrange-item.drop-before::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: -3px;
+        border-top: 2px solid var(--accent);
+    }
+
+    .arrange-item.drop-after::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: -3px;
+        border-top: 2px solid var(--accent);
+    }
+
+    .grip {
+        color: var(--text-faint);
+        letter-spacing: -2px;
+        font-size: 11px;
+        user-select: none;
+    }
+
+    .arrange-label {
+        flex: 1 1 auto;
+        font-size: 12px;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .arrange-by {
+        font-size: 10px;
+        color: var(--text-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
+
+    .arrange-foot {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 8px;
     }
 </style>

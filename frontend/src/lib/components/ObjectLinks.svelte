@@ -9,9 +9,40 @@
   Draws nothing until the cluster has answered, and nothing at all for an
   object with none of the three: the report is still the panel's main thing,
   and three empty headings above it would only push it down.
+
+  The panel can draw the three apart -- `part` -- so each takes its own place
+  in the order the user arranged the sections in. The three then share one
+  read of the object's links rather than asking the cluster three times.
 -->
+<script module lang="ts">
+    import { ResourceService as Service } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
+    import type * as kubeModels from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
+
+    /** The read in flight, per object and revision, shared by the parts drawn together. */
+    const reads = new Map<string, Promise<kubeModels.ObjectLinks | null>>();
+
+    function sharedRead(contextId: string, kind: string, namespace: string, name: string, revision: number): Promise<kubeModels.ObjectLinks | null> {
+        const key = `${contextId}#${kind}#${namespace}#${name}#${revision}`;
+        let read = reads.get(key);
+        if (!read) {
+            // Only shared while it is in flight: the parts mount together, and
+            // the next look at the object reads the cluster again.
+            // Called inside the promise chain, so a call that throws at once
+            // -- an unreachable backend -- is a failed read like any other.
+            read = Promise.resolve()
+                .then(() => Service.ObjectLinks(contextId, kind, namespace, name))
+                .then(
+                    (got) => got,
+                    () => null,
+                )
+                .finally(() => reads.delete(key));
+            reads.set(key, read);
+        }
+        return read;
+    }
+</script>
+
 <script lang="ts">
-    import { ResourceService } from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import type * as kube from '../../../bindings/github.com/k8sdockside/k8sdockside/internal/kube/models.js';
     import { PODS, singularFor } from '../catalogue';
     import { detail, type DetailTarget } from '../state/detail.svelte';
@@ -28,9 +59,11 @@
          * them already, laid out for a machine.
          */
         conditions?: boolean;
+        /** Draw only one of the three; all of them when left out. */
+        part?: 'conditions' | 'related' | 'pods';
     }
 
-    let { object, revision, conditions = true }: Props = $props();
+    let { object, revision, conditions = true, part }: Props = $props();
 
     let links = $state<kube.ObjectLinks | null>(null);
     /** Every read takes a number, and only the newest may land. */
@@ -38,14 +71,10 @@
 
     async function read(ref: DetailTarget): Promise<void> {
         const attempt = ++load;
-        try {
-            const got = await ResourceService.ObjectLinks(ref.contextId, ref.kind, ref.namespace, ref.name);
-            if (attempt === load) links = got;
-        } catch {
-            // The report below says what is wrong with the object; a summary
-            // that could not be read is simply not drawn.
-            if (attempt === load) links = null;
-        }
+        // A summary that could not be read is simply not drawn: the report
+        // below says what is wrong with the object.
+        const got = await sharedRead(ref.contextId, ref.kind, ref.namespace, ref.name, revision);
+        if (attempt === load) links = got;
     }
 
     /** Which object the sections on screen belong to. */
@@ -80,7 +109,7 @@
     }
 </script>
 
-{#if shownConditions.length > 0}
+{#if (!part || part === 'conditions') && shownConditions.length > 0}
     <PanelSection id="conditions" title="Conditions" count={shownConditions.length}>
         <table>
             <tbody>
@@ -105,7 +134,7 @@
     </PanelSection>
 {/if}
 
-{#if references.length > 0}
+{#if (!part || part === 'related') && references.length > 0}
     <PanelSection id="related" title="Related" count={references.length} what="the related objects">
         <ul class="refs">
             {#each references as ref, i (i)}
@@ -132,7 +161,7 @@
     </PanelSection>
 {/if}
 
-{#if pods}
+{#if (!part || part === 'pods') && pods}
     <PanelSection
         id="pods"
         title="Pods"

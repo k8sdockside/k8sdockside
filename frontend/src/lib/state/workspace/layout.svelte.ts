@@ -17,6 +17,7 @@ import {
     type PaneState,
 } from '../panes';
 import { NAV_GROUPS } from '../../catalogue';
+import { orderSections, rearranged, type NewSectionPlace } from './sections';
 import { clusters } from '../health.svelte';
 import { notices } from '../notices.svelte';
 import { session } from '../session.svelte';
@@ -268,6 +269,55 @@ export abstract class WorkspaceLayout extends WorkspaceTabs {
     setSectionFolded(key: string, folded: boolean): void {
         if (this.isSectionFolded(key) === folded) return;
         this.toggleSection(key);
+    }
+
+    /** Folds or unfolds every one of `keys` at once: the panel's Collapse all and Expand all. */
+    setSectionsFolded(keys: readonly string[], folded: boolean): void {
+        const current = this.settings.layout.foldedSections ?? [];
+        const next = folded ? [...current, ...keys.filter((k) => !current.includes(k))] : current.filter((k) => !keys.includes(k));
+        if (next.length === current.length && next.every((k, i) => k === current[i])) return;
+        this.settings.layout.foldedSections = next;
+        this.persistLayout();
+    }
+
+    // ----- the order of the details panel's sections ------------------------
+    //
+    // One order for every object on every cluster, as with the folds; the
+    // rules for sections an order does not name are in sections.ts.
+
+    /** Where a plugin's section new to the arranged order is drawn. */
+    get newSectionPlace(): NewSectionPlace {
+        return this.settings.layout.newSections === 'default' ? 'default' : 'bottom';
+    }
+
+    setNewSectionPlace(place: NewSectionPlace): void {
+        const value = place === 'default' ? 'default' : '';
+        if ((this.settings.layout.newSections ?? '') === value) return;
+        this.settings.layout.newSections = value;
+        this.persistLayout();
+    }
+
+    /** Whether the user has arranged the sections at all. */
+    get sectionsArranged(): boolean {
+        return (this.settings.layout.sectionOrder ?? []).length > 0;
+    }
+
+    /** An object's sections, given in the default order, in the order the user chose. */
+    orderSections(available: readonly string[]): string[] {
+        return orderSections(available, this.settings.layout.sectionOrder, this.newSectionPlace);
+    }
+
+    /** Keeps a new order for the sections on screen, which were `before` and are now `after`. */
+    arrangeSections(before: readonly string[], after: readonly string[]): void {
+        this.settings.layout.sectionOrder = rearranged(this.settings.layout.sectionOrder, before, after);
+        this.persistLayout();
+    }
+
+    /** Back to the default order, for every kind. */
+    resetSectionOrder(): void {
+        if (!this.sectionsArranged) return;
+        this.settings.layout.sectionOrder = [];
+        this.persistLayout();
     }
 
     /**

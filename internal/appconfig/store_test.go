@@ -459,6 +459,37 @@ func TestZoomRoundTripsAndIsRepaired(t *testing.T) {
 	}
 }
 
+func TestSectionOrderRoundTripsAndAnUnknownPlaceIsDropped(t *testing.T) {
+	path := tempSettings(t)
+	if err := os.WriteFile(path, []byte(`{"contexts":{},"layout":{"sectionOrder":["describe","conditions","plugin:kubevirt/machine"],"newSections":"sideways"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := openAt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := store.Get().Layout
+	if want := []string{"describe", "conditions", "plugin:kubevirt/machine"}; !slices.Equal(got.SectionOrder, want) {
+		t.Errorf("sectionOrder = %v, want %v", got.SectionOrder, want)
+	}
+	// A place the app does not know is the default, at the bottom.
+	if got.NewSections != "" {
+		t.Errorf("newSections = %q, want it dropped", got.NewSections)
+	}
+
+	got.NewSections = "default"
+	if _, err := store.SetLayout(got); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := openAt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.Get().Layout.NewSections != "default" {
+		t.Errorf("newSections = %q after a reopen, want default", reopened.Get().Layout.NewSections)
+	}
+}
+
 func TestAnUnusableZoomFallsBackToNormalSize(t *testing.T) {
 	path := tempSettings(t)
 	if err := os.WriteFile(path, []byte(`{"contexts":{},"layout":{"detailDock":"right","zoom":0}}`), 0o600); err != nil {
