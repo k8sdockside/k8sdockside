@@ -223,6 +223,16 @@ type Layout struct {
 	// away -- "describe", or a plugin's section as "plugin:<plugin>/<section>"
 	// -- for every object, on every cluster. The names are the frontend's.
 	FoldedSections []string `json:"foldedSections,omitempty"`
+	// SectionOrder is the order the user arranged the details panel's
+	// sections in, by the same keys as FoldedSections, for every object on
+	// every cluster. Empty means the default order. The app's own sections it
+	// does not name keep their default place; see NewSections for a plugin's.
+	SectionOrder []string `json:"sectionOrder,omitempty"`
+	// NewSections is where a plugin's section that SectionOrder does not name
+	// yet -- a plugin installed since the order was arranged -- is drawn:
+	// "bottom" (the default, and what "" means) or "default", where the
+	// plugin's sections go when nothing was arranged.
+	NewSections string `json:"newSections,omitempty"`
 }
 
 // Window is where the main window was last left and how big, in the screen

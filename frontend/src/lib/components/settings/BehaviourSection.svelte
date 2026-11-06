@@ -14,6 +14,7 @@
     import { workspace } from '../../state/workspace.svelte';
     import SettingsRow from './SettingsRow.svelte';
     import SettingsSection from './SettingsSection.svelte';
+    import SegmentedControl from './SegmentedControl.svelte';
     import Toggle from './Toggle.svelte';
 
     let overrides = $derived(workspace.foldingOverrideCount);
@@ -40,6 +41,30 @@
             label="Ask before removing a kubeconfig source"
             onchange={(v) => workspace.setConfirmSourceRemoval(v)}
         />
+    </SettingsRow>
+
+    <SettingsRow
+        label="New plugin panels in the details panel"
+        hint="Where a panel from a plugin you install goes, once you have arranged the details panel's sections. At the bottom, out of the way of the order you chose; or where the plugin puts it, before the report."
+    >
+        <SegmentedControl
+            label="Where new plugin panels go"
+            value={workspace.newSectionPlace}
+            options={[
+                { value: 'bottom', label: 'At the bottom' },
+                { value: 'default', label: "Where the plugin puts it" },
+            ]}
+            onchange={(v) => workspace.setNewSectionPlace(v === 'default' ? 'default' : 'bottom')}
+        />
+    </SettingsRow>
+
+    <SettingsRow
+        label="Order of the details panel's sections"
+        hint="Arranged with Arrange at the top of the details panel, for every object on every cluster, and kept with your settings. The default order puts what an object is doing first and the report last."
+    >
+        <button class="reset" disabled={!workspace.sectionsArranged} onclick={() => workspace.resetSectionOrder()}>
+            {workspace.sectionsArranged ? 'Back to the default order' : 'Default order'}
+        </button>
     </SettingsRow>
 
 </SettingsSection>
@@ -150,7 +175,8 @@
         margin-bottom: 12px;
     }
 
-    .bulk button {
+    .bulk button,
+    .reset {
         padding: 5px 11px;
         border-radius: var(--radius-sm);
         background: var(--bg-raised);
@@ -159,7 +185,12 @@
         color: var(--text-dim);
     }
 
-    .bulk button:hover {
+    .reset:disabled {
+        opacity: 0.55;
+    }
+
+    .bulk button:hover,
+    .reset:hover:not(:disabled) {
         background: var(--bg-hover);
         color: var(--text);
     }

@@ -320,6 +320,10 @@ export interface Settings {
         collapsedGroups: string[] | null;
         /** The details panel's sections folded away, for every object: "describe", "plugin:<id>/<section>". */
         foldedSections: string[];
+        /** The order the details panel's sections were arranged in, by the same keys; empty is the default order. */
+        sectionOrder: string[];
+        /** Where a plugin's section the order does not name yet goes: "bottom" ('' too) or "default". */
+        newSections: string;
     };
 }
 
@@ -505,6 +509,8 @@ export function adoptSettings(settings: appconfig.Settings): Settings {
             // different things to the sidebar.
             collapsedGroups: settings.layout?.collapsedGroups ?? null,
             foldedSections: settings.layout?.foldedSections ?? [],
+            sectionOrder: settings.layout?.sectionOrder ?? [],
+            newSections: settings.layout?.newSections ?? '',
             zoom: settings.layout?.zoom || 1,
         },
     };
