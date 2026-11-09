@@ -81,8 +81,14 @@ jobs:
       # Covers what the Go and npm scanners do not: committed secrets, and
       # misconfiguration in the Dockerfiles and CI config under build/.
       - name: Run Trivy
-        uses: aquasecurity/trivy-action@master
+        # Pinned rather than @master, which installs whatever Trivy is newest:
+        # the v0.76.2 release's checksums file answers 504, so installing it
+        # fails before anything is scanned. Move both forward together.
+        # Pinned to a commit, not a tag: in March 2026 (CVE-2026-33634) this
+        # action's tags were force-pushed to a credential stealer.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.76.1
           scan-type: fs
           scan-ref: .
           scanners: vuln,secret,misconfig
