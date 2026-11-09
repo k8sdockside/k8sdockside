@@ -321,6 +321,24 @@
         "official": true
     },
     {
+        "id": "crossplane",
+        "name": "Crossplane",
+        "tagline": "packages, APIs, compositions and managed resources, drawn",
+        "category": "platform",
+        "icon": "layers",
+        "description": "Whether the control plane is healthy in one sentence, then the picture: the package dependency graph with every revision, each API with the Compositions that serve it and the function pipeline each one runs, every managed resource kind by provider and which are failing, a timeline of what Crossplane did, and what is wrong in plain words. Panels on Providers, Functions, Configurations, XRDs and Compositions. Only reads; changes nothing.",
+        "repo": "https://github.com/k8sdockside/crossplane.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
+        "detect": ["crd:providers.pkg.crossplane.io"],
+        "links": [
+            { "label": "crossplane.io", "url": "https://www.crossplane.io/" },
+            { "label": "GitHub", "url": "https://github.com/crossplane/crossplane" }
+        ],
+        "official": true,
+        "minAppVersion": "0.1.36"
+    },
+    {
         "id": "gpu",
         "name": "GPU & Accelerators",
         "tagline": "GPUs and other devices, through device plugins or DRA",
