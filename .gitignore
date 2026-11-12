@@ -66,3 +66,5 @@ build/android/gen/
 # and `make build` both run, so they are build output rather than source.
 frontend/bindings/
 .DS_Store
+# Claude Code: personal settings, not shared
+.claude/settings.local.json

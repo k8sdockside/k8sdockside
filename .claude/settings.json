@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(make help)",
+      "Bash(make build-go)",
+      "Bash(make build-go-server)",
+      "Bash(make build-frontend)",
+      "Bash(make generate)",
+      "Bash(make generate-headless)",
+      "Bash(make test)",
+      "Bash(make test-frontend)",
+      "Bash(make vet)",
+      "Bash(make lint)",
+      "Bash(make lint-frontend)",
+      "Bash(make fmt)",
+      "Bash(make fmt-check)",
+      "Bash(make tidy-check)",
+      "Bash(make helm-lint)",
+      "Bash(make helm-template)",
+      "Bash(make precheck)",
+      "Bash(make audit)",
+      "Bash(go build *)",
+      "Bash(go test *)",
+      "Bash(go vet *)",
+      "Bash(go run ./cmd/plugincheck *)",
+      "Bash(gofmt *)",
+      "Bash(npm run check)",
+      "Bash(npm run test)",
+      "Bash(npm test)",
+      "Bash(npx vitest *)",
+      "Bash(npx svelte-check *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)"
+    ],
+    "ask": [
+      "Bash(make docker-buildx *)",
+      "Bash(make helm-install *)",
+      "Bash(make helm-uninstall *)",
+      "Bash(make update-deps *)",
+      "Bash(helm install *)",
+      "Bash(helm upgrade *)",
+      "Bash(helm uninstall *)",
+      "Bash(kubectl *)",
+      "Bash(git push *)",
+      "Bash(git tag *)",
+      "Bash(npm publish *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(~/.kube/**)",
+      "Edit(./frontend/bindings/**)",
+      "Edit(./frontend/dist/**)",
+      "Write(./frontend/bindings/**)",
+      "Write(./frontend/dist/**)"
+    ]
+  }
+}
