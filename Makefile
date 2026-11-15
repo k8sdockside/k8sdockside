@@ -83,6 +83,16 @@ dev: ## Run the app in development mode with hot reload (wails3 dev), on the PRO
 	@printf "$(CYAN)Starting wails3 dev on profile '$(PROFILE)'...$(RESET)\n"
 	@K8SDOCKSIDE_PROFILE=$(PROFILE) wails3 dev
 
+# GTK4 hands file dialogs to the desktop portal, and on KDE that portal cannot
+# select several folders at once (Settings -> Plugins -> Watch another folder).
+# GDK_DEBUG=no-portals makes GTK draw its own chooser instead. It switches off
+# every GTK portal for the run, not just the file chooser, so it is a separate
+# target rather than the default.
+.PHONY: dev-no-portals
+dev-no-portals: ## Like dev, but with GTK's own file dialogs instead of the desktop portal (Linux; multi-folder select on KDE).
+	@printf "$(CYAN)Starting wails3 dev on profile '$(PROFILE)' without GTK portals...$(RESET)\n"
+	@GDK_DEBUG=no-portals K8SDOCKSIDE_PROFILE=$(PROFILE) wails3 dev
+
 .PHONY: build
 build: ## Build the production desktop app into bin/ (wails3 build).
 	@printf "$(CYAN)Building $(APP_NAME)...$(RESET)\n"

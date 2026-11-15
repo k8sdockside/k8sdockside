@@ -23,6 +23,7 @@ Building, testing and releasing k8sdockside. For how it talks to a cluster, see
 
 ```sh
 make dev             # hot-reloading desktop app
+make dev-no-portals  # the same, with GTK's own file dialogs (Linux; KDE's portal picks one folder at a time)
 make build           # production desktop build into bin/
 make build-go        # compile the Go packages only, no frontend bundle
 make test            # Go unit tests with a coverage report
