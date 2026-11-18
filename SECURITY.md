@@ -103,7 +103,11 @@ already allowed to do that.
 ## Build and release security
 
 - **Every push is scanned.** CI runs `gosec` and `govulncheck` over the Go code
-  and `npm audit` over the frontend tree, and fails on findings.
+  and `npm audit` over the frontend tree, and fails on findings — for npm, on
+  high and critical advisories. An advisory with no fixed release can be
+  accepted only by name, with a written reason and an expiry date, in
+  [`frontend/audit-allow.json`](frontend/audit-allow.json); once that date
+  passes it fails the build again.
 - **Weekly deep scan.** A scheduled workflow re-runs those in reporting mode,
   adds a Trivy filesystem scan for committed secrets and misconfiguration, and
   files results under **Security → Code scanning**.

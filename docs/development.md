@@ -95,7 +95,7 @@ K8SDOCKSIDE_TEST_SERVICE=argocd/argocd-server \
 
 | Workflow | Runs on | What it does |
 |---|---|---|
-| [`ci.yml`](../.github/workflows/ci.yml) | every branch push, and PRs into `main` | Go build (desktop and server mode), test, vet, gofmt check and golangci-lint; bindings generation, svelte-check, vitest and the frontend bundle; gosec, govulncheck and `npm audit --audit-level=high`; `helm lint` and `helm template` of the chart |
+| [`ci.yml`](../.github/workflows/ci.yml) | every branch push, and PRs into `main` | Go build (desktop and server mode), test, vet, gofmt check and golangci-lint; bindings generation, svelte-check, vitest and the frontend bundle; gosec, govulncheck and the npm audit gate; `helm lint` and `helm template` of the chart |
 | [`security.yml`](../.github/workflows/security.yml) | Mondays 03:00 UTC, manual, and dependency changes on `main` | The same Go scanners in reporting mode with SARIF filed under **Security → Code scanning**, a Trivy filesystem scan for secrets and misconfiguration, and a full npm audit |
 | [`release.yml`](../.github/workflows/release.yml) | tags matching `v*`, and manual | Builds and packages every platform, then publishes the GitHub release |
 | [`server-image.yml`](../.github/workflows/server-image.yml) | tags matching `v*`, and manual | Builds the server-mode image for linux/amd64 and linux/arm64 and pushes it to `ghcr.io/k8sdockside/k8sdockside`, then pushes the Helm chart to `oci://ghcr.io/k8sdockside/helm` |
@@ -104,6 +104,21 @@ CI only runs the jobs a change can affect, via `dorny/paths-filter`. Note that
 the frontend filter includes `**/*.go`: `frontend/bindings/` is generated from
 the Go services and is not committed, so a service signature change breaks the
 frontend without touching a file under `frontend/`.
+
+### The npm audit gate
+
+`make npm-audit`, CI and the security workflow all judge the frontend's
+`npm audit` with one script,
+[`frontend/scripts/audit-gate.mjs`](../frontend/scripts/audit-gate.mjs): a high
+or critical advisory fails, anything lower is counted and reported. When an
+advisory has no fixed release and does not reach the shipped app — a ReDoS in
+build tooling, say — it can be accepted in
+[`frontend/audit-allow.json`](../frontend/audit-allow.json), by its GHSA id,
+with the package, the reason, and an `until` day. Past that day the gate fails
+again, so someone checks for a fix and either removes the entry or renews it
+with a reason that still holds. An entry for an advisory no longer reported is
+pointed out for removal. Accepting one advisory clears only the packages that
+depend on it; every other advisory is gated as before.
 
 The toolchain setup is shared by all three workflows in
 [`.github/actions/setup-build`](../.github/actions/setup-build/action.yml),

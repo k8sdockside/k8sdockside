@@ -466,13 +466,18 @@ govulncheck: install-govulncheck frontend-dist-stub ## Run govulncheck vulnerabi
 	@printf "$(GREEN)✓ govulncheck complete$(RESET)\n"
 
 .PHONY: npm-audit
-# The whole report, every severity, as the security workflow prints it -- and,
-# as it does, only high and critical fail. A low advisory with no fixed release
+# Only high and critical fail, as in CI. A low advisory with no fixed release
 # (deepmerge under vite-plugin-svelte, build-time only, was the first) would
-# otherwise block every push until upstream ships one.
+# otherwise block every push until upstream ships one; lower ones are counted,
+# and `npm audit` in frontend/ shows them all.
+#
+# The gate is frontend/scripts/audit-gate.mjs, the same one both workflows run,
+# so a high advisory with no fix can be accepted -- one at a time, with a
+# reason and an expiry -- in frontend/audit-allow.json. npm audit itself has no
+# way to set one advisory aside.
 npm-audit: ## Run npm audit against the frontend dependencies (fails on high and critical, as CI does).
 	@printf "$(CYAN)Running npm audit...$(RESET)\n"
-	@cd $(FRONTEND_DIR) && npm audit --audit-level=high
+	@cd $(FRONTEND_DIR) && node scripts/audit-gate.mjs
 	@printf "$(GREEN)✓ npm audit complete$(RESET)\n"
 
 ##@ Before you push
@@ -485,8 +490,8 @@ npm-audit: ## Run npm audit against the frontend dependencies (fails on high and
 # It needs what CI installs: the wails3 CLI (`make install-wails`) for the
 # bindings, the frontend's node_modules (`make deps`) and Playwright's Chromium
 # (`cd frontend && npx playwright install chromium`) for its browser tests, and
-# helm. npm audit here is `make npm-audit`, which fails on any advisory -- CI's
-# frontend audit only fails on high, so this is the stricter of the two.
+# helm. npm audit here is `make npm-audit`, the same gate as CI's: high and
+# critical fail, except what frontend/audit-allow.json accepts.
 PRECHECK_STEPS = fmt-check tidy-check vet lint build-go build-go-server test \
 	generate lint-frontend test-frontend build-frontend helm-lint helm-template audit
 

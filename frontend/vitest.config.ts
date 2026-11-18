@@ -22,6 +22,17 @@ export default defineConfig({
                     exclude: ['src/**/*.browser.test.ts'],
                 },
             },
+            // The tooling in scripts/ is plain Node with no DOM -- the npm
+            // audit gate, above all, which decides what fails CI and so is
+            // worth a test of its own.
+            {
+                extends: true,
+                test: {
+                    name: 'scripts',
+                    environment: 'node',
+                    include: ['scripts/**/*.test.mjs'],
+                },
+            },
             {
                 extends: true,
                 test: {

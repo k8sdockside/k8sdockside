@@ -1,0 +1,8 @@
+[
+    {
+        "id": "GHSA-fc5q-39xc-vjpf",
+        "package": "picomatch",
+        "reason": "ReDoS on crafted glob patterns. picomatch is only in build and test tooling (vite, vitest, svelte-check via tinyglobby and fdir), which match patterns written in this repository, never input from users; nothing of it is in the shipped bundle. Every published version (<= 4.0.7) is affected and there is no fixed release to move to.",
+        "until": "2027-01-31"
+    }
+]

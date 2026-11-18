@@ -299,12 +299,13 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      # `make npm-audit` fails on advisories of any severity, which is the right
-      # setting for a deliberate local audit but too noisy to gate every push
-      # on. High and above blocks here; the weekly scan reports the rest.
+      # The same gate as `make npm-audit` and the security workflow: high and
+      # critical block, except what frontend/audit-allow.json accepts (one
+      # advisory at a time, with a reason and an expiry). The weekly scan
+      # reports the rest.
       - name: Run npm audit
         working-directory: frontend
-        run: npm audit --audit-level=high
+        run: node scripts/audit-gate.mjs
 
   helm:
     name: Lint (Helm chart)
