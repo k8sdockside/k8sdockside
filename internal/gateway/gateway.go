@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strings"
@@ -69,15 +70,19 @@ type Gateway struct {
 	managed []Provider
 	oauth   *oauthClient
 	pending *pendingLogins
-	// Failed sign-ins, per address and per username.
-	ipLimit, userLimit *limiter
-	secret             string
-	upstream           atomic.Pointer[url.URL]
-	proxy              *httputil.ReverseProxy
-	probe              *http.Client
-	presence           *presence
-	pages              map[string]*template.Template
-	mux                *http.ServeMux
+	// Failed sign-ins: per address, per username from one address, and per
+	// username from anywhere. See loginSubmit.
+	ipLimit, userLimit, nameLimit *limiter
+	secret                        string
+	// generatedToken is set when the setup token was made at startup rather
+	// than configured, so the setup page can say where to find it.
+	generatedToken bool
+	upstream       atomic.Pointer[url.URL]
+	proxy          *httputil.ReverseProxy
+	probe          *http.Client
+	presence       *presence
+	pages          map[string]*template.Template
+	mux            *http.ServeMux
 }
 
 // New opens the gateway's store in the data directory and builds the gateway.
@@ -109,6 +114,7 @@ func New(cfg Config, deps Deps) (*Gateway, error) {
 		pending:   &pendingLogins{m: map[string]pendingLogin{}},
 		ipLimit:   newLimiter(30, 15*time.Minute),
 		userLimit: newLimiter(10, 15*time.Minute),
+		nameLimit: newLimiter(100, 15*time.Minute),
 		secret:    randomToken(32),
 		probe:     &http.Client{Timeout: 2 * time.Second},
 		presence:  newPresence(deps.Owners, clientGrace),
@@ -157,9 +163,17 @@ func (g *Gateway) bootstrap() error {
 	}
 	if g.cfg.SetupToken != "" {
 		g.log.Info("no users yet: open K8s Dockside and create the administrator with the setup token")
-	} else {
-		g.log.Warn("no users yet: the first person to open K8s Dockside creates the administrator account")
+		return nil
 	}
+	// Nobody has been told how the administrator is to be made, so the setup
+	// page must not simply belong to whoever reaches it first: on an
+	// ephemeral volume that would be anyone who reaches it after any restart.
+	// A token only this log shows keeps it for whoever can read the log --
+	// in a cluster, whoever may read this pod's logs.
+	g.cfg.SetupToken = randomToken(18)
+	g.generatedToken = true
+	g.log.Warn("no users yet: open K8s Dockside and create the administrator with this setup token; a new one is made on every start until then",
+		"setupToken", g.cfg.SetupToken)
 	return nil
 }
 
@@ -210,6 +224,7 @@ func (g *Gateway) housekeeping(ctx context.Context) {
 		g.pending.purge()
 		g.ipLimit.prune()
 		g.userLimit.prune()
+		g.nameLimit.prune()
 	}
 }
 
@@ -255,6 +270,7 @@ func (g *Gateway) routes() error {
 
 	m.HandleFunc("GET /-/account", g.signedIn(g.accountPage))
 	m.HandleFunc("POST /-/account/password", g.signedIn(g.accountPassword))
+	m.HandleFunc("POST /-/account/connect/{provider}", g.signedIn(g.accountConnect))
 
 	m.HandleFunc("GET /-/admin", g.adminOnly(func(w http.ResponseWriter, r *http.Request, _ visit) {
 		http.Redirect(w, r, "/-/admin/users", http.StatusSeeOther)
@@ -575,10 +591,16 @@ func (g *Gateway) ownHosts(r *http.Request) []string {
 }
 
 // clientIP is the address failed sign-ins are counted against.
+//
+// Behind proxies it is read from X-Forwarded-For, but from the right: a proxy
+// appends the address it was reached from to whatever the request already
+// carried, so the leftmost entries are the client's own words, and taking
+// the first would let anyone be a new address on every attempt. The entry
+// ProxyHops from the end is the one the outermost trusted proxy wrote.
 func (g *Gateway) clientIP(r *http.Request) string {
 	if g.cfg.TrustForwarded {
-		if fwd := firstValue(r.Header.Get("X-Forwarded-For")); fwd != "" {
-			return fwd
+		if ip := forwardedFor(r.Header.Values("X-Forwarded-For"), g.cfg.ProxyHops); ip != "" {
+			return ip
 		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -612,6 +634,34 @@ func safeNext(next string) string {
 		return "/"
 	}
 	return next
+}
+
+// forwardedFor picks the address hops entries from the end of the
+// X-Forwarded-For lines, which a proxy may send as one comma-separated line or
+// several. With fewer entries than hops, the first is as far out as anything
+// reached, and is used. Anything that is not an address gives "", so the
+// caller falls back to the connection's own.
+func forwardedFor(lines []string, hops int) string {
+	var entries []string
+	for _, line := range lines {
+		for e := range strings.SplitSeq(line, ",") {
+			if e = strings.TrimSpace(e); e != "" {
+				entries = append(entries, e)
+			}
+		}
+	}
+	if len(entries) == 0 {
+		return ""
+	}
+	pick := entries[max(len(entries)-max(hops, 1), 0)]
+	if host, _, err := net.SplitHostPort(pick); err == nil {
+		pick = host
+	}
+	ip, err := netip.ParseAddr(strings.Trim(pick, "[]"))
+	if err != nil {
+		return ""
+	}
+	return ip.Unmap().String()
 }
 
 func firstValue(header string) string {
@@ -649,6 +699,9 @@ type pendingLogin struct {
 	verifier string
 	next     string
 	expires  time.Time
+	// linkUser is the user connecting this provider account to their own,
+	// from the account page. Empty for a sign-in.
+	linkUser string
 }
 
 // pendingLogins are sign-ins sent to a provider and not yet back, by state.

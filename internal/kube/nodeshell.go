@@ -33,7 +33,13 @@ const (
 	// tiny, is mirrored everywhere, and the shell it brings is only the way in
 	// -- everything the user actually runs comes from the host, on the far side
 	// of the chroot.
-	DefaultNodeShellImage = "busybox"
+	//
+	// Pinned to a release and its digest, because this pod is privileged with
+	// the node's filesystem mounted: whatever a moving tag pointed at on the
+	// day would run as root on the machine. The digest is the multi-arch
+	// index, so every node architecture resolves it. Keep it equal to
+	// appconfig.DefaultNodeImage, and move both on together.
+	DefaultNodeShellImage = "busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4"
 	// DefaultNodeShellNamespace follows kubectl debug, which creates its pod in
 	// `default` unless told otherwise. It is a setting because a cluster with
 	// Pod Security Admission enforcing `restricted` there will refuse a

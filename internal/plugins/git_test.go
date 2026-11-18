@@ -248,3 +248,160 @@ func TestInstallWithoutGitSaysSoBeforeDoingAnything(t *testing.T) {
 		t.Errorf("the plugins folder was made before git was checked: %v", err)
 	}
 }
+
+// commit writes files into a repository and commits them.
+func commit(t *testing.T, repo, message string, files map[string]string) {
+	t.Helper()
+	for name, content := range files {
+		if err := os.MkdirAll(filepath.Join(repo, filepath.Dir(name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		write(t, repo, name, content)
+	}
+	git(t, repo, "add", ".")
+	git(t, repo, "commit", "-q", "-m", message)
+}
+
+func head(t *testing.T, repo string) string {
+	t.Helper()
+	out, err := gitOutput(repo, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestFetchUpdateSaysWhatAnUpdateBringsAndChangesNothing(t *testing.T) {
+	upstream, _, clone := upstreamWithClone(t, "https://github.com/acme/k8sdockside-acme.git")
+	installed := head(t, clone)
+
+	if up, err := FetchUpdate(clone); err != nil || up.From != up.To || len(up.Commits) != 0 {
+		t.Fatalf("with nothing new: %+v, %v", up, err)
+	}
+
+	commit(t, upstream, "Tidy the overview", map[string]string{"ui/index.html": "<p>hello</p>"})
+	up, err := FetchUpdate(clone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up.From != installed || up.To != head(t, upstream) {
+		t.Fatalf("from %s to %s, want %s to %s", up.From, up.To, installed, head(t, upstream))
+	}
+	if len(up.Commits) != 1 || !strings.HasSuffix(up.Commits[0], " Tidy the overview") {
+		t.Fatalf("commits = %q", up.Commits)
+	}
+	if up.Manifest != "" {
+		t.Fatalf("a change to the views alone changes no manifest, got %q", up.Manifest)
+	}
+	if head(t, clone) != installed {
+		t.Fatal("looking at an update must not take it")
+	}
+}
+
+// A plugin's manifest is where everything it may reach is declared, so an
+// update that changes it says how, word for word -- including a manifest in
+// a pack's subfolder, and not a repository's tooling files.
+func TestFetchUpdateShowsAChangedManifest(t *testing.T) {
+	upstream, _, clone := upstreamWithClone(t, "https://github.com/acme/k8sdockside-acme.git")
+	commit(t, upstream, "The plugin", map[string]string{
+		"plugin.json":      `{"id": "acme", "ui": {"kinds": ["pods"]}}`,
+		"extra/other.json": `{"id": "other"}`,
+		"package.json":     `{"name": "acme"}`,
+	})
+	git(t, clone, "pull", "-q", "--ff-only")
+
+	commit(t, upstream, "Read secrets too", map[string]string{
+		"plugin.json":      `{"id": "acme", "ui": {"kinds": ["pods", "secrets"], "write": true}}`,
+		"extra/other.json": `{"id": "other", "ui": {"kinds": ["nodes"]}}`,
+		"package.json":     `{"name": "acme", "version": "2"}`,
+	})
+	up, err := FetchUpdate(clone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"plugin.json", `"secrets"`, `"write": true`, "extra/other.json", `"nodes"`} {
+		if !strings.Contains(up.Manifest, want) {
+			t.Errorf("the manifest diff does not show %s:\n%s", want, up.Manifest)
+		}
+	}
+	if strings.Contains(up.Manifest, "package.json") {
+		t.Errorf("a tooling file is not a manifest:\n%s", up.Manifest)
+	}
+}
+
+// What is installed is what was shown: a commit pushed after the look is not
+// taken with it.
+func TestApplyUpdateTakesTheCommitThatWasShownAndNoLaterOne(t *testing.T) {
+	upstream, _, clone := upstreamWithClone(t, "https://github.com/acme/k8sdockside-acme.git")
+	commit(t, upstream, "Shown", map[string]string{"a.txt": "1"})
+	up, err := FetchUpdate(clone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commit(t, upstream, "Pushed after the look", map[string]string{"a.txt": "2"})
+	if _, err := FetchUpdate(clone); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ApplyUpdate(clone, up.To); err != nil {
+		t.Fatal(err)
+	}
+	if got := head(t, clone); got != up.To {
+		t.Fatalf("the clone is at %s, want the commit shown, %s", got, up.To)
+	}
+	if err := ApplyUpdate(clone, up.To); err != nil {
+		t.Fatalf("taking the same update twice: %v", err)
+	}
+}
+
+func TestApplyUpdateRefusesAnythingButAFetchedCommit(t *testing.T) {
+	_, _, clone := upstreamWithClone(t, "https://github.com/acme/k8sdockside-acme.git")
+	for _, to := range []string{"", "main", "HEAD~1", "--upload-pack=sh", strings.Repeat("a", 40)} {
+		if err := ApplyUpdate(clone, to); err == nil {
+			t.Errorf("ApplyUpdate(%q) was taken", to)
+		}
+	}
+}
+
+func TestFetchUpdateRefusesARewrittenHistory(t *testing.T) {
+	upstream, _, clone := upstreamWithClone(t, "https://github.com/acme/k8sdockside-acme.git")
+	git(t, upstream, "checkout", "-q", "--orphan", "rewritten")
+	commit(t, upstream, "Somebody else's history", map[string]string{"plugin.json": `{"id": "acme"}`})
+	git(t, upstream, "branch", "-q", "-D", "main")
+	git(t, upstream, "branch", "-q", "-m", "main")
+
+	if _, err := FetchUpdate(clone); err == nil || !strings.Contains(err.Error(), "cannot be fast-forwarded") {
+		t.Fatalf("FetchUpdate over a rewritten history = %v, want it refused", err)
+	}
+}
+
+// Installs are shallow clones -- clone --depth 1 -- so the look and the update
+// have to work on one, across more than one new commit.
+func TestAnUpdateWorksOnAShallowClone(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	upstream := t.TempDir()
+	git(t, upstream, "init", "-q")
+	commit(t, upstream, "One", map[string]string{"plugin.json": `{"id": "acme"}`})
+	commit(t, upstream, "Two", map[string]string{"a.txt": "2"})
+	plugins := t.TempDir()
+	git(t, plugins, "clone", "-q", "--depth", "1", "file://"+upstream, "acme")
+	clone := filepath.Join(plugins, "acme")
+
+	commit(t, upstream, "Three", map[string]string{"a.txt": "3"})
+	commit(t, upstream, "Four", map[string]string{"plugin.json": `{"id": "acme", "ui": {"write": true}}`})
+	up, err := FetchUpdate(clone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(up.Commits) != 2 || !strings.Contains(up.Manifest, `"write": true`) {
+		t.Fatalf("a shallow clone's update = %+v", up)
+	}
+	if err := ApplyUpdate(clone, up.To); err != nil {
+		t.Fatal(err)
+	}
+	if head(t, clone) != head(t, upstream) {
+		t.Fatal("the shallow clone was not brought up to date")
+	}
+}

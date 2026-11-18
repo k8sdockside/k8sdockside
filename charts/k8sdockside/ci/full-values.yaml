@@ -136,6 +136,7 @@ auth:
   # Trailing slash on purpose: the chart trims it.
   publicURL: https://dockside.example.com/
   trustForwardedHeaders: true
+  proxyHops: 2
   sessionTTL: 12h
   passwordLogin: false
   existingSetupTokenSecret:

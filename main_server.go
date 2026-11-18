@@ -45,9 +45,10 @@ func main() {
 
 	owners := session.NewOwners()
 	built := services.New(settings, services.Options{
-		Server:            true,
-		Owners:            owners,
-		KubeconfigFolders: folders,
+		Server:                   true,
+		Owners:                   owners,
+		KubeconfigFolders:        folders,
+		TrustedKubeconfigFolders: cfg.TrustedKubeconfigDirs(),
 		// K8SDOCKSIDE_UPDATE_CHECK=false: never ask GitHub, not even when a
 		// user presses Check now. The server never asks on its own either way.
 		NoUpdateChecks: strings.EqualFold(strings.TrimSpace(os.Getenv("K8SDOCKSIDE_UPDATE_CHECK")), "false"),

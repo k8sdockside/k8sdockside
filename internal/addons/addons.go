@@ -190,6 +190,11 @@ func scan[T Identified](dir string, parse Parse[T]) ([]T, []Problem) {
 // folder on its own should read.
 func FilesIn(dir string) []string { return jsonFilesIn(dir) }
 
+// IsFile reports whether a file of this name, in a folder that is read, is
+// read as an add-on: a JSON file that is not one of a repository's tooling
+// files.
+func IsFile(name string) bool { return isJSON(name) }
+
 // jsonFilesIn lists the add-on files directly inside a subdirectory.
 func jsonFilesIn(dir string) []string {
 	entries, err := os.ReadDir(dir)

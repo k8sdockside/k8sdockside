@@ -27,6 +27,7 @@ import { adoptKnownPlugin, adoptPluginCatalogue } from '../../plugins/adopt';
 import {
     type KnownPlugin,
     type Plugin,
+    type PluginUpdate,
     type PluginSectionSpec,
     type PluginViewSpec,
 } from '../../plugins/types';
@@ -689,23 +690,49 @@ export abstract class WorkspacePlugins extends WorkspaceLayout {
         }
     }
 
-    /** Pulls the repository a plugin was cloned from and reads it again. */
-    async updatePluginFromGit(id: string): Promise<void> {
+    /**
+     * What updating a plugin would bring -- its new commits, and the diff of
+     * its manifests when they change -- for its card to show before anything
+     * changes. `null` when the check failed, with the reason shown.
+     */
+    async pluginUpdate(id: string): Promise<PluginUpdate | null> {
         try {
-            this.pluginCatalogue = adoptPluginCatalogue(await PluginService.UpdateFromGit(id));
-            this.metricsAttachments = (await MetricsService.Attachments()) ?? [];
-            this.registerViews();
-            notices.inform(`Updated ${id}`);
+            const u = await PluginService.UpdatePreview(id);
+            return { from: u.from, to: u.to, commits: u.commits ?? [], more: u.more, manifest: u.manifest };
         } catch (err) {
-            notices.fail(`Could not update the plugin: ${message(err)}`);
+            const name = this.plugins.find((p) => p.id === id)?.name || id;
+            notices.fail(`Could not check ${name} for an update: ${message(err)}`);
+            return null;
         }
     }
 
     /**
-     * Pulls the repository of every plugin in `ids`, one after another, and
-     * says once how it went. Plugins cloned from one repository are pulled
-     * once. `onProgress` hears which one is being pulled, for the button to
-     * say so. A failure does not stop the rest: each is named at the end.
+     * Moves a plugin's clone to `to` -- the commit pluginUpdate found, so what
+     * is installed is what the card showed -- and reads the plugins again.
+     */
+    async updatePluginFromGit(id: string, to: string): Promise<boolean> {
+        try {
+            this.pluginCatalogue = adoptPluginCatalogue(await PluginService.UpdateFromGit(id, to));
+            this.metricsAttachments = (await MetricsService.Attachments()) ?? [];
+            this.registerViews();
+            notices.inform(`Updated ${id}`);
+            return true;
+        } catch (err) {
+            notices.fail(`Could not update the plugin: ${message(err)}`);
+            return false;
+        }
+    }
+
+    /**
+     * Updates every plugin in `ids`, one after another, and says once how it
+     * went. Plugins cloned from one repository are updated once. `onProgress`
+     * hears which one is being looked at, for the button to say so.
+     *
+     * An update that changes a plugin's manifest -- what it may read, call or
+     * run -- is held back and named at the end, to be read and taken from the
+     * plugin's own card: the one place it is shown. The rest only change code
+     * that stays inside what the plugin was already allowed. A failure does
+     * not stop the rest: each is named at the end.
      */
     async updateAllPluginsFromGit(ids: string[], onProgress?: (done: number, total: number, name: string) => void): Promise<void> {
         const byRepo = new Map<string, string>();
@@ -715,12 +742,22 @@ export abstract class WorkspacePlugins extends WorkspaceLayout {
         }
         const todo = [...byRepo.values()];
         const failed: string[] = [];
+        const held: string[] = [];
+        let updated = 0;
         let done = 0;
         for (const id of todo) {
             const name = this.plugins.find((p) => p.id === id)?.name || id;
             onProgress?.(done, todo.length, name);
             try {
-                this.pluginCatalogue = adoptPluginCatalogue(await PluginService.UpdateFromGit(id));
+                const u = await PluginService.UpdatePreview(id);
+                if (u.from === u.to) {
+                    // Already where its repository is.
+                } else if (u.manifest) {
+                    held.push(name);
+                } else {
+                    this.pluginCatalogue = adoptPluginCatalogue(await PluginService.UpdateFromGit(id, u.to));
+                    updated++;
+                }
             } catch (err) {
                 failed.push(`${name}: ${firstLine(message(err))}`);
             }
@@ -733,9 +770,11 @@ export abstract class WorkspacePlugins extends WorkspaceLayout {
             // The charts catch up on the next reload; the plugins are updated.
         }
         this.registerViews();
-        const ok = todo.length - failed.length;
-        if (!failed.length) notices.inform(`Updated ${ok} plugin${ok === 1 ? '' : 's'}`);
-        else notices.fail(`Updated ${ok} of ${todo.length} plugins. Could not update ${failed.join(' · ')}`);
+        const parts = [updated ? `Updated ${updated} plugin${updated === 1 ? '' : 's'}` : 'Nothing was updated'];
+        if (held.length) parts.push(`${held.join(', ')} change${held.length === 1 ? 's' : ''} what ${held.length === 1 ? 'it' : 'they'} may do -- update ${held.length === 1 ? 'it' : 'each'} from ${held.length === 1 ? 'its' : 'their'} card to read what first`);
+        if (failed.length) parts.push(`Could not update ${failed.join(' · ')}`);
+        if (failed.length || held.length) notices.fail(parts.join('. '));
+        else notices.inform(updated ? parts[0] : 'Every plugin is up to date');
     }
 
     /**

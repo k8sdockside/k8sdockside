@@ -942,8 +942,19 @@ and a round icon button group drawn from `actions()`.
 A plugin can live in a repository of its own. Put `plugin.json` at the root and
 its `ui/` folder beside it, and install it with **Settings → Plugins → From a
 repository**: the app runs `git clone --depth 1` into the plugins folder, and
-the card gets an **Update from repository** button that runs
-`git pull --ff-only`. `https://`, `ssh://` and `git@host:owner/repo` addresses
+the card gets an **Update from repository** button.
+
+**Update from repository** fetches first and shows, in the card, what the
+update brings: the new commits and, when any plugin file in the repository
+changes — `plugin.json`, or a pack's manifests one folder down — the diff of
+those files, marked. The manifest is where a plugin declares everything its
+views may read, change, call or run, and the app holds the views to it, so
+that diff is the change in what the plugin may do. **Update** then
+fast-forwards the clone to exactly the commit that was shown, not whatever the
+repository has by then. **Update all plugins** updates only plugins whose
+manifests are unchanged and names the rest, to be read and updated from their
+own cards. A repository whose history was rewritten so the installed commit is
+no longer in it is not updated: uninstall and install it again. `https://`, `ssh://` and `git@host:owner/repo` addresses
 are accepted; git never prompts, so a private repository needs credentials git
 can find on its own. `package.json`, `tsconfig*.json` and the like at the root
 are skipped rather than read as plugins.

@@ -29,6 +29,7 @@ func TestConfigFromEnv(t *testing.T) {
 	t.Setenv("K8SDOCKSIDE_KUBECONFIG_DIRS", "/etc/a, /etc/b,,")
 	t.Setenv("K8SDOCKSIDE_ADMIN_EMAILS", "Ops@Example.com")
 	t.Setenv("K8SDOCKSIDE_SESSION_TTL", "12h")
+	t.Setenv("K8SDOCKSIDE_PROXY_HOPS", "2")
 
 	c, err := ConfigFromEnv()
 	if err != nil {
@@ -43,7 +44,7 @@ func TestConfigFromEnv(t *testing.T) {
 	if !slices.Equal(c.KubeconfigDirs, []string{"/etc/a", "/etc/b"}) {
 		t.Fatalf("kubeconfig dirs = %v", c.KubeconfigDirs)
 	}
-	if !slices.Equal(c.AdminEmails, []string{"ops@example.com"}) || c.SessionTTL != 12*time.Hour {
+	if !slices.Equal(c.AdminEmails, []string{"ops@example.com"}) || c.SessionTTL != 12*time.Hour || c.ProxyHops != 2 {
 		t.Fatalf("config = %+v", c)
 	}
 }
@@ -54,12 +55,13 @@ func TestConfigFromEnvReportsEveryProblem(t *testing.T) {
 	t.Setenv("K8SDOCKSIDE_PASSWORD_LOGIN", "maybe")
 	t.Setenv("K8SDOCKSIDE_IN_CLUSTER", "sometimes")
 	t.Setenv("K8SDOCKSIDE_ADMIN_USERNAME", "root")
+	t.Setenv("K8SDOCKSIDE_PROXY_HOPS", "0")
 
 	_, err := ConfigFromEnv()
 	if err == nil {
 		t.Fatal("a bad configuration must be refused")
 	}
-	for _, want := range []string{"K8SDOCKSIDE_DATA_DIR", "K8SDOCKSIDE_PUBLIC_URL", "K8SDOCKSIDE_PASSWORD_LOGIN", "K8SDOCKSIDE_IN_CLUSTER", "K8SDOCKSIDE_ADMIN_PASSWORD"} {
+	for _, want := range []string{"K8SDOCKSIDE_DATA_DIR", "K8SDOCKSIDE_PUBLIC_URL", "K8SDOCKSIDE_PASSWORD_LOGIN", "K8SDOCKSIDE_IN_CLUSTER", "K8SDOCKSIDE_ADMIN_PASSWORD", "K8SDOCKSIDE_PROXY_HOPS"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the error does not mention %s: %v", want, err)
 		}

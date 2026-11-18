@@ -299,7 +299,9 @@ const (
 
 // Terminal defaults. The shells are bash for the comfort of it and sh because
 // a container that has anything has sh; the image is busybox because it is tiny
-// and mirrored everywhere, and the namespace follows kubectl debug.
+// and mirrored everywhere -- pinned by digest, since the node shell runs it
+// privileged on the node; see kube.DefaultNodeShellImage -- and the namespace
+// follows kubectl debug.
 //
 // They are stated here rather than taken from internal/kube so that this
 // package goes on knowing nothing about Kubernetes; kube has the same fallback
@@ -307,11 +309,15 @@ const (
 var defaultShells = []string{"bash", "sh"}
 
 const (
-	DefaultNodeImage     = "busybox"
+	DefaultNodeImage     = "busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4"
 	DefaultNodeNamespace = "default"
 	DefaultTermFontSize  = 12
 	DefaultScrollback    = 5000
 )
+
+// unpinnedNodeImage is the node shell image the app defaulted to before it
+// was pinned, which a stored setting is moved off -- see normaliseTerminal.
+const unpinnedNodeImage = "busybox"
 
 // The bounds a hand-edited file is held to. A one-pixel terminal and a million
 // lines of scrollback are both ways of making the app unusable from a text

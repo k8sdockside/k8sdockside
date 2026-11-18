@@ -26,6 +26,13 @@ type Options struct {
 	// in-cluster context, the Secrets the Helm chart mounts and the files
 	// uploaded through the admin page.
 	KubeconfigFolders []string
+	// TrustedKubeconfigFolders are the folders, among KubeconfigFolders, that
+	// the deployment itself fills: the in-cluster context and the chart's
+	// Secrets. In the web version only kubeconfigs in these, and those
+	// $KUBECONFIG names, may run an exec plugin or name a file; every other
+	// one -- uploaded, or added by path -- must carry its credentials inline.
+	// See kube.CheckInline.
+	TrustedKubeconfigFolders []string
 	// NoUpdateChecks forbids the web version from asking GitHub whether a
 	// newer release exists even when somebody asks it to, and from fetching
 	// the list of known plugins: for a server that must not reach the
@@ -53,6 +60,7 @@ type Built struct {
 func New(settings *appconfig.Store, opts Options) Built {
 	configs := NewKubeconfigService(settings)
 	configs.extra = opts.KubeconfigFolders
+	configs.trusted = opts.TrustedKubeconfigFolders
 	// The action service borrows the resource service's watcher rather than
 	// opening its own: acting on an object in a context already showing in a
 	// tab should cost no second connection and no second credential exec.

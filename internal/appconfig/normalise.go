@@ -430,7 +430,10 @@ func normaliseTerminal(t Terminal) Terminal {
 	}
 	t.Shells = shells
 
-	if strings.TrimSpace(t.NodeImage) == "" {
+	// "busybox" alone was the default before the default was pinned, and it
+	// is what every settings file written since holds unless someone changed
+	// it: the user did not choose a moving tag, the app did. Bring it along.
+	if image := strings.TrimSpace(t.NodeImage); image == "" || image == unpinnedNodeImage {
 		t.NodeImage = d.NodeImage
 	}
 	if strings.TrimSpace(t.NodeNamespace) == "" {

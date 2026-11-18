@@ -2,7 +2,7 @@
 
 Runs [K8s Dockside](https://github.com/k8sdockside/k8sdockside) in server
 mode: the Kubernetes desktop app as a web app inside a cluster, behind a sign-in
-of its own — local users (the first becomes the admin) and GitHub, Google,
+of its own — local users (the first, made with a setup token, is the admin) and GitHub, Google,
 Facebook, GitLab, Microsoft or any OIDC provider.
 
 The full guide — how it fits together, setting up each OAuth provider, the
@@ -156,9 +156,10 @@ The most used keys. [values.yaml](values.yaml) documents every one.
 | `rbac.extraClusterRoles` | `[]` | Existing ClusterRoles to bind as well |
 | `auth.publicURL` | `""` | External URL; derived from the first ingress host when empty |
 | `auth.trustForwardedHeaders` | `false` | Honour X-Forwarded-* (behind an ingress) |
+| `auth.proxyHops` | `1` | Proxies in front of the pod that append to X-Forwarded-For; the client address is read that far from the right |
 | `auth.sessionTTL` | `168h` | |
 | `auth.passwordLogin` | `true` | Allow username + password sign-in |
-| `auth.setupToken` / `auth.existingSetupTokenSecret` | | Token the first-run admin page asks for |
+| `auth.setupToken` / `auth.existingSetupTokenSecret` | | Token the first-run admin page asks for; unset, the server makes one and logs it |
 | `auth.bootstrapAdmin` | | Admin created at startup: `username`/`password` or `existingSecret` |
 | `auth.adminEmails` | `[]` | OAuth users with these verified emails become admins |
 | `auth.providers` | `[]` | OAuth providers; callback `<publicURL>/-/oauth/<id>/callback` |

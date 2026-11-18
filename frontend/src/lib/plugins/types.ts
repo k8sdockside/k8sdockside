@@ -279,6 +279,21 @@ export interface PluginCatalogue {
     problems: { path: string; message: string }[];
 }
 
+/**
+ * What updating a plugin cloned from a repository would bring, worked out
+ * before anything changes -- see plugins.Update.
+ */
+export interface PluginUpdate {
+    /** The commit installed now, and the one the update moves to; equal when there is nothing new. */
+    from: string;
+    to: string;
+    /** The new commits, newest first, as "abc1234 subject"; `more` counts those left out. */
+    commits: string[];
+    more: number;
+    /** The diff of the plugin's manifests, empty when what it may reach is unchanged. */
+    manifest: string;
+}
+
 /** One of a plugin's requirements, checked against a cluster. */
 export interface Presence {
     kind: string;

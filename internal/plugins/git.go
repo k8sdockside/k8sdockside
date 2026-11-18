@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/k8sdockside/k8sdockside/internal/addons"
 	"github.com/k8sdockside/k8sdockside/internal/procattr"
 )
 
@@ -294,4 +295,112 @@ func Pull(repo string) error {
 		return err
 	}
 	return runGit(repo, "pull", "--ff-only")
+}
+
+// Update is what updating a cloned plugin would bring, worked out before
+// anything in the clone changes, so that it can be read first.
+//
+// The commits say what changed; the manifest diff says whether what the
+// plugin may reach changed with them. A plugin's views run in a frame that
+// can do only what its manifest declares, and the app enforces that list, so
+// an update that leaves every manifest alone cannot reach anything new -- and
+// one that changes a manifest is worth reading before it is taken.
+type Update struct {
+	// From is the commit the clone is at, To the one updating would bring it
+	// to. Equal when there is nothing to update.
+	From string `json:"from"`
+	To   string `json:"to"`
+	// Commits are the new commits, newest first, as "abc1234 subject" -- at
+	// most maxUpdateCommits of them, with More counting the rest.
+	Commits []string `json:"commits"`
+	More    int      `json:"more"`
+	// Manifest is the diff of the plugin files -- the JSON files the loader
+	// reads, at the root and one folder down -- from From to To. Empty when
+	// none of them changed.
+	Manifest string `json:"manifest"`
+}
+
+// maxUpdateCommits bounds the commits an Update lists: enough to see what an
+// update is about, few enough to read.
+const maxUpdateCommits = 30
+
+// commitPattern is a full commit id, which is all ApplyUpdate takes.
+var commitPattern = regexp.MustCompile(`^[0-9a-f]{40}([0-9a-f]{24})?$`)
+
+// FetchUpdate fetches a clone's upstream and says what updating it would
+// bring, without changing what the clone has checked out.
+func FetchUpdate(repo string) (Update, error) {
+	if err := GitAvailable(); err != nil {
+		return Update{}, err
+	}
+	from, err := gitOutput(repo, "rev-parse", "HEAD")
+	if err != nil {
+		return Update{}, err
+	}
+	if err := runGit(repo, "fetch", "--quiet", "origin"); err != nil {
+		return Update{}, err
+	}
+	to, err := gitOutput(repo, "rev-parse", "@{upstream}")
+	if err != nil {
+		return Update{}, err
+	}
+	up := Update{From: from, To: to, Commits: []string{}}
+	if from == to {
+		return up, nil
+	}
+	if err := runGit(repo, "merge-base", "--is-ancestor", from, to); err != nil {
+		return Update{}, errors.New("the repository's history no longer contains what is installed -- it was rewritten upstream, or this clone has commits of its own -- so it cannot be fast-forwarded. Uninstall and install it again to take what is there now")
+	}
+	log, err := gitOutput(repo, "log", "--no-color", "--format=%h %s", from+".."+to)
+	if err != nil {
+		return Update{}, err
+	}
+	if log != "" {
+		up.Commits = strings.Split(log, "\n")
+	}
+	if len(up.Commits) > maxUpdateCommits {
+		up.More = len(up.Commits) - maxUpdateCommits
+		up.Commits = up.Commits[:maxUpdateCommits]
+	}
+
+	changed, err := gitOutput(repo, "diff", "--name-only", "--no-renames", from, to, "--", ":(glob)*.json", ":(glob)*/*.json")
+	if err != nil {
+		return Update{}, err
+	}
+	var manifests []string
+	for _, name := range strings.Split(changed, "\n") {
+		if name != "" && addons.IsFile(filepath.Base(name)) {
+			manifests = append(manifests, name)
+		}
+	}
+	if len(manifests) > 0 {
+		args := append([]string{"diff", "--no-color", "--no-ext-diff", "--no-renames", from, to, "--"}, manifests...)
+		if up.Manifest, err = gitOutput(repo, args...); err != nil {
+			return Update{}, err
+		}
+	}
+	return up, nil
+}
+
+// ApplyUpdate moves a clone forward to commit to, which FetchUpdate found --
+// that commit and no other, so what is installed is what was read, even if
+// the repository has moved on since. Fast-forward only, as Pull is.
+func ApplyUpdate(repo, to string) error {
+	if !commitPattern.MatchString(to) {
+		return fmt.Errorf("%q is not a commit to update to", to)
+	}
+	if err := GitAvailable(); err != nil {
+		return err
+	}
+	head, err := gitOutput(repo, "rev-parse", "HEAD")
+	if err != nil {
+		return err
+	}
+	if head == to {
+		return nil
+	}
+	if err := runGit(repo, "cat-file", "-e", to+"^{commit}"); err != nil {
+		return errors.New("that update has not been fetched here -- check for it again")
+	}
+	return runGit(repo, "merge", "--ff-only", "--quiet", to)
 }

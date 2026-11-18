@@ -27,9 +27,10 @@
         type PluginQuery,
     } from '../../plugins/categories';
     import { authorOf, knownStanding, standingOf } from '../../plugins/credit';
-    import type { KnownPlugin, PluginLink } from '../../plugins/types';
+    import type { KnownPlugin, PluginLink, PluginUpdate } from '../../plugins/types';
     import { fields } from '../../state/fields';
     import { resourceTabId } from '../../state/panes';
+    import { notices } from '../../state/notices.svelte';
     import { session } from '../../state/session.svelte';
     import { workspace } from '../../state/workspace.svelte';
     import Icon from '../Icon.svelte';
@@ -110,10 +111,41 @@
         return parts.slice(-2).join('/');
     }
 
+    /**
+     * The update waiting on an answer: which plugin, and what the app says it
+     * brings. Asked in the card, like an uninstall, before anything changes.
+     */
+    let reviewing = $state<({ id: string } & PluginUpdate) | null>(null);
+    /** The review's safe answer, focused so a stray Enter cannot update. */
+    let keepEl = $state<HTMLButtonElement | null>(null);
+
+    $effect(() => {
+        if (reviewing) keepEl?.focus();
+    });
+
+    /** Checks a plugin's repository and shows what an update would bring. */
     async function update(id: string): Promise<void> {
+        if (updating) return;
         updating = id;
         try {
-            await workspace.updatePluginFromGit(id);
+            const found = await workspace.pluginUpdate(id);
+            if (!found) return;
+            if (found.from === found.to) {
+                notices.inform(`${workspace.plugins.find((p) => p.id === id)?.name || id} is up to date`);
+                return;
+            }
+            reviewing = { id, ...found };
+        } finally {
+            updating = null;
+        }
+    }
+
+    /** Takes the update the card showed, and no later one. */
+    async function applyUpdate(id: string, to: string): Promise<void> {
+        if (updating) return;
+        updating = id;
+        try {
+            if (await workspace.updatePluginFromGit(id, to)) reviewing = null;
         } finally {
             updating = null;
         }
@@ -673,12 +705,12 @@
                 {#if plugin.repo && inPluginsDir(plugin)}
                     <button
                         class="update"
-                        disabled={updating === plugin.id || updatingAll !== null}
-                        title="git pull in {plugin.repo}"
+                        disabled={updating === plugin.id || updatingAll !== null || reviewing?.id === plugin.id}
+                        title="Fetch {plugin.repo} and show what an update would bring, before taking it"
                         onclick={() => void update(plugin.id)}
                     >
                         <Icon name="refresh" size={11} />
-                        {updating === plugin.id ? 'Updating…' : 'Update from repository'}
+                        {updating === plugin.id ? 'Checking…' : 'Update from repository'}
                     </button>
                 {/if}
                 <!-- Only what was installed into the plugins folder: the app
@@ -694,6 +726,38 @@
                         {uninstalling === plugin.id ? 'Uninstalling…' : 'Uninstall'}
                     </button>
                 {/if}
+            </div>
+        {/if}
+        {#if reviewing?.id === plugin.id}
+            {@const review = reviewing}
+            <!-- What the update brings, read before it is taken. The manifest
+                 is where everything the plugin may reach is declared, so a
+                 change to it is shown in full. -->
+            <div class="update-ask" class:widens={review.manifest !== ''} role="alertdialog" aria-label="Update {plugin.name}?">
+                <p class="question">
+                    {review.commits.length + review.more} new commit{review.commits.length + review.more === 1 ? '' : 's'}
+                    · <span class="path selectable">{review.from.slice(0, 12)} → {review.to.slice(0, 12)}</span>
+                </p>
+                <ul class="commits selectable">
+                    {#each review.commits as commit (commit)}<li>{commit}</li>{/each}
+                    {#if review.more > 0}<li class="more">and {review.more} more</li>{/if}
+                </ul>
+                {#if review.manifest}
+                    <p class="question warn">
+                        This update changes the plugin's manifest -- what it may read, change, call or run. Read the
+                        change before taking it.
+                    </p>
+                    <pre class="manifest selectable">{review.manifest}</pre>
+                {:else}
+                    <p class="question dim">The manifest is unchanged, so the plugin may reach nothing it could not before.</p>
+                {/if}
+                <div class="answers">
+                    <button bind:this={keepEl} class="uninstall-cancel" onclick={() => (reviewing = null)}>Keep this version</button>
+                    <button class="update-confirm" disabled={updating !== null} onclick={() => void applyUpdate(plugin.id, review.to)}>
+                        <Icon name="refresh" size={11} />
+                        {updating === plugin.id ? 'Updating…' : 'Update'}
+                    </button>
+                </div>
             </div>
         {/if}
         {#if asking?.id === plugin.id}
@@ -1521,6 +1585,97 @@
     }
 
     .uninstall:disabled {
+        opacity: 0.5;
+    }
+
+    /* The review an update waits on: what it brings, and -- when the manifest
+       changes -- that change, marked so it is not skimmed past. */
+    .update-ask {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 8px;
+        padding: 8px 10px;
+        border-radius: var(--radius-sm);
+        background: color-mix(in srgb, var(--accent) 6%, var(--bg-panel));
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+    }
+
+    .update-ask.widens {
+        background: color-mix(in srgb, var(--warn) 8%, var(--bg-panel));
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 45%, transparent);
+    }
+
+    .update-ask .question {
+        margin: 0;
+        font-size: 12px;
+        color: var(--text);
+        overflow-wrap: anywhere;
+    }
+
+    .update-ask .question.dim {
+        color: var(--text-dim);
+    }
+
+    .update-ask .question.warn {
+        font-weight: 600;
+    }
+
+    .update-ask .path {
+        font-family: var(--mono);
+        font-size: 11px;
+    }
+
+    .update-ask .commits {
+        margin: 0;
+        padding-left: 16px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text-dim);
+        max-height: 160px;
+        overflow: auto;
+    }
+
+    .update-ask .commits .more {
+        list-style: none;
+        font-family: inherit;
+    }
+
+    .update-ask .manifest {
+        margin: 0;
+        padding: 6px 8px;
+        max-height: 280px;
+        overflow: auto;
+        font-family: var(--mono);
+        font-size: 11px;
+        line-height: 1.4;
+        white-space: pre;
+        background: var(--bg);
+        border-radius: var(--radius-sm);
+    }
+
+    .update-ask .answers {
+        display: flex;
+        justify-content: flex-end;
+        gap: 6px;
+    }
+
+    .update-confirm {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 10px;
+        border-radius: var(--radius-sm);
+        font-size: 11.5px;
+        color: var(--accent);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+    }
+
+    .update-confirm:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--accent) 16%, transparent);
+    }
+
+    .update-confirm:disabled {
         opacity: 0.5;
     }
 

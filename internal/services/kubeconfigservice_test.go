@@ -147,6 +147,68 @@ func TestAddFolderRefusesAFolderWithNothingInIt(t *testing.T) {
 	}
 }
 
+// execConfig is sampleConfig's shape with a user that runs a program.
+const execConfig = `apiVersion: v1
+kind: Config
+current-context: c
+clusters:
+- name: k
+  cluster:
+    server: https://203.0.113.10:6443
+contexts:
+- name: c
+  context:
+    cluster: k
+    user: u
+users:
+- name: u
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1
+      command: sh
+      args: ["-c", "id"]
+`
+
+// In the web version, an administrator adding a kubeconfig by path -- one a
+// plugin's repository put on disk, say -- must not get a program run in the
+// pod by it.
+func TestTheWebVersionRefusesAnExecKubeconfigAddedByPath(t *testing.T) {
+	s := service(t)
+	s.server = true
+	dir := t.TempDir()
+	path := write(t, dir, "evil.yaml", execConfig)
+
+	if _, err := s.AddFile(t.Context(), path); err == nil || !strings.Contains(err.Error(), "runs a program") {
+		t.Fatalf("AddFile = %v, want it refused for running a program", err)
+	}
+	if _, err := s.AddFolder(t.Context(), dir); err == nil || !strings.Contains(err.Error(), "runs a program") {
+		t.Fatalf("AddFolder = %v, want it refused for running a program", err)
+	}
+	if len(s.store.ManualFiles()) != 0 || len(s.Folders()) != 0 {
+		t.Fatal("nothing refused may be remembered")
+	}
+}
+
+func TestTheWebVersionTakesAnExecKubeconfigTheDeploymentMounted(t *testing.T) {
+	s := service(t)
+	s.server = true
+	mounted := realTempDir(t)
+	write(t, mounted, "eks.yaml", execConfig)
+	s.extra, s.trusted = []string{mounted}, []string{mounted}
+
+	if got := s.Sync(); len(got) != 1 || len(got[0].Contexts) != 1 {
+		t.Fatalf("a mounted exec kubeconfig must be offered: %+v", got)
+	}
+}
+
+func TestTheDesktopAppTakesAnExecKubeconfig(t *testing.T) {
+	s := service(t)
+	path := write(t, t.TempDir(), "eks.yaml", execConfig)
+	if _, err := s.AddFile(t.Context(), path); err != nil {
+		t.Fatalf("AddFile = %v; the desktop app runs its user's own plugins", err)
+	}
+}
+
 func TestAddFolderRefusesAFile(t *testing.T) {
 	s := service(t)
 	path := write(t, t.TempDir(), "a.config", sampleConfig)
@@ -531,5 +593,14 @@ func TestRemoveContextRefusesNothing(t *testing.T) {
 	s := service(t)
 	if _, err := s.RemoveContext(t.Context(), ""); err == nil {
 		t.Error("RemoveContext(\"\") = nil error, want a complaint")
+	}
+}
+
+// The node shell's image is stated twice, since appconfig knows nothing of
+// Kubernetes: once as the setting's default, once as kube's fallback. They
+// must be the same pinned image.
+func TestTheNodeShellImageIsStatedTheSameTwice(t *testing.T) {
+	if appconfig.DefaultNodeImage != kube.DefaultNodeShellImage {
+		t.Fatalf("appconfig says %q, kube says %q", appconfig.DefaultNodeImage, kube.DefaultNodeShellImage)
 	}
 }

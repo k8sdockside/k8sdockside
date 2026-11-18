@@ -31,6 +31,7 @@ var (
 	errNoSuchUser    = errors.New("there is no such user")
 	errNoSuchThing   = errors.New("there is no such provider")
 	errProviderTaken = errors.New("a provider with that id already exists")
+	errIdentityTaken = errors.New("that account is already connected to another user here")
 )
 
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._@-]{0,63}$`)
@@ -71,6 +72,12 @@ func (u User) DisplayName() string {
 
 // HasPassword reports whether the user can sign in with a password.
 func (u User) HasPassword() bool { return u.PasswordHash != "" }
+
+// AwaitingFirstSignIn reports whether nobody can sign in as the user yet: an
+// administrator added them by email address, with no password, and no
+// provider account has claimed them. Only such a user may be claimed by an
+// address alone -- see signInExternal.
+func (u User) AwaitingFirstSignIn() bool { return !u.HasPassword() && len(u.Identities) == 0 }
 
 // sessionUser is the user as the app's services see it.
 func (u User) sessionUser() session.User {
@@ -256,6 +263,42 @@ func (s *store) userByIdentity(provider, subject string) (User, bool) {
 			return id.Provider == provider && id.Subject == subject
 		})
 	})
+}
+
+// linkIdentity connects a provider account to a user, as long as no other
+// user has it. Connecting the same account twice changes nothing; a second
+// account with the same provider is refused rather than replacing the first.
+func (s *store) linkIdentity(id string, ident Identity) (User, error) {
+	var linked User
+	err := s.mutate(func(st *state) error {
+		for _, u := range st.Users {
+			if u.ID != id && slices.ContainsFunc(u.Identities, func(x Identity) bool {
+				return x.Provider == ident.Provider && x.Subject == ident.Subject
+			}) {
+				return errIdentityTaken
+			}
+		}
+		i := st.userIndex(id)
+		if i < 0 {
+			return errNoSuchUser
+		}
+		u := &st.Users[i]
+		for _, x := range u.Identities {
+			if x.Provider != ident.Provider {
+				continue
+			}
+			if x.Subject != ident.Subject {
+				return errors.New("your account is already connected to a different account with that provider")
+			}
+			linked = *u
+			return nil
+		}
+		u.Identities = append(u.Identities, ident)
+		linked = *u
+		return nil
+	})
+	linked.Identities = slices.Clone(linked.Identities)
+	return linked, err
 }
 
 // userByEmail finds the one user with an email address. Two users sharing one

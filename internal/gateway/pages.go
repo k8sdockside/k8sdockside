@@ -28,6 +28,9 @@ type view struct {
 	Next          string
 	PasswordLogin bool
 	SetupToken    bool
+	// TokenInLog says the setup token was made at startup and is in the
+	// server's log, rather than configured.
+	TokenInLog    bool
 	Providers     []Provider
 	ProviderTypes []providerType
 	CallbackBase  string
