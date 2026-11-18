@@ -7,8 +7,15 @@
     {{if .SetupToken}}
     <label>Setup token
       <input name="token" required autocomplete="off">
+      {{if .TokenInLog}}
+      <small>No token was configured, so the server made one when it started and wrote it to its log, as <code>setupToken=…</code>. In Kubernetes: <code>kubectl logs deploy/&lt;name&gt; | grep setupToken</code>. It changes on every restart until the administrator exists.</small>
+      {{else}}
       <small>The value this deployment was given in K8SDOCKSIDE_SETUP_TOKEN.</small>
+      {{end}}
     </label>
+    {{end}}
+    {{if not .PasswordLogin}}
+    <p class="muted">Password sign-in is switched off here, so this password works only for the session this page starts. Before it ends, connect a sign-in provider on your account page, or list your address in K8SDOCKSIDE_ADMIN_EMAILS.</p>
     {{end}}
     <label>Username
       <input name="username" required autocomplete="username" autofocus value="{{index .Form "username"}}">

@@ -27,20 +27,100 @@ runs:
     # Wails links against GTK 4 and WebKitGTK 6 on Linux, and the wails3 CLI is
     # a Go program in the same module, so it needs the headers too -- not only
     # the app. Without these, nothing here compiles.
+    #
+    # They come to about 150 MB of packages, and every Go job needs them. The
+    # Ubuntu mirror some runners use is at times slow enough (tens of KB/s) for
+    # the download alone to outlast the job, and with several jobs fetching in
+    # parallel one of them usually does. So the .debs are cached, and a run
+    # installs from the cache without touching the network.
+    - name: Resolve Linux GUI packages
+      if: runner.os == 'Linux' && inputs.gui-deps == 'true'
+      id: gui-debs
+      shell: bash
+      # ImageOS and ImageVersion are set on GitHub-hosted runners; without
+      # them (a self-hosted runner) nothing is cached. The exact key names the
+      # image build, but the cache is restored from any build of the same OS
+      # (see the next step): GitHub runs more than one build of an image at
+      # once -- on Azure and on AWS, the latter with the slow mirror -- and a
+      # cache only the exact build could use would miss on whichever fleet did
+      # not make it.
+      run: |
+        packages="build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev"
+        echo "packages=$packages" >> "$GITHUB_OUTPUT"
+        echo "dir=$RUNNER_TEMP/gui-debs" >> "$GITHUB_OUTPUT"
+        if [ -n "${ImageOS:-}" ] && [ -n "${ImageVersion:-}" ]; then
+          echo "prefix=gui-debs-$ImageOS-" >> "$GITHUB_OUTPUT"
+          echo "key=gui-debs-$ImageOS-$ImageVersion-$RUNNER_ARCH-$(printf '%s' "$packages" | sha256sum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+        fi
+
+    # With restore-keys, the newest cache of any build of this OS is restored
+    # when this build has none of its own -- whatever its architecture or
+    # package list. Whether it fits is apt's call, in the next step.
+    - name: Restore Linux GUI packages
+      if: steps.gui-debs.outputs.key != ''
+      id: gui-debs-cache
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ steps.gui-debs.outputs.dir }}
+        key: ${{ steps.gui-debs.outputs.key }}
+        restore-keys: ${{ steps.gui-debs.outputs.prefix }}
+
     - name: Install Linux GUI build dependencies
       if: runner.os == 'Linux' && inputs.gui-deps == 'true'
+      id: gui-install
       shell: bash
+      env:
+        PACKAGES: ${{ steps.gui-debs.outputs.packages }}
+        DEBS: ${{ steps.gui-debs.outputs.dir }}
+        RESTORED: ${{ steps.gui-debs-cache.outputs.cache-matched-key }}
       # Composite steps take no timeout-minutes, so each apt call has its own:
       # a mirror that stops answering is tried again a few times, and given
-      # up on after five minutes, instead of holding the job until its limit.
+      # up on, instead of holding the job until its limit.
       run: |
+        if [ -n "$RESTORED" ] && compgen -G "$DEBS/*.deb" >/dev/null; then
+          # The packages are named as well as the files, so a cache that lacks
+          # one of them cannot pass for a fit. apt orders the installs and
+          # checks every dependency is among these files or already installed.
+          # --no-download makes a gap an error rather than a trip to the
+          # mirror, and without --allow-downgrades a cached package older than
+          # the image's own is one too: either way the cache does not fit this
+          # image, and it is downloaded below instead. apt's archive folder has
+          # to be this one as well: a file that upgrades an installed package
+          # (libc6, say) is otherwise looked for there, and apt fails with
+          # "Pathname to install is not absolute".
+          # shellcheck disable=SC2086 # PACKAGES is a list, split on purpose
+          if timeout 300 sudo apt-get -o Dir::Cache::archives="$DEBS" \
+            install -y --no-download --no-install-recommends $PACKAGES "$DEBS"/*.deb; then
+            echo "from=cache" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::warning::The cached GUI packages ($RESTORED) do not fit runner image ${ImageVersion:-unknown}; downloading them instead."
+        fi
+        # Downloaded into a folder of our own, which apt keeps, so the next
+        # step can cache exactly the packages this image was missing.
+        sudo rm -rf "$DEBS"
+        mkdir -p "$DEBS/partial"
         apt_opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
         timeout 300 sudo apt-get "${apt_opts[@]}" update
-        timeout 600 sudo apt-get "${apt_opts[@]}" install -y --no-install-recommends \
-          build-essential \
-          pkg-config \
-          libgtk-4-dev \
-          libwebkitgtk-6.0-dev
+        # shellcheck disable=SC2086 # PACKAGES is a list, split on purpose
+        timeout 600 sudo apt-get "${apt_opts[@]}" \
+          -o Dir::Cache::archives="$DEBS" -o APT::Keep-Downloaded-Packages=true \
+          install -y --no-install-recommends $PACKAGES
+        sudo rm -rf "$DEBS/partial" "$DEBS/lock"
+        sudo chown -R "$(id -u):$(id -g)" "$DEBS"
+        echo "from=download" >> "$GITHUB_OUTPUT"
+
+    # Saved straight away rather than at the end of the job, so a lint or test
+    # failure later on still leaves the next run a cache. Only what was
+    # downloaded is saved: a cache that installed cleanly is left as it is.
+    # When several jobs download at once, the first to save wins and the rest
+    # only log a warning.
+    - name: Save Linux GUI packages
+      if: steps.gui-debs.outputs.key != '' && steps.gui-install.outputs.from == 'download'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ steps.gui-debs.outputs.dir }}
+        key: ${{ steps.gui-debs.outputs.key }}
 
     - name: Set up Go
       uses: actions/setup-go@v7

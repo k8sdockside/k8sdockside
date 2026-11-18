@@ -3,6 +3,7 @@ package appconfig
 import (
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -74,6 +75,36 @@ func TestTerminalSettingsSurviveAReopen(t *testing.T) {
 func TestTheLocalShellDefaultsToTheMachinesOwn(t *testing.T) {
 	if got := openIn(t).Get().Preferences.Terminal.LocalShell; got != "" {
 		t.Errorf("local shell = %q, want empty: the default is this machine's", got)
+	}
+}
+
+// The node shell runs its image privileged, with the node's filesystem
+// mounted: the default must be a fixed image, not whatever a tag points at.
+func TestTheDefaultNodeImageIsPinnedByDigest(t *testing.T) {
+	if !strings.Contains(DefaultNodeImage, "@sha256:") {
+		t.Fatalf("DefaultNodeImage = %q, want it pinned by digest", DefaultNodeImage)
+	}
+}
+
+func TestTheOldUnpinnedDefaultNodeImageIsMovedOn(t *testing.T) {
+	for stored, want := range map[string]string{
+		"busybox":                        DefaultNodeImage,
+		" busybox ":                      DefaultNodeImage,
+		"busybox:latest":                 "busybox:latest",
+		"registry.internal/busybox:1.36": "registry.internal/busybox:1.36",
+	} {
+		path := tempSettings(t)
+		raw := `{"preferences":{"terminal":{"nodeImage":` + strconv.Quote(stored) + `}}}`
+		if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		store, err := openAt(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := store.Get().Preferences.Terminal.NodeImage; got != want {
+			t.Errorf("a stored %q became %q, want %q", stored, got, want)
+		}
 	}
 }
 

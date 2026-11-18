@@ -85,6 +85,8 @@ spec:
             {{- end }}
             - name: K8SDOCKSIDE_TRUST_FORWARDED
               value: {{ .Values.auth.trustForwardedHeaders | quote }}
+            - name: K8SDOCKSIDE_PROXY_HOPS
+              value: {{ .Values.auth.proxyHops | default 1 | quote }}
             - name: K8SDOCKSIDE_IN_CLUSTER
               value: {{ .Values.clusters.inCluster.enabled | quote }}
             {{- if .Values.clusters.inCluster.enabled }}

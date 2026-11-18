@@ -238,6 +238,14 @@ clusters:
   # All of the above are mounted as one read-only directory,
   # /etc/k8sdockside/kubeconfigs, named in K8SDOCKSIDE_KUBECONFIG_DIRS. Admins can
   # also upload kubeconfigs at /-/admin; those are stored under /data.
+  #
+  # Only the kubeconfigs listed here (and the in-cluster one) may use an `exec`
+  # plugin, an auth provider or a file path such as tokenFile or
+  # certificate-authority. An uploaded kubeconfig, or one an admin adds by its
+  # path, must carry its credentials inline (token, client-certificate-data,
+  # client-key-data, certificate-authority-data): an exec stanza would run a
+  # program in the pod, and a file path would send that file to whichever server
+  # the kubeconfig names.
 
 # RBAC for the pod's own ServiceAccount. Only rendered when
 # clusters.inCluster.enabled is true.
@@ -281,6 +289,12 @@ auth:
   # behind an ingress or gateway, which sets them; leave off when the Service is
   # reached directly, or clients can claim any address they like.
   trustForwardedHeaders: false
+  # How many proxies in front of the pod append to X-Forwarded-For: 1 for an
+  # ingress or gateway reached directly, 2 for a cloud load balancer in front of
+  # it that appends too. The client's address -- which failed sign-ins are
+  # counted against -- is read that many entries from the right, because the
+  # entries further left are whatever the client chose to send.
+  proxyHops: 1
   # How long a sign-in lasts (a Go duration).
   sessionTTL: 168h
   # Allow username + password sign-in for local users. With false, only the
@@ -288,8 +302,10 @@ auth:
   passwordLogin: true
 
   # On first start, with no users yet, the first visitor creates the admin
-  # account. On an address anyone can reach, protect that page with a token the
-  # visitor must present -- or skip it entirely with bootstrapAdmin.
+  # account, and must present a setup token. Set it here or in a Secret; left
+  # empty, the server makes one at startup and writes it to its log
+  # (kubectl logs deploy/<release> | grep setupToken). Or skip the page
+  # entirely with bootstrapAdmin.
   setupToken: ""
   # Or take the token from an existing Secret (wins over setupToken).
   existingSetupTokenSecret:

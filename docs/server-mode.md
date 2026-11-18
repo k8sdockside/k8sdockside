@@ -115,17 +115,31 @@ and commented in full in its [values.yaml](../charts/k8sdockside/values.yaml).
 
 ## Signing in
 
-**The first user becomes the admin.** On first start, with no users yet, the
-first visitor is asked to create the admin account. On an address anyone can
-reach, do not leave that open. Either:
+**The first admin needs a setup token.** On first start, with no users yet,
+the first-run page at `/-/setup` creates the admin account, and it asks for a
+setup token, so that whoever happens to reach a fresh install first does not
+get to own it. The token is one of:
 
-- set a **setup token** (`auth.setupToken`, or `auth.existingSetupTokenSecret`):
-  the first-run page then asks for it, so only someone who can read the Secret
-  can claim admin; or
-- create the admin **at startup** (`auth.bootstrapAdmin`, or its
-  `existingSecret`), and the first-run page never appears. This only happens
-  while no users exist, so changing the values later does not reset anyone's
-  password.
+- **the one you set** (`auth.setupToken`, or `auth.existingSetupTokenSecret`),
+  so only someone who can read that Secret can claim admin; or
+- **one the server makes**, when you set neither that nor a bootstrap admin. It
+  is written to the server's log at startup, and only there:
+
+  ```sh
+  kubectl -n k8sdockside logs deploy/k8sdockside | grep setupToken
+  ```
+
+  A new one is made on every start until the admin exists — on an ephemeral
+  `/data`, after every restart that finds no users.
+
+Or create the admin **at startup** (`auth.bootstrapAdmin`, or its
+`existingSecret`), and the first-run page never appears. This only happens
+while no users exist, so changing the values later does not reset anyone's
+password.
+
+While nobody exists, a sign-in through an OAuth provider is refused unless its
+verified address is in `auth.adminEmails`: with `autoSignup` on a public
+provider, the first person through could otherwise be anyone.
 
 **Admins and users.** Admins manage users, sign-in providers, clusters and
 plugins at `/-/admin`; everyone else uses the app. Both work with the same
@@ -135,7 +149,27 @@ be done to the clusters.
 Local users sign in with a username and password; `auth.passwordLogin: false`
 turns that off and leaves OAuth only. `auth.adminEmails` makes anyone who
 signs in through OAuth with one of those verified addresses an admin — the
-declarative way to hand out admin on an OAuth-only install.
+declarative way to hand out admin on an OAuth-only install. (An admin created
+on the first-run page of an OAuth-only install has a password that works for
+that one session: connect a provider from *Your account* before it ends, or
+list the address in `auth.adminEmails`.)
+
+**Matching a provider sign-in to a user.** A sign-in through a provider is the
+user who signed in with that provider account before. Otherwise, if the
+provider vouches for the address (verified), it claims the user an admin added
+with that address — but only one nobody can sign in as yet: no password, and
+no provider account. An account that already has either is never handed to a
+provider on the strength of an address, since that would make the least
+careful enabled provider the way into every account, the admin's included.
+Its owner adds providers from **Your account → Connect a sign-in provider**,
+while signed in.
+
+What the address still decides — `auth.adminEmails`, `allowedDomains`, and
+claiming an invited user — rests on every enabled provider verifying
+addresses properly. Facebook sends no verified flag, and the address it sends
+is taken as verified; an OIDC provider's `email_verified` claim is believed;
+Microsoft's address, which carries no such claim, is not. Enable only
+providers you would trust to say who owns an address.
 
 A sign-in lasts `auth.sessionTTL`, a week by default.
 
@@ -307,9 +341,11 @@ Key names must be unique across all the Secrets, since they share a directory.
 
 The standard `KUBECONFIG` variable works too, through `extraEnv`.
 
-**No credential plugins.** The image contains git and helm and nothing else,
-so a kubeconfig whose user runs an `exec` plugin — `aws eks get-token`,
-`gke-gcloud-auth-plugin`, `kubelogin` — cannot authenticate. Use a token or a
+**No credential plugins in the image.** The image contains git and helm and
+nothing else, so a kubeconfig whose user runs an `exec` plugin — `aws eks
+get-token`, `gke-gcloud-auth-plugin`, `kubelogin` — cannot authenticate. (A
+mounted kubeconfig may still name one; an uploaded one may not — see
+[Uploaded in the admin UI](#uploaded-in-the-admin-ui).) Use a token or a
 client certificate instead: typically a ServiceAccount in the target cluster,
 bound to what it should be allowed, and a kubeconfig carrying its token. Or
 build an image `FROM` this one with the plugin added.
@@ -318,6 +354,24 @@ build an image `FROM` this one with the plugin added.
 
 Admins can upload kubeconfigs at `/-/admin`. They are stored under
 `/data/kubeconfigs`, so they last only as long as the data volume does.
+
+**Uploaded kubeconfigs carry their credentials inline.** A kubeconfig is not
+just data: an `exec` stanza names a program that the Kubernetes client runs,
+and `tokenFile`, `client-certificate`, `client-key` and
+`certificate-authority` name files it reads and sends to whatever server the
+same file names. Uploading a kubeconfig must not be a way to run a shell in
+the pod, or to send the pod's own ServiceAccount token somewhere. So an upload
+is refused unless every user and cluster in it uses `token`,
+`client-certificate-data`, `client-key-data` and `certificate-authority-data`
+— no `exec`, no `auth-provider`, no file paths — even ones no context uses.
+
+The same holds for a kubeconfig an admin adds by path inside the app, and for
+anything else outside the deployment's own sources. Only the in-cluster
+context, the Secrets the chart mounts (`clusters.kubeconfigs`,
+`clusters.existingSecrets`, `K8SDOCKSIDE_KUBECONFIG_DIRS`) and files named in
+`KUBECONFIG` may use exec plugins and file paths: whoever writes those already
+controls the deployment. A file uploaded by an older version that breaks this
+rule stays on disk but offers no contexts, and the clusters page says why.
 
 ## Persistence
 
@@ -374,6 +428,17 @@ auth:
 behind a proxy that sets them: reached directly, a client could claim any
 address it liked.
 
+The client's address — what failed sign-ins are counted against — is read
+from `X-Forwarded-For` **from the right**. A proxy appends the address it was
+reached from to whatever the request already carried, so the entries on the
+left are the client's own words. `auth.proxyHops` says how many proxies
+append: 1 (the default) for an ingress or gateway reached directly, 2 for a
+cloud load balancer in front of it that appends too.
+
+Failed sign-ins are limited per address (30 in 15 minutes), per username from
+one address (10), and per username from anywhere (100). A known username can
+therefore not be locked out by failing on purpose from one address.
+
 With the Gateway API instead:
 
 ```yaml
@@ -398,13 +463,14 @@ running it some other way.
 | `K8SDOCKSIDE_DATA_DIR` | `/data` | Where all state is kept. `XDG_CONFIG_HOME` and Helm's cache, config and data directories are pointed inside it unless already set |
 | `K8SDOCKSIDE_PUBLIC_URL` | | External URL; used for OAuth callback URLs and Secure cookies |
 | `K8SDOCKSIDE_TRUST_FORWARDED` | `false` | Honour `X-Forwarded-Proto`/`-Host`/`-For` |
+| `K8SDOCKSIDE_PROXY_HOPS` | `1` | Proxies in front that append to `X-Forwarded-For`; the client address is read that many entries from the right (1–10) |
 | `K8SDOCKSIDE_IN_CLUSTER` | `auto` | Offer the pod's ServiceAccount as a context: `auto` (when a token is mounted), `true` or `false` |
 | `K8SDOCKSIDE_IN_CLUSTER_NAME` | `in-cluster` | That context's name |
 | `K8SDOCKSIDE_KUBECONFIG_DIRS` | | Comma-separated directories of read-only kubeconfig files. Each regular file or symlink directly inside is read; dot files are skipped |
 | `KUBECONFIG` | | Also read, as usual |
 | `K8SDOCKSIDE_SESSION_TTL` | `168h` | How long a sign-in lasts (Go duration) |
 | `K8SDOCKSIDE_PASSWORD_LOGIN` | `true` | Allow username and password sign-in |
-| `K8SDOCKSIDE_SETUP_TOKEN` | | Required on the first-run page, when set |
+| `K8SDOCKSIDE_SETUP_TOKEN` | | The token the first-run page asks for. Unset, and with no bootstrap admin, the server makes one and logs it as `setupToken=…` |
 | `K8SDOCKSIDE_ADMIN_USERNAME`, `K8SDOCKSIDE_ADMIN_PASSWORD` | | Create this admin at startup while there are no users |
 | `K8SDOCKSIDE_ADMIN_EMAILS` | | Comma-separated; OAuth users with one of these verified addresses become admins |
 | `K8SDOCKSIDE_AUTH_PROVIDERS_FILE` | | JSON array of [OAuth providers](#oauth-providers), shown read-only in the admin UI |
@@ -450,8 +516,13 @@ running it some other way.
   a cluster is served there: a view gets its data through the app, which does
   need a sign-in. Don't install a plugin whose view files you want kept
   private.
-- **Claim admin before anyone else can.** On a public address, set a setup token
-  or a bootstrap admin (see [Signing in](#signing-in)).
+- **Claim admin before anyone else can.** The first-run page needs a setup
+  token — yours, or one the server logs at startup — so reaching a fresh
+  install first is not enough; anyone who can read the pod's logs can read a
+  logged one. Set a bootstrap admin to skip the page entirely (see
+  [Signing in](#signing-in)).
+- **Uploaded kubeconfigs cannot run programs or read files in the pod.** See
+  [Uploaded in the admin UI](#uploaded-in-the-admin-ui).
 - **Terminate TLS in front of it** and set `auth.publicURL` to the `https://`
   address, so session cookies are marked Secure.
 - **Trust forwarded headers only behind a proxy** that sets them.

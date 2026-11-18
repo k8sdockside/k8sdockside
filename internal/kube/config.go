@@ -189,6 +189,40 @@ type Sources struct {
 	Files    []string // added by hand
 	Folders  []string // scanned on every sync
 	Excluded []string // found, but hidden at the user's request
+
+	// InlineOnly is set in the web version, where whoever adds a kubeconfig
+	// is not trusted with the pod reading it: there, a kubeconfig must carry
+	// its credentials inline -- see CheckInline -- and one that does not is
+	// reported as broken and offers no contexts. Those in Trusted, and those
+	// $KUBECONFIG names, are exempt: the deployment provided them.
+	InlineOnly bool
+	Trusted    []string
+}
+
+// Admit reports why these sources would refuse the kubeconfig at path if it
+// were added by hand, or nil if they would take it -- so that adding one can
+// fail at once rather than leave a broken entry behind. See InlineOnly.
+func (s Sources) Admit(path string) error {
+	return s.admit(resolve(path), SourceManual, s.trustedDirs())
+}
+
+func (s Sources) admit(resolved, source string, trusted []string) error {
+	if !s.InlineOnly || source == SourceEnv || within(resolved, trusted) {
+		return nil
+	}
+	return CheckInline(resolved)
+}
+
+// trustedDirs is Trusted resolved the way the files found are, so the two can
+// be compared.
+func (s Sources) trustedDirs() []string {
+	var out []string
+	for _, dir := range s.Trusted {
+		if resolved := resolve(dir); resolved != "" {
+			out = append(out, resolved)
+		}
+	}
+	return out
 }
 
 // Discover finds every kubeconfig the app should offer: ~/.kube/config, the
@@ -242,6 +276,8 @@ func Discover(sources Sources) []File {
 		}
 	}
 
+	trusted := sources.trustedDirs()
+
 	files := make([]File, 0, len(candidates))
 	seen := make(map[string]bool, len(candidates))
 	for _, c := range candidates {
@@ -258,6 +294,11 @@ func Discover(sources Sources) []File {
 		}
 
 		parsed, nothingThere := parseFile(resolved, c.source)
+		if parsed.Error == "" {
+			if err := sources.admit(resolved, c.source, trusted); err != nil {
+				parsed.Error, parsed.Contexts = err.Error(), []Context{}
+			}
+		}
 		// A glob hit that turns out not to be a kubeconfig is not an error the
 		// user needs to see -- they never asked for that file. Nor is a
 		// ~/.kube/config that is absent or empty: plenty of people keep every

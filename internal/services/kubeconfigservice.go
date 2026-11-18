@@ -28,7 +28,12 @@ type KubeconfigService struct {
 	// extra are folders scanned on every sync beside the user's own sources,
 	// which the user cannot stop watching -- see Options.KubeconfigFolders.
 	extra []string
-	// server is set in the web version, which has no file manager to open.
+	// trusted are the folders whose kubeconfigs may run exec plugins and name
+	// files in the web version -- see Options.TrustedKubeconfigFolders.
+	trusted []string
+	// server is set in the web version, which has no file manager to open,
+	// and where a kubeconfig from anywhere but trusted must carry its
+	// credentials inline.
 	server bool
 
 	mu    sync.RWMutex
@@ -46,11 +51,7 @@ func NewKubeconfigService(store *appconfig.Store) *KubeconfigService {
 // paths, and the rest of ~/.kube -- takes out the contexts the user has
 // removed, and returns what is left.
 func (s *KubeconfigService) Sync() []kube.File {
-	files := s.withoutRemoved(kube.Discover(kube.Sources{
-		Files:    s.store.ManualFiles(),
-		Folders:  slices.Concat(s.store.ManualFolders(), s.extra),
-		Excluded: s.store.ExcludedFiles(),
-	}))
+	files := s.withoutRemoved(kube.Discover(s.sources()))
 
 	index := make(map[string]kube.Context)
 	for _, f := range files {
@@ -63,6 +64,17 @@ func (s *KubeconfigService) Sync() []kube.File {
 	s.files, s.index = files, index
 	s.mu.Unlock()
 	return files
+}
+
+// sources is everything Sync scans, and the rule for what it accepts.
+func (s *KubeconfigService) sources() kube.Sources {
+	return kube.Sources{
+		Files:      s.store.ManualFiles(),
+		Folders:    slices.Concat(s.store.ManualFolders(), s.extra),
+		Excluded:   s.store.ExcludedFiles(),
+		InlineOnly: s.server,
+		Trusted:    s.trusted,
+	}
 }
 
 // withoutRemoved takes the removed contexts out of the files that still hold
@@ -164,6 +176,9 @@ func (s *KubeconfigService) AddFile(ctx context.Context, path string) ([]kube.Fi
 	}
 	if parsed := kube.ParseFile(abs, kube.SourceManual); parsed.Error != "" {
 		return s.Files(), errors.New(parsed.Error)
+	}
+	if err := s.sources().Admit(abs); err != nil {
+		return s.Files(), err
 	}
 	if _, err := s.store.AddManualFile(abs); err != nil {
 		return s.Files(), err
@@ -302,8 +317,23 @@ func (s *KubeconfigService) AddFolder(ctx context.Context, path string) ([]kube.
 	if !info.IsDir() {
 		return s.Files(), errors.New("not a folder")
 	}
-	if found := kube.ScanFolder(abs); len(found) == 0 {
+	found := kube.ScanFolder(abs)
+	if len(found) == 0 {
 		return s.Files(), fmt.Errorf("no kubeconfig files in %s", filepath.Base(abs))
+	}
+	// A folder's files that are refused are left out of the sidebar without a
+	// word, as a folder's broken files are; a folder of nothing but those
+	// would look as if adding it had done nothing.
+	var refused error
+	admitted := slices.ContainsFunc(found, func(f kube.File) bool {
+		err := s.sources().Admit(f.Path)
+		if refused == nil {
+			refused = err
+		}
+		return err == nil
+	})
+	if !admitted {
+		return s.Files(), fmt.Errorf("none of the kubeconfigs in %s can be used here: %s: %w", filepath.Base(abs), filepath.Base(found[0].Path), refused)
 	}
 	if _, err := s.store.AddManualFolder(abs); err != nil {
 		return s.Files(), err

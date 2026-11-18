@@ -41,9 +41,13 @@ SIGNING IN
     kubectl --namespace {{ $ns }} get secret {{ include "k8sdockside.authSecretName" . }} -o jsonpath='{.data.setup-token}' | base64 -d
 {{- else }}
 
-  WARNING: whoever opens the page first creates the admin account. Open it
-  yourself before anyone else can reach it, or set auth.setupToken or
-  auth.bootstrapAdmin.
+  The first visitor creates the admin account, and has to present the setup
+  token the server made at startup and wrote to its log:
+
+    kubectl --namespace {{ $ns }} logs deploy/{{ $fullname }} | grep setupToken
+
+  A new one is made on every start until the admin exists. Set auth.setupToken
+  or auth.bootstrapAdmin to choose it yourself.
 {{- end }}
 
   Admins manage users, sign-in providers, clusters and plugins at {{ $publicURL | default "" }}/-/admin

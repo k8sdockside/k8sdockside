@@ -9,6 +9,20 @@
     <dt>Signs in with</dt><dd>{{range $i, $m := .SignIn}}{{if $i}}, {{end}}{{$m}}{{else}}—{{end}}</dd>
   </dl>
 </section>
+{{if .Providers}}
+<section class="panel">
+  <h2>Connect a sign-in provider</h2>
+  <p class="muted">Sign in with another account of yours from now on. You are sent to the provider, and whichever account you sign in to there is connected to this one.</p>
+  <div class="stack narrow">
+    {{range .Providers}}
+    <form method="post" action="/-/account/connect/{{.ID}}">
+      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+      <button type="submit" class="provider {{.Type}}">Connect {{.Name}}</button>
+    </form>
+    {{end}}
+  </div>
+</section>
+{{end}}
 {{if .PasswordLogin}}
 <section class="panel">
   <h2>{{if .User.HasPassword}}Change your password{{else}}Set a password{{end}}</h2>

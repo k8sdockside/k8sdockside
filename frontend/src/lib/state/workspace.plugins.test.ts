@@ -617,6 +617,41 @@ describe('solution plugins', () => {
         expect(notices.current?.text).toBe('Installed MetalLB');
     });
 
+    // "Update all" is one click across every plugin, so it takes only what
+    // stays inside what each plugin was already allowed: an update that
+    // changes a manifest is held back for its own card, where it is shown.
+    test('updating every plugin holds back the ones whose manifest changes', async () => {
+        const cloned = (id: string) => ({ ...plugin(id), origin: `/p/${id}/plugin.json`, repo: `/p/${id}` });
+        workspace.pluginCatalogue = { plugins: [cloned('same'), cloned('code'), cloned('wider')], dir: '/p', folders: [], problems: [] };
+        const previews: Record<string, { from: string; to: string; commits: string[]; more: number; manifest: string }> = {
+            same: { from: 's1', to: 's1', commits: [], more: 0, manifest: '' },
+            code: { from: 'c1', to: 'c2', commits: ['c2 Tidy'], more: 0, manifest: '' },
+            wider: { from: 'w1', to: 'w2', commits: ['w2 Read secrets'], more: 0, manifest: '+ "secrets"' },
+        };
+        // Cast because the bindings return a CancellablePromise, which nothing
+        // here cancels: a plain promise is what a stubbed call answers with.
+        vi.mocked(PluginService.UpdatePreview).mockImplementation(
+            (async (id: string) => previews[id]) as unknown as typeof PluginService.UpdatePreview,
+        );
+        vi.mocked(PluginService.UpdateFromGit)
+            .mockClear()
+            .mockImplementation((async () => workspace.pluginCatalogue) as unknown as typeof PluginService.UpdateFromGit);
+
+        await workspace.updateAllPluginsFromGit(['same', 'code', 'wider']);
+
+        expect(PluginService.UpdateFromGit).toHaveBeenCalledTimes(1);
+        expect(PluginService.UpdateFromGit).toHaveBeenCalledWith('code', 'c2');
+        expect(notices.current?.tone).toBe('error');
+        expect(notices.current?.text).toContain('Updated 1 plugin');
+        expect(notices.current?.text).toContain('wider changes what it may do');
+    });
+
+    test('updating one plugin takes the commit that was shown', async () => {
+        vi.mocked(PluginService.UpdateFromGit).mockClear().mockResolvedValueOnce({ plugins: [], dir: '', folders: [], problems: [] });
+        expect(await workspace.updatePluginFromGit('acme', 'f00d')).toBe(true);
+        expect(PluginService.UpdateFromGit).toHaveBeenCalledWith('acme', 'f00d');
+    });
+
     // The clone is kept when what it holds will not load, so the reasons have
     // to reach the settings list, and the status bar has room for one line.
     test('a clone that would not load is re-read, and reported on one line', async () => {

@@ -51,10 +51,20 @@ func (g *Gateway) clusterGroups() []clusterGroup {
 			Files: readKubeconfigDir(dir),
 		})
 	}
+	uploaded := readKubeconfigDir(g.cfg.UploadDir())
+	for i, f := range uploaded {
+		// One kept before uploads were checked is refused by the app all the
+		// same; say why here, where it can be removed.
+		if f.Error == "" {
+			if err := kube.CheckInline(filepath.Join(g.cfg.UploadDir(), f.Name)); err != nil {
+				uploaded[i] = clusterFile{Name: f.Name, Error: "The app does not use this file: " + err.Error()}
+			}
+		}
+	}
 	groups = append(groups, clusterGroup{
 		Title:    "Added here",
 		Note:     "Kept in the data directory. On a persistent volume they survive a restart; without one they do not.",
-		Files:    readKubeconfigDir(g.cfg.UploadDir()),
+		Files:    uploaded,
 		Uploaded: true,
 	})
 	return groups
@@ -145,6 +155,11 @@ func (g *Gateway) addKubeconfig(name string, content []byte, replace bool) (clus
 	}
 	if len(parsed.Contexts) == 0 {
 		return clusterFile{}, errors.New("that kubeconfig has no contexts")
+	}
+	// An upload is the one place an administrator writes a file into the pod;
+	// it must not be able to name a program to run or a file to send.
+	if err := kube.CheckInline(tmpPath); err != nil {
+		return clusterFile{}, fmt.Errorf("that kubeconfig cannot be used here: %s", strings.ReplaceAll(err.Error(), tmpPath, final))
 	}
 	if err := root.Rename(tmp, final); err != nil {
 		return clusterFile{}, err

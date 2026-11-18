@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -24,6 +25,15 @@ func (g *Gateway) renderAccount(w http.ResponseWriter, r *http.Request, v visit,
 		Error:         errMsg,
 		PasswordLogin: g.cfg.PasswordLogin,
 		SignIn:        g.signInMethods(v.user),
+		Providers:     g.connectable(v.user),
+	})
+}
+
+// connectable lists the enabled providers the user has no account connected
+// from yet, for the account page to offer.
+func (g *Gateway) connectable(u User) []Provider {
+	return slices.DeleteFunc(g.enabledProviders(), func(p Provider) bool {
+		return slices.ContainsFunc(u.Identities, func(id Identity) bool { return id.Provider == p.ID })
 	})
 }
 
@@ -412,15 +422,16 @@ func splitList(raw string) []string {
 // notices are the messages a redirect after a change can ask for, by name --
 // a name rather than the text, so a link cannot put words on the page.
 var notices = map[string]string{
-	"user-created":     "The user was added.",
-	"user-updated":     "The user was updated.",
-	"user-deleted":     "The user was removed.",
-	"password-changed": "Your password was changed.",
-	"provider-saved":   "The sign-in provider was saved.",
-	"provider-deleted": "The sign-in provider was removed.",
-	"cluster-added":    "The kubeconfig was added; its contexts are in the app's sidebar now.",
-	"cluster-deleted":  "The kubeconfig was removed.",
-	"signed-out":       "You are signed out.",
+	"user-created":       "The user was added.",
+	"user-updated":       "The user was updated.",
+	"user-deleted":       "The user was removed.",
+	"password-changed":   "Your password was changed.",
+	"provider-connected": "The account was connected; you can sign in with it from now on.",
+	"provider-saved":     "The sign-in provider was saved.",
+	"provider-deleted":   "The sign-in provider was removed.",
+	"cluster-added":      "The kubeconfig was added; its contexts are in the app's sidebar now.",
+	"cluster-deleted":    "The kubeconfig was removed.",
+	"signed-out":         "You are signed out.",
 }
 
 func noticeFor(r *http.Request) string {

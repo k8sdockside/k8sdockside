@@ -86,7 +86,11 @@ connection the app makes is listed in
   gets a confirmation from the app first.
 - **Installing a plugin from a repository runs `git clone`** into the plugins
   folder, for `https://`, `ssh://` and `git@host:path` addresses only, with
-  prompts disabled. The plugins offered under *Settings → Plugins → Available*
+  prompts disabled. **Updating one is shown before it is taken**: the app
+  fetches, lists the new commits and, when a manifest changes — which is where
+  everything a plugin may reach is declared — shows that change in full, then
+  moves the clone to exactly the commit it showed. *Update all* takes only
+  updates that leave every manifest alone. The plugins offered under *Settings → Plugins → Available*
   are a list compiled into the app, each with a fixed `https://` repository;
   the frontend names the plugin, never the address, and nothing is fetched to
   find out what exists. Suggestions in the sidebar only open Settings.
@@ -98,7 +102,14 @@ connection the app makes is listed in
 The app is only as privileged as the kubeconfig you point it at. Treat a
 context's RBAC as the boundary: **Shell** on a node, for example, creates the
 same privileged debug pod `kubectl debug` would, and will only work if you are
-already allowed to do that.
+already allowed to do that. That pod runs `busybox` pinned to a release and its
+digest, never a moving tag, since it runs as root with the node's filesystem
+mounted; *Settings → Terminal → Node shell image* replaces it.
+
+In the web version, kubeconfigs uploaded by an admin, or added by path, must
+carry their credentials inline: no `exec` plugins, auth providers or file
+paths, which would let an upload run a program in the pod or send it one of
+the pod's own files. See [docs/server-mode.md](docs/server-mode.md#uploaded-in-the-admin-ui).
 
 ## Build and release security
 

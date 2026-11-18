@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"mime/multipart"
@@ -156,7 +157,7 @@ func (h *harness) post(c *http.Client, path string, form url.Values) *http.Respo
 func (h *harness) setUp(username string) *http.Client {
 	h.t.Helper()
 	c := h.browser()
-	resp := h.post(c, "/-/setup", url.Values{"username": {username}, "password": {testPassword}, "confirm": {testPassword}})
+	resp := h.post(c, "/-/setup", url.Values{"username": {username}, "password": {testPassword}, "confirm": {testPassword}, "token": {h.gw.cfg.SetupToken}})
 	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/" {
 		h.t.Fatalf("setup answered %d to %q: %s", resp.StatusCode, resp.Header.Get("Location"), readBody(h.t, resp))
 	}
@@ -180,11 +181,18 @@ func (h *harness) addUser(username, role string) User {
 func (h *harness) signIn(username string) *http.Client {
 	h.t.Helper()
 	c := h.browser()
+	h.signInWith(c, username)
+	return c
+}
+
+// signInWith signs username in, in a browser that may already have been
+// signed in as someone else.
+func (h *harness) signInWith(c *http.Client, username string) {
+	h.t.Helper()
 	resp := h.post(c, "/-/login", url.Values{"username": {username}, "password": {testPassword}})
 	if resp.StatusCode != http.StatusSeeOther {
 		h.t.Fatalf("signing in as %s answered %d: %s", username, resp.StatusCode, readBody(h.t, resp))
 	}
-	return c
 }
 
 func (h *harness) lastSeen() *http.Request {
@@ -279,6 +287,69 @@ func TestSetupTokenIsRequiredWhenConfigured(t *testing.T) {
 	form.Set("token", "s3cret-token")
 	if resp := h.post(h.browser(), "/-/setup", form); resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("setup with the token = %d, want 303", resp.StatusCode)
+	}
+}
+
+func TestWithoutAConfiguredTokenSetupNeedsTheOneInTheLog(t *testing.T) {
+	var logs bytes.Buffer
+	cfg := Config{DataDir: t.TempDir(), InCluster: "false", SessionTTL: time.Hour, PasswordLogin: true}
+	gw, err := New(cfg, Deps{Owners: session.NewOwners(), Logger: slog.New(slog.NewTextHandler(&logs, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(gw.Handler())
+	t.Cleanup(srv.Close)
+	h := &harness{t: t, gw: gw, srv: srv}
+
+	m := regexp.MustCompile(`setupToken=(\S+)`).FindStringSubmatch(logs.String())
+	if m == nil {
+		t.Fatalf("the log must carry the setup token: %s", logs.String())
+	}
+	if body := readBody(t, h.page(h.browser(), "/-/setup")); !strings.Contains(body, "grep setupToken") {
+		t.Fatalf("the setup page must say where the token is: %s", body)
+	}
+
+	form := url.Values{"username": {"mallory"}, "password": {testPassword}, "confirm": {testPassword}}
+	if resp := h.post(h.browser(), "/-/setup", form); resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("setup without the token = %d, want 403", resp.StatusCode)
+	}
+	form.Set("token", "a-guess")
+	if resp := h.post(h.browser(), "/-/setup", form); resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("setup with a wrong token = %d, want 403", resp.StatusCode)
+	}
+	if gw.store.userCount() != 0 {
+		t.Fatal("nobody must have been created without the token")
+	}
+	form.Set("username", "alice")
+	form.Set("token", m[1])
+	if resp := h.post(h.browser(), "/-/setup", form); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("setup with the logged token = %d, want 303", resp.StatusCode)
+	}
+}
+
+func TestEveryStartWithNobodyMakesANewSetupToken(t *testing.T) {
+	dir := t.TempDir()
+	token := func() string {
+		gw, err := New(Config{DataDir: dir, InCluster: "false", SessionTTL: time.Hour}, Deps{Owners: session.NewOwners(), Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return gw.cfg.SetupToken
+	}
+	first, second := token(), token()
+	if first == "" || first == second {
+		t.Fatalf("tokens %q and %q: each start must make a new, non-empty one", first, second)
+	}
+}
+
+func TestNoSetupTokenIsMadeWhenItIsNotNeeded(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.AdminUsername, c.AdminPassword = "root", testPassword })
+	if h.gw.cfg.SetupToken != "" || h.gw.generatedToken {
+		t.Fatal("a deployment that made its administrator at startup needs no setup token")
+	}
+	h = newHarness(t, func(c *Config) { c.SetupToken = "configured" })
+	if h.gw.cfg.SetupToken != "configured" || h.gw.generatedToken {
+		t.Fatal("a configured setup token must be the one used")
 	}
 }
 
@@ -535,6 +606,87 @@ func TestSignInIsRateLimited(t *testing.T) {
 	}
 }
 
+// signInFrom tries a password sign-in that arrives through a proxy, which
+// sends xff as X-Forwarded-For.
+func (h *harness) signInFrom(xff, username, password string) *http.Response {
+	h.t.Helper()
+	form := url.Values{"username": {username}, "password": {password}}
+	req, err := http.NewRequest(http.MethodPost, h.srv.URL+"/-/login", strings.NewReader(form.Encode()))
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-Forwarded-For", xff)
+	return h.do(h.browser(), req)
+}
+
+func TestForwardedFor(t *testing.T) {
+	for _, tc := range []struct {
+		lines []string
+		hops  int
+		want  string
+	}{
+		{[]string{"203.0.113.7"}, 1, "203.0.113.7"},
+		// The client wrote the first entry; the ingress appended the second.
+		{[]string{"198.51.100.1, 203.0.113.7"}, 1, "203.0.113.7"},
+		{[]string{"198.51.100.1", "203.0.113.7"}, 1, "203.0.113.7"},
+		// A load balancer, then the ingress.
+		{[]string{"198.51.100.1, 203.0.113.7, 10.0.0.5"}, 2, "203.0.113.7"},
+		{[]string{"203.0.113.7"}, 3, "203.0.113.7"},
+		{[]string{"[2001:db8::1]:4711"}, 1, "2001:db8::1"},
+		{[]string{"::ffff:203.0.113.7"}, 1, "203.0.113.7"},
+		{[]string{"203.0.113.7, not-an-address"}, 1, ""},
+		{[]string{" , "}, 1, ""},
+		{nil, 1, ""},
+	} {
+		if got := forwardedFor(tc.lines, tc.hops); got != tc.want {
+			t.Errorf("forwardedFor(%q, %d) = %q, want %q", tc.lines, tc.hops, got, tc.want)
+		}
+	}
+}
+
+func TestASpoofedForwardedForIsStillCountedAgainstTheRealAddress(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.TrustForwarded, c.ProxyHops = true, 1 })
+	h.addUser("alice", roleAdmin)
+	// Thirty failures, each claiming a new address in front of the one the
+	// ingress appended, and each for a different name so that only the
+	// per-address limit is in play.
+	for i := range 30 {
+		h.signInFrom(fmt.Sprintf("198.51.100.%d, 203.0.113.7", i), fmt.Sprintf("guess%d", i), "wrong password")
+	}
+	if resp := h.signInFrom("198.51.100.200, 203.0.113.7", "alice", testPassword); resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("the address that failed thirty times = %d, want 429", resp.StatusCode)
+	}
+	if resp := h.signInFrom("203.0.113.8", "alice", testPassword); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("another address = %d, want 303", resp.StatusCode)
+	}
+}
+
+func TestOneAddressCannotLockSomeoneElseOut(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.TrustForwarded = true })
+	h.addUser("alice", roleAdmin)
+	for range 10 {
+		h.signInFrom("203.0.113.66", "alice", "wrong password")
+	}
+	if resp := h.signInFrom("203.0.113.66", "alice", testPassword); resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("the failing address = %d, want 429", resp.StatusCode)
+	}
+	if resp := h.signInFrom("203.0.113.7", "alice", testPassword); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("alice from her own address = %d, want 303", resp.StatusCode)
+	}
+}
+
+func TestGuessingOneNameFromManyAddressesIsLimited(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.TrustForwarded = true })
+	h.addUser("alice", roleAdmin)
+	for i := range 100 {
+		h.signInFrom(fmt.Sprintf("198.51.100.%d", i/9), "alice", "wrong password")
+	}
+	if resp := h.signInFrom("203.0.113.7", "alice", testPassword); resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("after a hundred failures from many addresses = %d, want 429", resp.StatusCode)
+	}
+}
+
 func TestSwitchedOffUsersCannotSignIn(t *testing.T) {
 	h := newHarness(t, nil)
 	h.addUser("alice", roleAdmin)
@@ -665,6 +817,19 @@ func TestUploadingAndRemovingAKubeconfig(t *testing.T) {
 	if resp := upload("prod", testKubeconfig); resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("a good kubeconfig = %d: %s", resp.StatusCode, readBody(t, resp))
 	}
+	for name, config := range map[string]string{
+		"shell":     strings.Replace(testKubeconfig, "    token: abc", "    exec:\n      apiVersion: client.authentication.k8s.io/v1\n      command: sh\n      args: [\"-c\", \"id\"]", 1),
+		"sa-token":  strings.Replace(testKubeconfig, "    token: abc", "    tokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token", 1),
+		"local-key": strings.Replace(testKubeconfig, "    token: abc", "    client-certificate: /data/a.crt\n    client-key: /data/a.key", 1),
+	} {
+		resp := upload(name, config)
+		if body := readBody(t, resp); resp.StatusCode != http.StatusBadRequest || !strings.Contains(body, "only inline credentials") {
+			t.Errorf("%s: an upload naming a program or a file = %d, want 400: %s", name, resp.StatusCode, body)
+		}
+		if _, err := os.Stat(filepath.Join(h.gw.cfg.UploadDir(), name+".yaml")); !os.IsNotExist(err) {
+			t.Errorf("%s: a refused upload must not be kept", name)
+		}
+	}
 	path := filepath.Join(h.gw.cfg.UploadDir(), "prod.yaml")
 	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("the kubeconfig must be kept, readable only by the app: %v %v", info, err)
@@ -685,6 +850,20 @@ func TestUploadingAndRemovingAKubeconfig(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("the kubeconfig must be gone")
+	}
+}
+
+// A kubeconfig kept before uploads were checked -- on a persistent volume,
+// from an older version -- is refused by the app; the clusters page says why.
+func TestTheClustersPageExplainsAnOldExecUpload(t *testing.T) {
+	h := newHarness(t, nil)
+	c := h.setUp("alice")
+	old := strings.Replace(testKubeconfig, "    token: abc", "    exec:\n      apiVersion: client.authentication.k8s.io/v1\n      command: sh", 1)
+	if err := os.WriteFile(filepath.Join(h.gw.cfg.UploadDir(), "old.yaml"), []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if body := readBody(t, h.page(c, "/-/admin/clusters")); !strings.Contains(body, "The app does not use this file") {
+		t.Fatalf("the clusters page must say the old upload is not used: %s", body)
 	}
 }
 
@@ -866,16 +1045,177 @@ func TestAnUnverifiedEmailMatchesNobody(t *testing.T) {
 	}
 }
 
-func TestTheFirstProviderSignInIsTheAdministrator(t *testing.T) {
+// With autoSignup on a public provider, the first to arrive could be anyone:
+// on a deployment with nobody yet, a provider admits only a listed
+// administrator.
+func TestTheFirstProviderSignInIsNotTheAdministratorByBeingFirst(t *testing.T) {
 	h := newHarness(t, nil)
 	issuer := fakeIssuer(t, map[string]any{"sub": "u-1", "email": "ops@example.com", "email_verified": true})
 	h.addProvider(oidcProvider(issuer.URL, true))
+
+	if resp := h.providerSignIn(h.browser(), "sso"); resp.StatusCode != http.StatusForbidden || !strings.Contains(readBody(t, resp), "setup page first") {
+		t.Fatalf("callback = %d, want 403 sending to the setup page", resp.StatusCode)
+	}
+	if n := h.gw.store.userCount(); n != 0 {
+		t.Fatalf("nobody must have been created, there are %d users", n)
+	}
+}
+
+func TestAListedAdministratorCanBeTheFirstProviderSignIn(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.AdminEmails = []string{"ops@example.com"} })
+	issuer := fakeIssuer(t, map[string]any{"sub": "u-1", "email": "ops@example.com", "email_verified": true})
+	h.addProvider(oidcProvider(issuer.URL, false))
 
 	if resp := h.providerSignIn(h.browser(), "sso"); resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("callback = %d: %s", resp.StatusCode, readBody(t, resp))
 	}
 	if u, _ := h.gw.store.userByIdentity("sso", "u-1"); !u.Admin() {
-		t.Fatal("the first person in must be the administrator")
+		t.Fatal("a listed administrator must be the administrator")
+	}
+}
+
+// A provider vouching for an address claims only an account nobody can sign
+// in to yet; otherwise the least careful enabled provider would decide who
+// may be the administrator.
+func TestProviderSignInDoesNotTakeOverAnAccountWithAPassword(t *testing.T) {
+	h := newHarness(t, nil)
+	root := h.addUser("root", roleAdmin)
+	if _, err := h.gw.store.updateUser(root.ID, func(u *User) error { u.Email = "root@example.com"; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	issuer := fakeIssuer(t, map[string]any{"sub": "attacker", "email": "root@example.com", "email_verified": true})
+	h.addProvider(oidcProvider(issuer.URL, true))
+
+	resp := h.providerSignIn(h.browser(), "sso")
+	if resp.StatusCode != http.StatusForbidden || !strings.Contains(readBody(t, resp), "account page") {
+		t.Fatalf("callback = %d, want 403 pointing at the account page", resp.StatusCode)
+	}
+	if _, ok := h.gw.store.userByIdentity("sso", "attacker"); ok {
+		t.Fatal("the provider account must not have been linked to anyone")
+	}
+	if n := h.gw.store.userCount(); n != 1 {
+		t.Fatalf("no second account may be made for the address, there are %d users", n)
+	}
+}
+
+func TestProviderSignInDoesNotTakeOverAnAccountAnotherProviderClaimed(t *testing.T) {
+	h := newHarness(t, nil)
+	h.addUser("root", roleAdmin)
+	if _, err := h.gw.store.createUser(User{Username: "frank", Email: "frank@example.com", Role: roleUser}, false); err != nil {
+		t.Fatal(err)
+	}
+	first := fakeIssuer(t, map[string]any{"sub": "u-77", "email": "frank@example.com", "email_verified": true})
+	h.addProvider(oidcProvider(first.URL, false))
+	if resp := h.providerSignIn(h.browser(), "sso"); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("the first claim = %d: %s", resp.StatusCode, readBody(t, resp))
+	}
+
+	second := fakeIssuer(t, map[string]any{"sub": "other", "email": "frank@example.com", "email_verified": true})
+	p := oidcProvider(second.URL, false)
+	p.ID, p.Name = "other", "Other SSO"
+	h.addProvider(p)
+	if resp := h.providerSignIn(h.browser(), "other"); resp.StatusCode != http.StatusForbidden || !strings.Contains(readBody(t, resp), "already an account here") {
+		t.Fatalf("a second provider = %d, want 403", resp.StatusCode)
+	}
+	if _, ok := h.gw.store.userByIdentity("other", "other"); ok {
+		t.Fatal("the second provider account must not have been linked")
+	}
+}
+
+// connect starts connecting a provider from c's account page and finishes
+// it, returning the callback's answer.
+func (h *harness) connect(c *http.Client, provider string) *http.Response {
+	h.t.Helper()
+	resp := h.post(c, "/-/account/connect/"+provider, url.Values{"csrf": {h.csrf(c, "/-/account")}})
+	if resp.StatusCode != http.StatusFound {
+		h.t.Fatalf("starting a connection = %d: %s", resp.StatusCode, readBody(h.t, resp))
+	}
+	loc, err := url.Parse(resp.Header.Get("Location"))
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return h.page(c, "/-/oauth/"+provider+"/callback?code=the-code&state="+url.QueryEscape(loc.Query().Get("state")))
+}
+
+func TestASignedInUserCanConnectAProvider(t *testing.T) {
+	h := newHarness(t, nil)
+	alice := h.addUser("alice", roleAdmin)
+	issuer := fakeIssuer(t, map[string]any{"sub": "u-5", "email": "alice@example.com", "email_verified": true})
+	h.addProvider(oidcProvider(issuer.URL, false))
+
+	c := h.signIn("alice")
+	if body := readBody(t, h.page(c, "/-/account")); !strings.Contains(body, "Connect Company SSO") {
+		t.Fatalf("the account page must offer the provider: %s", body)
+	}
+	resp := h.connect(c, "sso")
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/-/account?done=provider-connected" {
+		t.Fatalf("callback = %d %q: %s", resp.StatusCode, resp.Header.Get("Location"), readBody(t, resp))
+	}
+	if u, ok := h.gw.store.userByIdentity("sso", "u-5"); !ok || u.ID != alice.ID {
+		t.Fatal("the provider account must be connected to alice")
+	}
+	if body := readBody(t, h.page(c, "/-/account")); strings.Contains(body, "Connect Company SSO") {
+		t.Fatal("a connected provider must not be offered again")
+	}
+
+	// And it signs her in from now on.
+	if resp := h.providerSignIn(h.browser(), "sso"); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("signing in with the connected account = %d: %s", resp.StatusCode, readBody(t, resp))
+	}
+}
+
+func TestConnectingNeedsTheSessionsCSRFToken(t *testing.T) {
+	h := newHarness(t, nil)
+	h.addUser("alice", roleAdmin)
+	issuer := fakeIssuer(t, map[string]any{"sub": "u-5"})
+	h.addProvider(oidcProvider(issuer.URL, false))
+
+	c := h.signIn("alice")
+	if resp := h.post(c, "/-/account/connect/sso", url.Values{}); resp.StatusCode != http.StatusForbidden || !strings.Contains(readBody(t, resp), "form has expired") {
+		t.Fatalf("a connection without the CSRF token = %d, want 403", resp.StatusCode)
+	}
+	if resp := h.post(h.browser(), "/-/account/connect/sso", url.Values{}); resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Location"), "/-/login") {
+		t.Fatalf("a connection without a sign-in = %d %q, want a redirect to sign in", resp.StatusCode, resp.Header.Get("Location"))
+	}
+}
+
+func TestConnectingAnotherUsersProviderAccountIsRefused(t *testing.T) {
+	h := newHarness(t, nil)
+	h.addUser("alice", roleAdmin)
+	bob := h.addUser("bob", roleUser)
+	if _, err := h.gw.store.linkIdentity(bob.ID, Identity{Provider: "sso", Subject: "u-5"}); err != nil {
+		t.Fatal(err)
+	}
+	issuer := fakeIssuer(t, map[string]any{"sub": "u-5"})
+	h.addProvider(oidcProvider(issuer.URL, false))
+
+	if resp := h.connect(h.signIn("alice"), "sso"); resp.StatusCode != http.StatusConflict || !strings.Contains(readBody(t, resp), "already connected to another user") {
+		t.Fatalf("connecting bob's account to alice = %d, want 409", resp.StatusCode)
+	}
+	if u, _ := h.gw.store.userByIdentity("sso", "u-5"); u.ID != bob.ID {
+		t.Fatal("the provider account must still be bob's alone")
+	}
+}
+
+func TestAConnectionFinishedAfterSigningOutIsRefused(t *testing.T) {
+	h := newHarness(t, nil)
+	alice := h.addUser("alice", roleAdmin)
+	issuer := fakeIssuer(t, map[string]any{"sub": "u-5"})
+	h.addProvider(oidcProvider(issuer.URL, false))
+
+	c := h.signIn("alice")
+	resp := h.post(c, "/-/account/connect/sso", url.Values{"csrf": {h.csrf(c, "/-/account")}})
+	loc, _ := url.Parse(resp.Header.Get("Location"))
+	h.page(c, "/-/logout")
+	h.addUser("mallory", roleUser)
+	h.signInWith(c, "mallory")
+
+	cb := h.page(c, "/-/oauth/sso/callback?code=the-code&state="+url.QueryEscape(loc.Query().Get("state")))
+	if cb.StatusCode != http.StatusForbidden || !strings.Contains(readBody(t, cb), "no longer signed in as the account that asked") {
+		t.Fatalf("finishing alice's connection as mallory = %d, want 403", cb.StatusCode)
+	}
+	if u, ok := h.gw.store.userByIdentity("sso", "u-5"); ok {
+		t.Fatalf("the provider account must be connected to nobody, it is %s's (alice is %s)", u.Username, alice.ID)
 	}
 }
 

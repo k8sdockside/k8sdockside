@@ -31,6 +31,12 @@ type Config struct {
 	// TrustForwarded honours X-Forwarded-Proto, -Host and -For, for a
 	// deployment behind an ingress that sets them.
 	TrustForwarded bool
+	// ProxyHops is how many proxies in front of the gateway append to
+	// X-Forwarded-For: one for an ingress reached directly, two for a load
+	// balancer in front of the ingress. The client's address is the one the
+	// outermost of them wrote, counted from the right -- everything to its
+	// left came from the client, which can write anything there.
+	ProxyHops int
 	// InCluster is "auto", "true" or "false": whether the pod's own service
 	// account is offered as a cluster.
 	InCluster string
@@ -83,6 +89,11 @@ func ConfigFromEnv() (Config, error) {
 		problems = append(problems, err)
 	}
 
+	hops := envOr("K8SDOCKSIDE_PROXY_HOPS", "1")
+	if c.ProxyHops, err = strconv.Atoi(hops); err != nil || c.ProxyHops < 1 || c.ProxyHops > 10 {
+		problems = append(problems, fmt.Errorf("K8SDOCKSIDE_PROXY_HOPS: %q is not a number from 1 to 10", hops))
+	}
+
 	ttl := envOr("K8SDOCKSIDE_SESSION_TTL", "168h")
 	if c.SessionTTL, err = time.ParseDuration(ttl); err != nil || c.SessionTTL < time.Minute {
 		problems = append(problems, fmt.Errorf("K8SDOCKSIDE_SESSION_TTL: %q is not a duration of a minute or more", ttl))
@@ -125,6 +136,14 @@ func ConfigFromEnv() (Config, error) {
 		c.AdminEmails[i] = strings.ToLower(email)
 	}
 	return c, errors.Join(problems...)
+}
+
+// TrustedKubeconfigDirs are the folders of kubeconfigs the deployment itself
+// provides -- the in-cluster one and those mounted from Secrets -- which alone
+// may run exec plugins or name files. Uploaded kubeconfigs, and any added by
+// path in the app, must carry their credentials inline: see kube.CheckInline.
+func (c Config) TrustedKubeconfigDirs() []string {
+	return append([]string{c.generatedDir()}, c.KubeconfigDirs...)
 }
 
 // UploadDir is where kubeconfigs added through the admin page are kept.

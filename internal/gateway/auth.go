@@ -23,7 +23,16 @@ func (g *Gateway) setupPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/-/login", http.StatusSeeOther)
 		return
 	}
-	g.render(w, http.StatusOK, "setup", view{Title: "Set up K8s Dockside", SetupToken: g.cfg.SetupToken != ""})
+	g.render(w, http.StatusOK, "setup", g.setupView())
+}
+
+func (g *Gateway) setupView() view {
+	return view{
+		Title:         "Set up K8s Dockside",
+		SetupToken:    g.cfg.SetupToken != "",
+		TokenInLog:    g.generatedToken,
+		PasswordLogin: g.cfg.PasswordLogin,
+	}
 }
 
 // setupSubmit creates the first administrator, which is only possible while
@@ -36,11 +45,8 @@ func (g *Gateway) setupSubmit(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/-/login", http.StatusSeeOther)
 		return
 	}
-	v := view{
-		Title:      "Set up K8s Dockside",
-		SetupToken: g.cfg.SetupToken != "",
-		Form:       formValues(r, "username", "name", "email"),
-	}
+	v := g.setupView()
+	v.Form = formValues(r, "username", "name", "email")
 	fail := func(status int, msg string) {
 		v.Error = msg
 		g.render(w, status, "setup", v)
@@ -140,8 +146,14 @@ func (g *Gateway) loginSubmit(w http.ResponseWriter, r *http.Request) {
 
 	username := v.Form["username"]
 	password := r.PostFormValue("password")
-	ip, key := g.clientIP(r), strings.ToLower(username)
-	if g.ipLimit.blocked(ip) || g.userLimit.blocked(key) {
+	// Failures count against the address, against the username from that
+	// address, and -- far more generously -- against the username from
+	// anywhere. A username is no secret, so a tight limit on the name alone
+	// would let anyone lock its owner out by failing on purpose; the wide one
+	// still stops guessing spread over many addresses.
+	ip, name := g.clientIP(r), strings.ToLower(username)
+	key := name + "\x00" + ip
+	if g.ipLimit.blocked(ip) || g.userLimit.blocked(key) || g.nameLimit.blocked(name) {
 		fail(http.StatusTooManyRequests, "Too many failed attempts. Wait a few minutes and try again.")
 		return
 	}
@@ -156,6 +168,7 @@ func (g *Gateway) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	if !matched {
 		g.ipLimit.fail(ip)
 		g.userLimit.fail(key)
+		g.nameLimit.fail(name)
 		fail(http.StatusUnauthorized, "That username and password do not match.")
 		return
 	}
@@ -247,15 +260,37 @@ func (g *Gateway) oauthStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	next := safeNext(r.URL.Query().Get("next"))
+	g.sendToProvider(w, r, p, pendingLogin{provider: p.ID, next: next}, func(status int, msg string) {
+		g.loginError(w, next, status, msg)
+	})
+}
+
+// accountConnect sends a signed-in user to a provider to connect an account
+// there to their own. It is a form post, behind the session's CSRF token, so
+// that another site cannot start it on a user's behalf.
+func (g *Gateway) accountConnect(w http.ResponseWriter, r *http.Request, v visit) {
+	p, ok := g.enabledProvider(r.PathValue("provider"))
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	g.sendToProvider(w, r, p, pendingLogin{provider: p.ID, next: "/-/account", linkUser: v.user.ID}, func(status int, msg string) {
+		g.renderAccount(w, r, v, status, msg)
+	})
+}
+
+// sendToProvider starts an authorisation with p for the sign-in or connection
+// pl describes, and redirects the browser there.
+func (g *Gateway) sendToProvider(w http.ResponseWriter, r *http.Request, p Provider, pl pendingLogin, fail func(status int, msg string)) {
 	cfg, _, err := g.oauth.config(r.Context(), p, g.callbackURL(r, p.ID))
 	if err != nil {
 		g.log.Warn("could not reach a sign-in provider", "provider", p.ID, "err", err)
-		g.loginError(w, next, http.StatusBadGateway, fmt.Sprintf("%s cannot be reached right now. Try again, or sign in another way.", p.Name))
+		fail(http.StatusBadGateway, fmt.Sprintf("%s cannot be reached right now. Try again, or sign in another way.", p.Name))
 		return
 	}
 
 	state := randomToken(32)
-	pl := pendingLogin{provider: p.ID, next: next, expires: time.Now().Add(pendingTTL)}
+	pl.expires = time.Now().Add(pendingTTL)
 	var opts []oauth2.AuthCodeOption
 	// PKCE ties the code to this sign-in, on top of the state. Facebook is
 	// left out: it does not take part, and a verifier it does not expect is
@@ -265,7 +300,7 @@ func (g *Gateway) oauthStart(w http.ResponseWriter, r *http.Request) {
 		opts = append(opts, oauth2.S256ChallengeOption(pl.verifier))
 	}
 	if err := g.pending.put(state, pl); err != nil {
-		g.loginError(w, next, http.StatusServiceUnavailable, sentence(err))
+		fail(http.StatusServiceUnavailable, sentence(err))
 		return
 	}
 	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure as in startSession
@@ -335,6 +370,10 @@ func (g *Gateway) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		g.loginError(w, pl.next, http.StatusBadGateway, fmt.Sprintf("%s did not say who you are.", p.Name))
 		return
 	}
+	if pl.linkUser != "" {
+		g.finishConnect(w, r, p, pl, ext)
+		return
+	}
 	u, err := g.signInExternal(p, ext)
 	if err != nil {
 		g.loginError(w, pl.next, http.StatusForbidden, sentence(err))
@@ -342,6 +381,31 @@ func (g *Gateway) oauthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	g.log.Info("signed in through a provider", "provider", p.ID, "username", u.Username)
 	g.startSession(w, r, u, pl.next)
+}
+
+// finishConnect adds the provider account that came back to the user who
+// asked for it -- who must still be the one signed in, in this browser, since
+// the connection was started from their session and nowhere else.
+func (g *Gateway) finishConnect(w http.ResponseWriter, r *http.Request, p Provider, pl pendingLogin, ext externalIdentity) {
+	u, sess, ok := g.current(r)
+	if !ok || u.ID != pl.linkUser {
+		g.loginError(w, "/-/account", http.StatusForbidden, "You are no longer signed in as the account that asked to connect. Sign in, then connect from your account page.")
+		return
+	}
+	if ext.Subject == "" {
+		g.renderAccount(w, r, visit{user: u, sess: sess}, http.StatusBadGateway, fmt.Sprintf("%s did not say who you are.", p.Name))
+		return
+	}
+	ident := Identity{Provider: p.ID, Subject: ext.Subject}
+	if ext.EmailVerified {
+		ident.Email = strings.ToLower(strings.TrimSpace(ext.Email))
+	}
+	if _, err := g.store.linkIdentity(u.ID, ident); err != nil {
+		g.renderAccount(w, r, visit{user: u, sess: sess}, http.StatusConflict, sentence(err))
+		return
+	}
+	g.log.Info("connected a provider account", "provider", p.ID, "username", u.Username)
+	http.Redirect(w, r, "/-/account?done=provider-connected", http.StatusSeeOther)
 }
 
 func (g *Gateway) loginError(w http.ResponseWriter, next string, status int, msg string) {
@@ -375,7 +439,16 @@ func (g *Gateway) signInExternal(p Provider, ext externalIdentity) (User, error)
 			if u.Disabled {
 				return User{}, errSwitchedOff
 			}
+			// An address is enough to claim only an account nobody can sign
+			// in to yet. One that already has a password or a provider
+			// account belongs to someone, and handing it to whoever a
+			// provider vouches for would make the least careful enabled
+			// provider the way into every account -- the administrator's
+			// included. Its owner connects more providers while signed in.
 			return g.store.updateUser(u.ID, func(u *User) error {
+				if !u.AwaitingFirstSignIn() {
+					return fmt.Errorf("there is already an account here for %s. Sign in to it the way you usually do, then connect %s on your account page", email, p.Name)
+				}
 				u.Identities = append(u.Identities, Identity{Provider: p.ID, Subject: ext.Subject, Email: email})
 				if u.Name == "" {
 					u.Name = ext.Name
@@ -395,14 +468,14 @@ func (g *Gateway) signInExternal(p Provider, ext externalIdentity) (User, error)
 	}
 
 	role := p.DefaultRole
-	// The first person in is the administrator, whichever way they came in --
-	// but only someone the provider would have admitted anyway, and not on a
-	// deployment that asked for its administrator to be made with a token.
-	first := g.store.userCount() == 0
-	if first && !listedAdmin && g.cfg.SetupToken != "" {
+	// While nobody exists, the administrator is made on the setup page, with
+	// a token -- see bootstrap -- or is one of the deployment's listed
+	// administrator addresses. Whoever a provider happens to admit first is
+	// neither: with autoSignup on a public provider, that is anyone at all.
+	if g.store.userCount() == 0 && !listedAdmin {
 		return User{}, errors.New("the administrator is created on the setup page first")
 	}
-	if first || listedAdmin {
+	if listedAdmin {
 		role = roleAdmin
 	}
 	local, _, _ := strings.Cut(email, "@")

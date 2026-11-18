@@ -861,30 +861,60 @@ func installed(cat plugins.Catalogue, dest string) error {
 	return fmt.Errorf("cloned into %s, but it would not load:\n%s", dest, strings.Join(reasons, "\n"))
 }
 
-// UpdateFromGit pulls the repository a plugin was cloned from and reads it
-// again.
-func (s *PluginService) UpdateFromGit(ctx context.Context, id string) (plugins.Catalogue, error) {
+// UpdatePreview fetches the repository a plugin was cloned from and says what
+// updating it would bring -- the new commits, and the diff of its manifests
+// when they change -- without changing what is installed. The card shows it
+// and asks before UpdateFromGit takes it.
+//
+// It is the one look anybody gets at an update before it runs: a plugin's
+// views are someone else's code, and a repository that changes hands, or is
+// broken into, ships its next commit to everyone who presses Update.
+func (s *PluginService) UpdatePreview(ctx context.Context, id string) (plugins.Update, error) {
+	if err := session.RequireAdmin(ctx); err != nil {
+		return plugins.Update{Commits: []string{}}, err
+	}
+	repo, err := s.cloneOf(id)
+	if err != nil {
+		return plugins.Update{Commits: []string{}}, err
+	}
+	return plugins.FetchUpdate(repo)
+}
+
+// UpdateFromGit moves the clone a plugin came from to commit to -- the To of
+// an UpdatePreview, so what is installed is exactly what was shown -- and
+// reads the plugins again.
+func (s *PluginService) UpdateFromGit(ctx context.Context, id, to string) (plugins.Catalogue, error) {
 	if err := session.RequireAdmin(ctx); err != nil {
 		return s.catalogue(), err
 	}
-	plugin, ok := s.catalogue().Find(id)
-	if !ok {
-		return s.catalogue(), fmt.Errorf("no plugin called %q is installed", id)
+	repo, err := s.cloneOf(id)
+	if err != nil {
+		return s.catalogue(), err
 	}
-	// Only a clone the app made: a watched folder is the user's own checkout,
-	// and pulling into it is theirs to do.
-	if !plugin.Builtin() && !plugins.InPluginsDir(s.store.PluginsDir(), plugin) {
-		return s.catalogue(), fmt.Errorf("%s is read from a folder you watch -- it is your own checkout, so pull it yourself", plugin.Name)
-	}
-	repo, ok := plugins.RepoOf(plugin)
-	if !ok {
-		return s.catalogue(), fmt.Errorf("%s was not installed from a repository, so there is nothing to pull", plugin.Name)
-	}
-	if err := plugins.Pull(repo); err != nil {
+	if err := plugins.ApplyUpdate(repo, to); err != nil {
 		return s.catalogue(), err
 	}
 	s.forget()
 	return s.catalogue(), nil
+}
+
+// cloneOf is the repository the installed plugin id was cloned into, and the
+// reason when it was not.
+func (s *PluginService) cloneOf(id string) (string, error) {
+	plugin, ok := s.catalogue().Find(id)
+	if !ok {
+		return "", fmt.Errorf("no plugin called %q is installed", id)
+	}
+	// Only a clone the app made: a watched folder is the user's own checkout,
+	// and pulling into it is theirs to do.
+	if !plugin.Builtin() && !plugins.InPluginsDir(s.store.PluginsDir(), plugin) {
+		return "", fmt.Errorf("%s is read from a folder you watch -- it is your own checkout, so pull it yourself", plugin.Name)
+	}
+	repo, ok := plugins.RepoOf(plugin)
+	if !ok {
+		return "", fmt.Errorf("%s was not installed from a repository, so there is nothing to pull", plugin.Name)
+	}
+	return repo, nil
 }
 
 // UninstallPreview says what uninstalling a plugin would delete -- its clone,

@@ -454,7 +454,7 @@ export function adoptSettings(settings: appconfig.Settings): Settings {
                 // machine answers to it -- see appconfig.Terminal.External.
                 external: settings.preferences?.terminal?.external ?? '',
                 shells: [...(settings.preferences?.terminal?.shells ?? ['bash', 'sh'])],
-                nodeImage: settings.preferences?.terminal?.nodeImage || 'busybox',
+                nodeImage: settings.preferences?.terminal?.nodeImage || 'busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4',
                 nodeNamespace: settings.preferences?.terminal?.nodeNamespace || 'default',
                 fontSize: settings.preferences?.terminal?.fontSize || 12,
                 scrollback: settings.preferences?.terminal?.scrollback || 5000,

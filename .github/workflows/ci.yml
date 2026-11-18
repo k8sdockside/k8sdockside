@@ -94,21 +94,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      # Server mode does not link GTK, so the headers this installs go unused
-      # here; the shared action is kept anyway so every Go job gets its Go the
-      # same way.
+      # Server mode does not link GTK, so no headers: the shared action is used
+      # only so every Go job gets its Go the same way.
       - name: Setup build environment
         uses: ./.github/actions/setup-build
         with:
           node-version: none
           wails: 'false'
+          gui-deps: 'false'
 
       # The server tag compiles files the desktop build never sees -- the HTTP
       # gateway and its auth -- so without this job they could break unnoticed
       # until a release tag tried to build the image. A compile check only,
-      # like build-go; the image itself is server-image.yml's.
+      # like build-go; the image itself is server-image.yml's. It builds
+      # without cgo, as the image does (build/docker/Dockerfile.server), which
+      # is also why this job needs no GTK headers.
       - name: Build Go packages (server mode)
         run: make build-go-server
+        env:
+          CGO_ENABLED: '0'
 
   test:
     name: Test (Go)
