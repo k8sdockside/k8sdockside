@@ -27,20 +27,80 @@ runs:
     # Wails links against GTK 4 and WebKitGTK 6 on Linux, and the wails3 CLI is
     # a Go program in the same module, so it needs the headers too -- not only
     # the app. Without these, nothing here compiles.
+    #
+    # They come to about 150 MB of packages, and every Go job needs them. The
+    # Ubuntu mirror the runners use is at times slow enough (tens of KB/s) for
+    # the download alone to outlast the job, and with several jobs fetching in
+    # parallel one of them usually does. So the .debs are cached: one run per
+    # runner image downloads them, and every later run installs from the cache
+    # without touching the network.
+    - name: Resolve Linux GUI packages
+      if: runner.os == 'Linux' && inputs.gui-deps == 'true'
+      id: gui-debs
+      shell: bash
+      # ImageOS and ImageVersion are set on GitHub-hosted runners. The key holds
+      # them so cached packages are only installed on the image they were
+      # resolved against: a newer image may already have some of them, or need
+      # newer ones. Without them (a self-hosted runner) nothing is cached.
+      run: |
+        packages="build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev"
+        echo "packages=$packages" >> "$GITHUB_OUTPUT"
+        echo "dir=$RUNNER_TEMP/gui-debs" >> "$GITHUB_OUTPUT"
+        if [ -n "${ImageOS:-}" ] && [ -n "${ImageVersion:-}" ]; then
+          echo "key=gui-debs-$ImageOS-$ImageVersion-$RUNNER_ARCH-$(printf '%s' "$packages" | sha256sum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Restore Linux GUI packages
+      if: steps.gui-debs.outputs.key != ''
+      id: gui-debs-cache
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ steps.gui-debs.outputs.dir }}
+        key: ${{ steps.gui-debs.outputs.key }}
+
     - name: Install Linux GUI build dependencies
       if: runner.os == 'Linux' && inputs.gui-deps == 'true'
       shell: bash
+      env:
+        PACKAGES: ${{ steps.gui-debs.outputs.packages }}
+        DEBS: ${{ steps.gui-debs.outputs.dir }}
+        CACHE_HIT: ${{ steps.gui-debs-cache.outputs.cache-hit }}
       # Composite steps take no timeout-minutes, so each apt call has its own:
       # a mirror that stops answering is tried again a few times, and given
-      # up on after five minutes, instead of holding the job until its limit.
+      # up on, instead of holding the job until its limit.
       run: |
+        if [ "$CACHE_HIT" = true ]; then
+          # apt orders the installs and checks every dependency is among these
+          # files or already installed; --no-download makes a gap an error
+          # rather than a trip to the mirror. Its archive folder has to be this
+          # one too: a file that upgrades an installed package (libc6, say) is
+          # otherwise looked for there, and apt fails with "Pathname to install
+          # is not absolute".
+          timeout 300 sudo apt-get -o Dir::Cache::archives="$DEBS" \
+            install -y --no-download --no-install-recommends "$DEBS"/*.deb
+          exit 0
+        fi
+        # Downloaded into a folder of our own, which apt keeps, so the next
+        # step can cache exactly the packages this image was missing.
+        mkdir -p "$DEBS/partial"
         apt_opts=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
         timeout 300 sudo apt-get "${apt_opts[@]}" update
-        timeout 600 sudo apt-get "${apt_opts[@]}" install -y --no-install-recommends \
-          build-essential \
-          pkg-config \
-          libgtk-4-dev \
-          libwebkitgtk-6.0-dev
+        # shellcheck disable=SC2086 # PACKAGES is a list, split on purpose
+        timeout 600 sudo apt-get "${apt_opts[@]}" \
+          -o Dir::Cache::archives="$DEBS" -o APT::Keep-Downloaded-Packages=true \
+          install -y --no-install-recommends $PACKAGES
+        sudo rm -rf "$DEBS/partial" "$DEBS/lock"
+        sudo chown -R "$(id -u):$(id -g)" "$DEBS"
+
+    # Saved straight away rather than at the end of the job, so a lint or test
+    # failure later on still leaves the next run a cache. When several jobs
+    # miss at once, the first to save wins and the rest only log a warning.
+    - name: Save Linux GUI packages
+      if: steps.gui-debs.outputs.key != '' && steps.gui-debs-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ steps.gui-debs.outputs.dir }}
+        key: ${{ steps.gui-debs.outputs.key }}
 
     - name: Set up Go
       uses: actions/setup-go@v7
