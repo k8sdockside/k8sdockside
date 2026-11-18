@@ -143,15 +143,34 @@ func TestConsoleRunsCommandsInATerminal(t *testing.T) {
 		}
 	}
 
+	// Until a command has exited, everything typed is that command's: a
+	// line sent the moment its last output appears can reach its terminal
+	// in the instant before it exits, and is gone with it. So each command
+	// is typed at a prompt, as someone at the dock would: once the console
+	// has said its nth.
+	waitForPrompt := func(n int) {
+		t.Helper()
+		const prompt = "tool\x1b[0m › "
+		deadline := time.Now().Add(10 * time.Second)
+		for strings.Count(out.String(), prompt) < n {
+			if time.Now().After(deadline) {
+				t.Fatalf("never saw prompt %d in:\n%s", n, out.String())
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
 	// The command sees a terminal, of the size the window said.
 	waitFor("istty")
 	waitFor("30 100")
+	waitForPrompt(2)
 
 	// A command that reads gets what is typed while it runs.
 	_, _ = io.WriteString(typing, "read\r")
 	time.Sleep(200 * time.Millisecond)
 	_, _ = io.WriteString(typing, "hello\r")
 	waitFor("got:hello")
+	waitForPrompt(3)
 
 	// A failing command's status is said.
 	_, _ = io.WriteString(typing, "fail\r")
