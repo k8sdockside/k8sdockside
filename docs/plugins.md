@@ -100,6 +100,7 @@ definitions.
 | Pixel agents | Observability | K8s Dockside | [k8sdockside/pixelagents](https://github.com/k8sdockside/pixelagents) | — works on any cluster |
 | Blast radius | Platform | K8s Dockside | [k8sdockside/blastradius](https://github.com/k8sdockside/blastradius) | — works on any cluster |
 | Network policy matrix | Networking | K8s Dockside | [k8sdockside/networkpolicymatrix](https://github.com/k8sdockside/networkpolicymatrix) | — works on any cluster |
+| kubectl panel | Observability | K8s Dockside | [k8sdockside/kubectl-panel](https://github.com/k8sdockside/kubectl-panel) | — works on any cluster |
 
 Every card credits its author, and says whether the plugin is **Official** —
 kept alongside the app by its author — or from the **Community**. Yours can be

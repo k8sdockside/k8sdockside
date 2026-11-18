@@ -439,5 +439,22 @@
         ],
         "official": true,
         "minAppVersion": "0.1.23"
+    },
+    {
+        "id": "kubectl-panel",
+        "name": "kubectl panel",
+        "tagline": "the kubectl commands for what you are looking at",
+        "category": "observability",
+        "icon": "terminal",
+        "description": "A panel on every Pod, Deployment and Service listing the kubectl commands for that object, filled in from the object itself and ready to paste: get, describe, events, logs, exec, port-forward, rollout and scale. Every line names its cluster with --context, so a command copied from one tab cannot run against another. Works on any cluster.",
+        "repo": "https://github.com/k8sdockside/kubectl-panel.git",
+        "author": "K8s Dockside",
+        "authorUrl": "https://github.com/k8sdockside",
+        "links": [
+            { "label": "kubectl reference", "url": "https://kubernetes.io/docs/reference/kubectl/" },
+            { "label": "Source", "url": "https://github.com/k8sdockside/kubectl-panel" }
+        ],
+        "official": true,
+        "minAppVersion": "0.1.36"
     }
 ]
