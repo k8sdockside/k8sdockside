@@ -59,6 +59,8 @@ export const PluginService = {
     InstallFromGit: vi.fn().mockResolvedValue({ plugins: [], dir: '', folders: [], problems: [] }),
     UpdatePreview: vi.fn().mockResolvedValue({ from: 'a', to: 'a', commits: [], more: 0, manifest: '' }),
     UpdateFromGit: vi.fn().mockResolvedValue({ plugins: [], dir: '', folders: [], problems: [] }),
+    UninstallPreview: vi.fn().mockResolvedValue({ path: '', plugins: [] }),
+    Uninstall: vi.fn().mockResolvedValue({ plugins: [], dir: '', folders: [], problems: [] }),
     GitMissing: vi.fn().mockResolvedValue(''),
     HideSuggestion: vi.fn().mockResolvedValue({}),
     Probe: vi.fn().mockResolvedValue({ known: [], absent: [] }),

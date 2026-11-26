@@ -646,6 +646,72 @@ describe('solution plugins', () => {
         expect(notices.current?.text).toContain('wider changes what it may do');
     });
 
+    test('installing several known plugins goes on past one that fails, and names it', async () => {
+        workspace.knownPlugins = [
+            { ...known('metallb', []), name: 'MetalLB' },
+            { ...known('cilium', []), name: 'Cilium' },
+        ];
+        vi.mocked(PluginService.InstallKnown)
+            .mockClear()
+            .mockRejectedValueOnce(new Error('repository not found'))
+            .mockResolvedValueOnce({ plugins: [plugin('cilium')], dir: '', folders: [], problems: [] });
+        // The failure makes it read the folders again, for the settings list.
+        vi.mocked(PluginService.List).mockResolvedValueOnce({ plugins: [plugin('cilium')], dir: '', folders: [], problems: [] });
+
+        await workspace.installKnownPlugins(['metallb', 'cilium']);
+
+        expect(PluginService.InstallKnown).toHaveBeenCalledTimes(2);
+        expect(workspace.hasPlugin('cilium')).toBe(true);
+        expect(notices.current?.tone).toBe('error');
+        expect(notices.current?.text).toBe('Installed 1 plugin. Could not install MetalLB: repository not found');
+    });
+
+    test('switching several plugins off leaves alone the ones already off', async () => {
+        workspace.pluginCatalogue = {
+            plugins: [plugin('on'), { ...plugin('off'), disabled: true }],
+            dir: '',
+            folders: [],
+            problems: [],
+        };
+        vi.mocked(PluginService.SetEnabled)
+            .mockClear()
+            .mockResolvedValueOnce({ plugins: [{ ...plugin('on'), disabled: true }, { ...plugin('off'), disabled: true }], dir: '', folders: [], problems: [] });
+
+        await workspace.setPluginsEnabled(['on', 'off'], false);
+
+        expect(PluginService.SetEnabled).toHaveBeenCalledTimes(1);
+        expect(PluginService.SetEnabled).toHaveBeenCalledWith('on', false);
+        expect(notices.current?.text).toBe('Switched 1 plugin off');
+    });
+
+    // Two plugins from one clone are one thing to delete, and the question
+    // should say so once rather than ask about the same folder twice.
+    test('what several uninstalls delete is listed once per clone', async () => {
+        vi.mocked(PluginService.UninstallPreview).mockImplementation((async (id: string) =>
+            id === 'lonely'
+                ? { path: '/p/lonely', plugins: ['lonely'] }
+                : { path: '/p/pack', plugins: ['a', 'b'] }) as unknown as typeof PluginService.UninstallPreview);
+
+        expect(await workspace.pluginRemovals(['a', 'b', 'lonely'])).toEqual([
+            { path: '/p/pack', plugins: ['a', 'b'] },
+            { path: '/p/lonely', plugins: ['lonely'] },
+        ]);
+    });
+
+    test('uninstalling several skips one that went with an earlier one', async () => {
+        workspace.pluginCatalogue = { plugins: [plugin('a'), plugin('b'), plugin('c')], dir: '', folders: [], problems: [] };
+        vi.mocked(PluginService.Uninstall)
+            .mockClear()
+            // Deleting a's clone takes b with it.
+            .mockResolvedValueOnce({ plugins: [plugin('c')], dir: '', folders: [], problems: [] })
+            .mockResolvedValueOnce({ plugins: [], dir: '', folders: [], problems: [] });
+
+        await workspace.uninstallPlugins(['a', 'b', 'c']);
+
+        expect(vi.mocked(PluginService.Uninstall).mock.calls).toEqual([['a'], ['c']]);
+        expect(notices.current?.text).toBe('Uninstalled 3 plugins');
+    });
+
     test('updating one plugin takes the commit that was shown', async () => {
         vi.mocked(PluginService.UpdateFromGit).mockClear().mockResolvedValueOnce({ plugins: [], dir: '', folders: [], problems: [] });
         expect(await workspace.updatePluginFromGit('acme', 'f00d')).toBe(true);

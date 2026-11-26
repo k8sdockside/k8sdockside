@@ -14,6 +14,7 @@
   administrators. Everyone else still sees what is installed and what it does.
 -->
 <script lang="ts">
+    import { SvelteSet } from 'svelte/reactivity';
     import { PluginService } from '../../../../bindings/github.com/k8sdockside/k8sdockside/internal/services';
     import { SETTINGS } from '../../catalogue';
     import { onExternalClick } from '../../links';
@@ -154,18 +155,16 @@
     /** How far "Update all" has got, while it runs. */
     let updatingAll = $state<{ done: number; total: number; name: string } | null>(null);
 
-    async function updateAll(): Promise<void> {
+    async function updateAll(ids: string[] = updatable.map((p) => p.id)): Promise<void> {
         if (updatingAll || updating) return;
-        updatingAll = { done: 0, total: updatable.length, name: '' };
+        updatingAll = { done: 0, total: ids.length, name: '' };
         try {
-            await workspace.updateAllPluginsFromGit(
-                updatable.map((p) => p.id),
-                (done, total, name) => (updatingAll = { done, total, name }),
-            );
+            await workspace.updateAllPluginsFromGit(ids, (done, total, name) => (updatingAll = { done, total, name }));
         } finally {
             updatingAll = null;
         }
     }
+
 
     /** The plugin being uninstalled, if one is. */
     let uninstalling = $state<string | null>(null);
@@ -261,6 +260,108 @@
     );
     /** A search that found nothing -- said once, rather than as four empty lists. */
     let foundNothing = $derived(narrowed(query) && shownTotal === 0);
+
+    /**
+     * The cards ticked for a bulk action. Keyed by list as well as id: a known
+     * plugin read from a watched folder has one card under Available and one
+     * under the watched folders, and ticking one should not tick the other.
+     * Cleared after every bulk action, so a plugin that moves list -- installed,
+     * or uninstalled back to Available -- does not come back ticked.
+     */
+    const selected = new SvelteSet<string>();
+    const knownKey = (id: string) => `known:${id}`;
+    const pluginKey = (id: string) => `plugin:${id}`;
+
+    function toggle(key: string, on: boolean): void {
+        if (on) selected.add(key);
+        else selected.delete(key);
+    }
+
+    /** Every card the search shows, which is what "Select all" ticks. */
+    let shownKeys = $derived([
+        ...shownKnown.map((k) => knownKey(k.id)),
+        ...[...shownBuiltin, ...shownInstalled, ...shownWatched].map((p) => pluginKey(p.id)),
+    ]);
+    let allShownSelected = $derived(shownKeys.length > 0 && shownKeys.every((key) => selected.has(key)));
+    let someShownSelected = $derived(shownKeys.some((key) => selected.has(key)));
+
+    function selectAllShown(on: boolean): void {
+        for (const key of shownKeys) toggle(key, on);
+    }
+
+    /*
+     * What each bulk action would take from the selection. Every action takes
+     * only the cards it applies to, and its button says how many, so a mixed
+     * selection is fine: Install installs the available ones and leaves the
+     * rest alone. A card the search hides now still counts -- the bar says so.
+     */
+    let pickedKnown = $derived(known.filter((k) => selected.has(knownKey(k.id))));
+    let pickedPlugins = $derived(workspace.plugins.filter((p) => selected.has(pluginKey(p.id))));
+    let pickedUpdatable = $derived(pickedPlugins.filter((p) => updatable.some((u) => u.id === p.id)));
+    let pickedRemovable = $derived(pickedPlugins.filter((p) => installed.some((i) => i.id === p.id)));
+    let pickedOff = $derived(pickedPlugins.filter((p) => p.disabled));
+    let pickedOn = $derived(pickedPlugins.filter((p) => !p.disabled));
+    let pickedHidden = $derived([...selected].filter((key) => !shownKeys.includes(key)).length);
+
+    /** How far a bulk install, switch or uninstall has got, while it runs. */
+    let bulk = $state<{ verb: string; done: number; total: number; name: string } | null>(null);
+    let busy = $derived(bulk !== null || updatingAll !== null || updating !== null || installing !== null || uninstalling !== null);
+
+    async function runBulk(verb: string, total: number, work: () => Promise<void>): Promise<void> {
+        if (busy) return;
+        bulk = { verb, done: 0, total, name: '' };
+        try {
+            await work();
+        } finally {
+            bulk = null;
+            selected.clear();
+        }
+    }
+
+    function installPicked(): Promise<void> {
+        const ids = pickedKnown.map((k) => k.id);
+        return runBulk('Installing', ids.length, () =>
+            workspace.installKnownPlugins(ids, (done, total, name) => (bulk = { verb: 'Installing', done, total, name })),
+        );
+    }
+
+    function switchPicked(enabled: boolean): Promise<void> {
+        const ids = (enabled ? pickedOff : pickedOn).map((p) => p.id);
+        return runBulk(enabled ? 'Switching on' : 'Switching off', ids.length, () => workspace.setPluginsEnabled(ids, enabled));
+    }
+
+    async function updatePicked(): Promise<void> {
+        if (busy) return;
+        try {
+            await updateAll(pickedUpdatable.map((p) => p.id));
+        } finally {
+            selected.clear();
+        }
+    }
+
+    /**
+     * The bulk uninstall waiting on an answer: everything it deletes, one
+     * entry per clone. Asked in the page for the same reason a card asks.
+     */
+    let askingBulk = $state<{ ids: string[]; removals: { path: string; plugins: string[] }[] } | null>(null);
+    let bulkCancelEl = $state<HTMLButtonElement | null>(null);
+
+    $effect(() => {
+        if (askingBulk) bulkCancelEl?.focus();
+    });
+
+    async function askUninstallPicked(): Promise<void> {
+        if (busy) return;
+        const ids = pickedRemovable.map((p) => p.id);
+        const removals = await workspace.pluginRemovals(ids);
+        if (removals.length) askingBulk = { ids: removals.flatMap((r) => r.plugins).filter((id) => ids.includes(id)), removals };
+    }
+
+    function uninstallPicked(): Promise<void> {
+        const ids = askingBulk?.ids ?? [];
+        askingBulk = null;
+        return runBulk('Uninstalling', ids.length, () => workspace.uninstallPlugins(ids));
+    }
 
     function pickCategory(id: string): void {
         query.category = query.category === id ? '' : id;
@@ -364,6 +465,92 @@
             </button>
         {/each}
     </div>
+
+    {#if session.admin && shownKeys.length > 0}
+        <!-- Ticking cards and acting on them together. Each button takes only
+             the ticked cards it applies to and says how many, so ticking
+             "all" and pressing Update updates what can be updated. -->
+        <div class="bulk" role="toolbar" aria-label="Act on the selected plugins">
+            <label class="pick all">
+                <input
+                    type="checkbox"
+                    checked={allShownSelected}
+                    indeterminate={someShownSelected && !allShownSelected}
+                    disabled={busy}
+                    onchange={(event) => selectAllShown(event.currentTarget.checked)}
+                />
+                {narrowed(query) ? `Select all shown` : 'Select all'}
+                <span class="n">{shownKeys.length}</span>
+            </label>
+            {#if selected.size > 0}
+                <span class="bulk-count">
+                    {selected.size} selected{#if pickedHidden > 0}, {pickedHidden} hidden by the search{/if}
+                </span>
+                <button class="plain" disabled={busy} onclick={() => selected.clear()}>Clear</button>
+                <div class="bulk-actions">
+                    {#if pickedKnown.length > 0}
+                        <button class="bulk-btn" disabled={busy || !!gitMissing} title={gitMissing || 'git clone each one, one after another'} onclick={() => void installPicked()}>
+                            <Icon name="download" size={12} /> Install <span class="n">{pickedKnown.length}</span>
+                        </button>
+                    {/if}
+                    {#if pickedUpdatable.length > 0}
+                        <button
+                            class="bulk-btn"
+                            disabled={busy}
+                            title="git pull each one. An update that changes what a plugin may do is held back for its own card."
+                            onclick={() => void updatePicked()}
+                        >
+                            <Icon name="refresh" size={12} /> Update <span class="n">{pickedUpdatable.length}</span>
+                        </button>
+                    {/if}
+                    {#if pickedOff.length > 0}
+                        <button class="bulk-btn" disabled={busy} onclick={() => void switchPicked(true)}>
+                            Switch on <span class="n">{pickedOff.length}</span>
+                        </button>
+                    {/if}
+                    {#if pickedOn.length > 0}
+                        <button class="bulk-btn" disabled={busy} onclick={() => void switchPicked(false)}>
+                            Switch off <span class="n">{pickedOn.length}</span>
+                        </button>
+                    {/if}
+                    {#if pickedRemovable.length > 0}
+                        <button class="bulk-btn danger" disabled={busy || askingBulk !== null} onclick={() => void askUninstallPicked()}>
+                            <Icon name="trash" size={12} /> Uninstall <span class="n">{pickedRemovable.length}</span>
+                        </button>
+                    {/if}
+                </div>
+            {/if}
+            {#if bulk}
+                <div class="bulk-progress">
+                    <span>{bulk.verb} {Math.min(bulk.done + 1, bulk.total)} of {bulk.total}…{#if bulk.name} {bulk.name}{/if}</span>
+                    <div class="update-all-progress" aria-hidden="true">
+                        <i style="width: {(bulk.done / Math.max(1, bulk.total)) * 100}%"></i>
+                    </div>
+                </div>
+            {/if}
+        </div>
+        {#if askingBulk}
+            <div class="uninstall-ask" role="alertdialog" aria-label="Uninstall {askingBulk.ids.length} plugins?">
+                <p class="question">
+                    Delete these from the plugins folder? Tabs open on their views will say they are gone.
+                </p>
+                <ul class="removals">
+                    {#each askingBulk.removals as removal (removal.path)}
+                        <li>
+                            <span class="path selectable">{removal.path}</span>
+                            <span class="dim">— {removal.plugins.join(', ')}</span>
+                        </li>
+                    {/each}
+                </ul>
+                <div class="answers">
+                    <button bind:this={bulkCancelEl} class="uninstall-cancel" onclick={() => (askingBulk = null)}>Cancel</button>
+                    <button class="uninstall-confirm" disabled={busy} onclick={() => void uninstallPicked()}>
+                        <Icon name="trash" size={11} /> Uninstall {askingBulk.ids.length}
+                    </button>
+                </div>
+            </div>
+        {/if}
+    {/if}
 
     {#if foundNothing}
         <p class="note nothing">
@@ -591,8 +778,11 @@
 </SettingsSection>
 
 {#snippet card(plugin: import('../../plugins/types').Plugin)}
-    <article class="plugin" class:off={plugin.disabled}>
+    <article class="plugin" class:off={plugin.disabled} class:picked={selected.has(pluginKey(plugin.id))}>
         <header>
+            {#if session.admin}
+                {@render pick(pluginKey(plugin.id), plugin.name)}
+            {/if}
             <PluginMark id={plugin.id} icon={plugin.icon} logo={plugin.logo} size={16} />
             <div class="naming">
                 <p class="name">{plugin.name}</p>
@@ -785,6 +975,18 @@
     </article>
 {/snippet}
 
+{#snippet pick(key: string, name: string)}
+    <label class="pick" title="Select {name}">
+        <input
+            type="checkbox"
+            checked={selected.has(key)}
+            disabled={busy}
+            aria-label="Select {name}"
+            onchange={(event) => toggle(key, event.currentTarget.checked)}
+        />
+    </label>
+{/snippet}
+
 {#snippet categoryTag(id: string | undefined)}
     <!-- Also the filter: the quickest way to "more like this one". -->
     {@const category = categoryOf(id)}
@@ -850,8 +1052,11 @@
     {@const running = workspace.clustersRunning(offer)}
     {@const watchedCopy = watched.find((p) => p.id === offer.id)}
     {@const failed = workspace.pluginInstallFailure?.id === offer.id}
-    <article class="plugin known" class:failed>
+    <article class="plugin known" class:failed class:picked={selected.has(knownKey(offer.id))}>
         <header>
+            {#if session.admin}
+                {@render pick(knownKey(offer.id), offer.name)}
+            {/if}
             <PluginMark id={offer.id} icon={offer.icon} size={18} />
             <div class="naming">
                 <p class="name">{offer.name}</p>
@@ -1108,6 +1313,100 @@
         background: color-mix(in srgb, var(--accent) 16%, transparent);
         border-color: var(--accent);
         color: var(--text);
+    }
+
+    /* Sticky, so the actions are still there after scrolling down a list of
+       a dozen cards to tick the last one. */
+    .bulk {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 12px;
+        margin: 6px 0 4px;
+        padding: 6px 10px;
+        border-radius: var(--radius-sm);
+        background: var(--bg-panel);
+        box-shadow: inset 0 0 0 1px var(--border-soft);
+        font-size: 12px;
+    }
+
+    .pick {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: none;
+        cursor: pointer;
+    }
+
+    .pick input {
+        margin: 0;
+        accent-color: var(--accent);
+        cursor: pointer;
+    }
+
+    .pick.all {
+        color: var(--text-dim);
+    }
+
+    .pick .n,
+    .bulk-btn .n {
+        font-variant-numeric: tabular-nums;
+        color: var(--text-faint);
+    }
+
+    .bulk-count {
+        color: var(--text);
+    }
+
+    .bulk-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-left: auto;
+    }
+
+    .bulk-btn {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 10px;
+        border-radius: var(--radius-sm);
+        font-size: 11.5px;
+        color: var(--text);
+        box-shadow: inset 0 0 0 1px var(--border);
+    }
+
+    .bulk-btn:hover:not(:disabled) {
+        background: var(--bg-hover);
+    }
+
+    .bulk-btn:disabled {
+        opacity: 0.5;
+    }
+
+    .bulk-btn.danger {
+        color: var(--error);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--error) 55%, transparent);
+    }
+
+    .bulk-btn.danger:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--error) 16%, transparent);
+    }
+
+    .bulk-progress {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        flex-basis: 100%;
+        font-size: 11px;
+        color: var(--text-faint);
+    }
+
+    .plugin.picked {
+        box-shadow: inset 0 0 0 1px var(--accent);
     }
 
     .chip .n {
@@ -1702,6 +2001,17 @@
     .uninstall-ask .path {
         font-family: var(--mono);
         font-size: 11px;
+    }
+
+    .uninstall-ask .removals {
+        margin: 0;
+        padding-left: 16px;
+        font-size: 11.5px;
+        overflow-wrap: anywhere;
+    }
+
+    .uninstall-ask .dim {
+        color: var(--text-faint);
     }
 
     .uninstall-ask .answers {

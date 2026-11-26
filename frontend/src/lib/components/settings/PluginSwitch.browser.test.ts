@@ -20,7 +20,7 @@ const settle = () => new Promise((r) => setTimeout(r, 60));
 const switchFor = (name: string) =>
     [...document.querySelectorAll('article.plugin')]
         .find((el) => el.textContent?.includes(name))
-        ?.querySelector('input[type="checkbox"]') as HTMLInputElement | undefined;
+        ?.querySelector('.switch input[type="checkbox"]') as HTMLInputElement | undefined;
 
 beforeEach(() => {
     document.body.innerHTML = '';
@@ -161,4 +161,64 @@ test('a watched folder’s plugin is listed apart, and the published one is stil
     expect(dropped).toHaveBeenCalledWith('/dev/k8sdockside-vitistack');
     dropped.mockRestore();
     workspace.knownPlugins = [];
+});
+
+// Ticking cards and acting on them together. Each button takes only the ticked
+// cards it applies to, so "Select all" then "Switch off" leaves an off plugin
+// alone rather than turning it back on.
+test('select all, then switch off, sends only the plugins that are on', async () => {
+    const sent = vi.spyOn(workspace, 'setPluginsEnabled').mockResolvedValue(undefined);
+    const PluginsSection = (await import('./PluginsSection.svelte')).default;
+    render(PluginsSection);
+    await settle();
+
+    (document.querySelector('.bulk .pick.all input') as HTMLInputElement).click();
+    await settle();
+    const button = (label: string) =>
+        [...document.querySelectorAll('.bulk-btn')].find((b) => b.textContent?.includes(label)) as HTMLButtonElement | undefined;
+    expect(button('Switch off')?.textContent).toContain('1');
+    expect(button('Switch on')?.textContent).toContain('1');
+    // Nothing here is installed into the plugins folder, so nothing to delete.
+    expect(button('Uninstall')).toBeUndefined();
+
+    button('Switch off')!.click();
+    await settle();
+    expect(sent).toHaveBeenCalledWith(['argocd'], false);
+    // Done with: the ticks are cleared.
+    expect(document.querySelector('.bulk-count')).toBeNull();
+    sent.mockRestore();
+});
+
+test('a bulk uninstall asks once, listing every folder it deletes', async () => {
+    workspace.pluginCatalogue = {
+        plugins: [
+            { ...plugin('acme', 'Acme'), origin: '/p/acme/plugin.json', repo: '/p/acme' },
+            { ...plugin('beta', 'Beta'), origin: '/p/beta/plugin.json', repo: '/p/beta' },
+        ],
+        dir: '/p', folders: [], problems: [],
+    };
+    const preview = vi.spyOn(workspace, 'pluginRemovals').mockResolvedValue([
+        { path: '/p/acme', plugins: ['acme'] },
+        { path: '/p/beta', plugins: ['beta'] },
+    ]);
+    const removed = vi.spyOn(workspace, 'uninstallPlugins').mockResolvedValue(undefined);
+    const PluginsSection = (await import('./PluginsSection.svelte')).default;
+    render(PluginsSection);
+    await settle();
+
+    (document.querySelector('.bulk .pick.all input') as HTMLInputElement).click();
+    await settle();
+    ([...document.querySelectorAll('.bulk-btn')].find((b) => b.textContent?.includes('Uninstall')) as HTMLButtonElement).click();
+    await settle();
+    const ask = document.querySelector('.uninstall-ask');
+    expect(ask?.textContent).toContain('/p/acme');
+    expect(ask?.textContent).toContain('/p/beta');
+    expect(removed).not.toHaveBeenCalled();
+    expect(document.activeElement?.classList.contains('uninstall-cancel')).toBe(true);
+
+    (ask!.querySelector('button.uninstall-confirm') as HTMLButtonElement).click();
+    await settle();
+    expect(removed).toHaveBeenCalledWith(['acme', 'beta']);
+    preview.mockRestore();
+    removed.mockRestore();
 });

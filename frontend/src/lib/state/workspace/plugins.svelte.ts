@@ -778,6 +778,125 @@ export abstract class WorkspacePlugins extends WorkspaceLayout {
     }
 
     /**
+     * What every bulk action does once it is through: the charts and the tab
+     * titles follow the catalogue it left. Once at the end rather than after
+     * each plugin, because nobody looks at them in between.
+     */
+    private async settleAfterBulk(): Promise<void> {
+        try {
+            this.metricsAttachments = (await MetricsService.Attachments()) ?? [];
+        } catch {
+            // The charts catch up on the next reload; the plugins are changed.
+        }
+        this.registerViews();
+    }
+
+    /**
+     * Installs every known plugin in `ids`, one after another, and says once
+     * how it went. One after another because each is a git clone into the same
+     * folder, and the catalogue each returns is read again by the next.
+     * A failure does not stop the rest; each is named at the end.
+     */
+    async installKnownPlugins(ids: string[], onProgress?: (done: number, total: number, name: string) => void): Promise<void> {
+        this.pluginInstallFailure = null;
+        const failed: string[] = [];
+        let installed = 0;
+        let done = 0;
+        for (const id of ids) {
+            const name = this.knownPlugins.find((k) => k.id === id)?.name ?? id;
+            onProgress?.(done, ids.length, name);
+            try {
+                this.pluginCatalogue = adoptPluginCatalogue(await PluginService.InstallKnown(id));
+                installed++;
+            } catch (err) {
+                failed.push(`${name}: ${firstLine(message(err))}`);
+            }
+            done++;
+        }
+        onProgress?.(done, ids.length, '');
+        // A clone that would not load still left its folder behind, and
+        // Settings should list it with the reason.
+        if (failed.length) await this.loadPlugins();
+        await this.settleAfterBulk();
+        const head = installed ? `Installed ${installed} plugin${installed === 1 ? '' : 's'}` : 'Nothing was installed';
+        if (failed.length) notices.fail(`${head}. Could not install ${failed.join(' · ')}`);
+        else notices.inform(head);
+    }
+
+    /**
+     * Switches every plugin in `ids` on or off. Ones already in the wanted
+     * state are left alone, so the count said at the end is of what changed.
+     */
+    async setPluginsEnabled(ids: string[], enabled: boolean): Promise<void> {
+        const todo = ids.filter((id) => {
+            const plugin = this.plugins.find((p) => p.id === id);
+            return plugin && plugin.disabled === enabled;
+        });
+        const failed: string[] = [];
+        for (const id of todo) {
+            try {
+                this.pluginCatalogue = adoptPluginCatalogue(await PluginService.SetEnabled(id, enabled));
+            } catch (err) {
+                failed.push(`${this.plugins.find((p) => p.id === id)?.name || id}: ${firstLine(message(err))}`);
+            }
+        }
+        await this.settleAfterBulk();
+        const changed = todo.length - failed.length;
+        const verb = enabled ? 'on' : 'off';
+        const head = changed
+            ? `Switched ${changed} plugin${changed === 1 ? '' : 's'} ${verb}`
+            : `Every plugin chosen was already ${verb}`;
+        if (failed.length) notices.fail(`${head}. Could not switch ${failed.join(' · ')}`);
+        else notices.inform(head);
+    }
+
+    /**
+     * What uninstalling every plugin in `ids` would delete, for one question
+     * to ask about it all. Plugins that share a clone are one entry, since
+     * deleting it takes them all. A plugin the app refuses to uninstall is left
+     * out and named, rather than spoiling the rest.
+     */
+    async pluginRemovals(ids: string[]): Promise<{ path: string; plugins: string[] }[]> {
+        const byPath = new Map<string, { path: string; plugins: string[] }>();
+        const refused: string[] = [];
+        for (const id of ids) {
+            try {
+                const removal = await PluginService.UninstallPreview(id);
+                const entry = byPath.get(removal.path) ?? { path: removal.path, plugins: [] };
+                for (const p of [id, ...(removal.plugins ?? [])]) if (!entry.plugins.includes(p)) entry.plugins.push(p);
+                byPath.set(removal.path, entry);
+            } catch (err) {
+                refused.push(`${this.plugins.find((p) => p.id === id)?.name || id}: ${firstLine(message(err))}`);
+            }
+        }
+        if (refused.length) notices.fail(`Cannot uninstall ${refused.join(' · ')}`);
+        return [...byPath.values()];
+    }
+
+    /**
+     * Uninstalls every plugin in `ids` and says once how it went. One that
+     * already went with an earlier one -- the same clone -- is skipped, not
+     * reported as missing.
+     */
+    async uninstallPlugins(ids: string[]): Promise<void> {
+        const failed: string[] = [];
+        const before = new Set(this.plugins.map((p) => p.id));
+        for (const id of ids) {
+            if (!this.plugins.some((p) => p.id === id)) continue;
+            try {
+                this.pluginCatalogue = adoptPluginCatalogue(await PluginService.Uninstall(id));
+            } catch (err) {
+                failed.push(`${this.plugins.find((p) => p.id === id)?.name || id}: ${firstLine(message(err))}`);
+            }
+        }
+        await this.settleAfterBulk();
+        const gone = [...before].filter((id) => !this.plugins.some((p) => p.id === id)).length;
+        const head = gone ? `Uninstalled ${gone} plugin${gone === 1 ? '' : 's'}` : 'Nothing was uninstalled';
+        if (failed.length) notices.fail(`${head}. Could not uninstall ${failed.join(' · ')}`);
+        else notices.inform(head);
+    }
+
+    /**
      * What uninstalling a plugin would delete -- its clone, folder or file, and
      * every plugin read from there -- for its card to ask about before
      * anything is deleted. `null` when the app refuses, with the reason shown.
